@@ -1,4 +1,4 @@
-package tenant
+package usecases
 
 import (
 	"github.com/memberclass-backend-golang/internal/domain/dto"
