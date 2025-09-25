@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -30,9 +31,9 @@ func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionReq
 	builder.WriteString(bunnyParametersAccess.LibraryID)
 	builder.WriteString("/collections")
 	url := builder.String()
-	
+
 	b.log.Debug("Creating collection in Bunny", "name", createCollectionRequest.Name, "url", url)
-	
+
 	header := http.Header{
 		"Content-Type": []string{"application/json"},
 		"AccessKey":    []string{bunnyParametersAccess.LibraryApiKey},
@@ -58,9 +59,9 @@ func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionReq
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
-	
+
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		b.log.Error("Bunny API returned error", "statusCode", resp.StatusCode, "status", resp.Status, "url", url, "responseBody", string(bodyBytes))
@@ -88,9 +89,9 @@ func (b *BunnyService) CreateVideo(ctx context.Context, video dto.CreateVideoReq
 	builder.WriteString(bunnyParametersAccess.LibraryID)
 	builder.WriteString("/videos")
 	url := builder.String()
-	
+
 	b.log.Debug("Creating video in Bunny", "title", video.Title, "collectionID", video.CollectionID, "url", url)
-	
+
 	header := http.Header{
 		"Content-Type": []string{"application/json"},
 		"AccessKey":    []string{bunnyParametersAccess.LibraryApiKey},
@@ -116,9 +117,9 @@ func (b *BunnyService) CreateVideo(ctx context.Context, video dto.CreateVideoReq
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
-	
+
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		b.log.Error("Bunny API returned error", "status", resp.Status, "url", url, "responseBody", string(bodyBytes))
@@ -146,9 +147,9 @@ func (b *BunnyService) UploadVideo(ctx context.Context, uploadVideoRequest dto.U
 	builder.WriteString("/videos/")
 	builder.WriteString(uploadVideoRequest.GUID)
 	url := builder.String()
-	
+
 	b.log.Debug("Uploading video file to Bunny", "guid", uploadVideoRequest.GUID, "fileSize", len(uploadVideoRequest.File), "contentType", uploadVideoRequest.ContentType, "url", url)
-	
+
 	header := http.Header{
 		"Content-Type": []string{uploadVideoRequest.ContentType},
 		"AccessKey":    []string{bunnyParametersAccess.LibraryApiKey},
@@ -168,9 +169,9 @@ func (b *BunnyService) UploadVideo(ctx context.Context, uploadVideoRequest dto.U
 	}
 
 	defer resp.Body.Close()
-	
+
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
-	
+
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		b.log.Error("Bunny API returned error", "statusCode", resp.StatusCode, "status", resp.Status, "url", url, "responseBody", string(bodyBytes))
@@ -193,9 +194,9 @@ func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess
 	builder.WriteString("/collections?libraryId=")
 	builder.WriteString(bunnyParametersAccess.LibraryID)
 	url := builder.String()
-	
+
 	b.log.Debug("Getting collections from Bunny", "url", url)
-	
+
 	header := http.Header{
 		"Content-Type": []string{"application/json"},
 		"AccessKey":    []string{bunnyParametersAccess.LibraryApiKey},
@@ -216,9 +217,9 @@ func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess
 	}
 
 	defer resp.Body.Close()
-	
+
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
-	
+
 	var collectionsResponse dto.BunnyCollectionsResponse
 	err = json.NewDecoder(resp.Body).Decode(&collectionsResponse)
 	if err != nil {
@@ -232,8 +233,23 @@ func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess
 }
 
 func NewBunnyService(log ports.Logger) ports.BunnyService {
+	timeoutStr := os.Getenv("BUNNY_TIMEOUT_SECONDS")
+	timeout := 30 * time.Second
+
+	if timeoutStr != "" {
+		if parsedTimeout, err := time.ParseDuration(timeoutStr + "s"); err == nil {
+			timeout = parsedTimeout
+		} else {
+			log.Warn("Invalid BUNNY_TIMEOUT_SECONDS, using default", "value", timeoutStr, "default", "30s")
+		}
+	}
+
+	log.Info("BunnyService initialized", "timeout", timeout.String())
+
 	return &BunnyService{
-		client:  &http.Client{},
+		client: &http.Client{
+			Timeout: timeout,
+		},
 		baseURL: os.Getenv("BUNNY_BASE_URL"),
 		log:     log,
 	}
