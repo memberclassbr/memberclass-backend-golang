@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -37,7 +38,13 @@ func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionReq
 		"AccessKey":    []string{bunnyParametersAccess.LibraryApiKey},
 	}
 
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(createCollectionRequest.Name))
+	reqBody, err := json.Marshal(createCollectionRequest)
+	if err != nil {
+		b.log.Error("Failed to marshal request body", "error", err, "request", createCollectionRequest)
+		return nil, err
+	}
+
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
 	if err != nil {
 		b.log.Error("Failed to create HTTP request", "error", err, "url", url)
 		return nil, err
@@ -55,7 +62,8 @@ func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionReq
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
 	
 	if resp.StatusCode != http.StatusOK {
-		b.log.Error("Bunny API returned error", "statusCode", resp.StatusCode, "status", resp.Status, "url", url)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		b.log.Error("Bunny API returned error", "statusCode", resp.StatusCode, "status", resp.Status, "url", url, "responseBody", string(bodyBytes))
 		return nil, errors.New(resp.Status)
 	}
 
@@ -88,7 +96,13 @@ func (b *BunnyService) CreateVideo(ctx context.Context, video dto.CreateVideoReq
 		"AccessKey":    []string{bunnyParametersAccess.LibraryApiKey},
 	}
 
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(video.Title))
+	reqBody, err := json.Marshal(video)
+	if err != nil {
+		b.log.Error("Failed to marshal request body", "error", err, "request", video)
+		return nil, err
+	}
+
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
 	if err != nil {
 		b.log.Error("Failed to create HTTP request", "error", err, "url", url)
 		return nil, err
@@ -106,7 +120,8 @@ func (b *BunnyService) CreateVideo(ctx context.Context, video dto.CreateVideoReq
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
 	
 	if resp.StatusCode != http.StatusOK {
-		b.log.Error("Bunny API returned error", "statusCode", resp.StatusCode, "status", resp.Status, "url", url)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		b.log.Error("Bunny API returned error", "status", resp.Status, "url", url, "responseBody", string(bodyBytes))
 		return nil, errors.New(resp.Status)
 	}
 
@@ -157,7 +172,8 @@ func (b *BunnyService) UploadVideo(ctx context.Context, uploadVideoRequest dto.U
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
 	
 	if resp.StatusCode != http.StatusOK {
-		b.log.Error("Bunny API returned error", "statusCode", resp.StatusCode, "status", resp.Status, "url", url)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		b.log.Error("Bunny API returned error", "statusCode", resp.StatusCode, "status", resp.Status, "url", url, "responseBody", string(bodyBytes))
 		return errors.New(resp.Status)
 	}
 
@@ -165,7 +181,7 @@ func (b *BunnyService) UploadVideo(ctx context.Context, uploadVideoRequest dto.U
 	return nil
 }
 
-func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess dto.BunnyParametersAccess) (*[]dto.BunnyCollection, error) {
+func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess dto.BunnyParametersAccess) (*dto.BunnyCollectionsResponse, error) {
 
 	if bunnyParametersAccess.LibraryID == "" || bunnyParametersAccess.LibraryApiKey == "" {
 		return nil, errors.New("libraryID and libraryApiKey is required")
@@ -203,15 +219,15 @@ func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess
 	
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
 	
-	var collections []dto.BunnyCollection
-	err = json.NewDecoder(resp.Body).Decode(&collections)
+	var collectionsResponse dto.BunnyCollectionsResponse
+	err = json.NewDecoder(resp.Body).Decode(&collectionsResponse)
 	if err != nil {
 		b.log.Error("Failed to decode response", "error", err, "url", url)
 		return nil, err
 	}
 
-	b.log.Debug("Collections retrieved successfully", "count", len(collections))
-	return &collections, nil
+	b.log.Debug("Collections retrieved successfully", "count", len(collectionsResponse.Items))
+	return &collectionsResponse, nil
 
 }
 

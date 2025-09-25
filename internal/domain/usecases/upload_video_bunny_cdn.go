@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
@@ -23,9 +22,9 @@ type UploadVideoBunnyCdnUseCase struct {
 }
 
 func (u *UploadVideoBunnyCdnUseCase) Execute(ctx context.Context, bunnyParams dto.BunnyParametersAccess, fileBytes []byte, title string) (*dto.UploadVideoResponse, error) {
-	u.log.Info("Starting video upload process", 
-		"libraryID", bunnyParams.LibraryID, 
-		"title", title, 
+	u.log.Info("Starting video upload process",
+		"libraryID", bunnyParams.LibraryID,
+		"title", title,
 		"fileSize", len(fileBytes))
 
 	collectionID := u.ensureSocialCollection(ctx, bunnyParams)
@@ -72,8 +71,8 @@ func (u *UploadVideoBunnyCdnUseCase) Execute(ctx context.Context, bunnyParams dt
 	urlMedia := u.generatedMediaUrl(ctx, bunnyParams.LibraryID, uploadReq.GUID)
 	u.log.Debug("Media URL generated", "mediaURL", urlMedia)
 
-	u.log.Info("Video upload process completed successfully", 
-		"guid", uploadReq.GUID, 
+	u.log.Info("Video upload process completed successfully",
+		"guid", uploadReq.GUID,
 		"mediaURL", urlMedia,
 		"title", title)
 
@@ -95,10 +94,10 @@ func (u *UploadVideoBunnyCdnUseCase) ensureSocialCollection(ctx context.Context,
 		return ""
 	}
 
-	u.log.Debug("Collections retrieved", "count", len(*collections))
+	u.log.Debug("Collections retrieved", "count", len(collections.Items))
 
 	if collections != nil {
-		for _, collection := range *collections {
+		for _, collection := range collections.Items {
 			if collection.Name == collectionSocial {
 				u.log.Debug("Social collection found", "guid", collection.GUID)
 				return collection.GUID

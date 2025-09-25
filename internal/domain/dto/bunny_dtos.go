@@ -1,8 +1,20 @@
 package dto
 
 type BunnyCollection struct {
-	GUID string `json:"guid"`
-    Name string `json:"name"`
+	VideoLibraryID     int    `json:"videoLibraryId"`
+	GUID               string `json:"guid"`
+	Name               string `json:"name"`
+	VideoCount         int    `json:"videoCount"`
+	TotalSize          int64  `json:"totalSize"`
+	PreviewVideoIds    string `json:"previewVideoIds"`
+	PreviewImageUrls   []string `json:"previewImageUrls"`
+}
+
+type BunnyCollectionsResponse struct {
+	TotalItems    int                `json:"totalItems"`
+	CurrentPage   int                `json:"currentPage"`
+	ItemsPerPage  int                `json:"itemsPerPage"`
+	Items         []BunnyCollection  `json:"items"`
 }
 
 

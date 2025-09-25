@@ -3,7 +3,6 @@ package tenant
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
@@ -22,7 +21,7 @@ func (t *TenantRepository) FindByID(tenantID string) (*entities.Tenant, error) {
 		"dropboxAppId", "dropboxMemberId", "dropboxRefreshToken", "dropboxAccessToken", 
 		"dropboxAccessTokenValid", "import", "isOpenArea", "listFiles", "comments", 
 		"hideCards", "hideYoutube", "bunnyLibraryApiKey", "bunnyLibraryId", token_api_auth, 
-		"language", webhook_api, "registerNewUser", "aiEnabled" FROM "Tenant" WHERE id = ?`
+		"language", webhook_api, "registerNewUser", "aiEnabled" FROM "Tenant" WHERE id = $1`
 
 	var tenant entities.Tenant
 	err := t.db.QueryRow(query, tenantID).Scan(
@@ -68,7 +67,7 @@ func (t *TenantRepository) FindByID(tenantID string) (*entities.Tenant, error) {
 		t.log.Error(err.Error())
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
-			Message: fmt.Errorf("error finding user by email: %w", err).Error(),
+			Message: "error finding tenant",
 		}
 	}
 
@@ -76,8 +75,8 @@ func (t *TenantRepository) FindByID(tenantID string) (*entities.Tenant, error) {
 }
 
 func (t *TenantRepository) FindBunnyInfoByID(tenantID string) (*entities.Tenant, error) {
-	query := `SELECT id, bunnyLibraryApiKey, bunnyLibraryId
-				FROM "Tenant" WHERE id = ?`
+	query := `SELECT id, "bunnyLibraryApiKey", "bunnyLibraryId"
+				FROM "Tenant" WHERE id = $1`
 
 	var tenant entities.Tenant
 	err := t.db.QueryRow(query, tenantID).Scan(
@@ -92,14 +91,13 @@ func (t *TenantRepository) FindBunnyInfoByID(tenantID string) (*entities.Tenant,
 		t.log.Error(err.Error())
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
-			Message: fmt.Errorf("error finding tenant by id: %w", err).Error(),
-		}
+			Message: "error finding tenant"}
 	}
 
 	return &tenant, nil
 }
 
-func NewTenantRepository(db *sql.DB, log ports.Logger) *TenantRepository {
+func NewTenantRepository(db *sql.DB, log ports.Logger) ports.TenantRepository {
 	return &TenantRepository{
 		db:  db,
 		log: log,
