@@ -47,7 +47,7 @@ func startApplication(log ports.Logger, db *sql.DB, cache ports.Cache, router *r
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8181"
 	}
 
 	server := &http.Server{
