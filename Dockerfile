@@ -36,7 +36,7 @@ USER appuser
 
 # Environment variables with default values
 ENV PORT=8181 \
-    LOG_LEVEL=info \
+    LOG_LEVEL=DEBUG \
     DB_DRIVER=postgres \
     BUNNY_BASE_URL=https://api.bunny.net/ \
     BUNNY_TIMEOUT_SECONDS=30
