@@ -38,7 +38,7 @@ USER appuser
 ENV PORT=8181 \
     LOG_LEVEL=DEBUG \
     DB_DRIVER=postgres \
-    BUNNY_BASE_URL=https://api.bunny.net/ \
+    BUNNY_BASE_URL=https://video.bunnycdn.com/ \
     BUNNY_TIMEOUT_SECONDS=30
 
 # Expose port
