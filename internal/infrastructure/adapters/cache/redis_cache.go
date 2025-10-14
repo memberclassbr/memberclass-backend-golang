@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
 	"time"
 
@@ -15,12 +16,26 @@ type RedisCache struct {
 }
 
 func NewRedisCache(log ports.Logger) ports.Cache {
-	client := redis.NewClient(&redis.Options{
-		Addr:     os.Getenv("UPSTASH_REDIS_REST_URL"),
-		Password: os.Getenv("UPSTASH_REDIS_REST_TOKEN"),
-	})
+	redisURL := os.Getenv("UPSTASH_REDIS_URL")
 
-	_, err := client.Ping(context.Background()).Result()
+	// Parse the Redis URL if it's in the format redis://user:password@host:port
+	// or rediss:// for TLS connections
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Error("Failed to parse Redis URL: " + err.Error())
+		panic(err)
+	}
+
+	// If TLS is not configured but we need it, add it
+	if opts.TLSConfig == nil && len(redisURL) > 8 && redisURL[:8] == "rediss://" {
+		opts.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	client := redis.NewClient(opts)
+
+	_, err = client.Ping(context.Background()).Result()
 	if err != nil {
 		log.Error("Failed to connect to Redis: " + err.Error())
 		panic(err)

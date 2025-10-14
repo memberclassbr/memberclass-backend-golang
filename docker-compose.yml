@@ -4,14 +4,15 @@ services:
   app:
     build: .
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-8181}:8181"
     environment:
       - DB_DRIVER=${DB_DRIVER}
       - DB_DSN=${DB_DSN}
       - LOG_LEVEL=${LOG_LEVEL}
       - BUNNY_BASE_URL=${BUNNY_BASE_URL}
       - BUNNY_TIMEOUT_SECONDS=${BUNNY_TIMEOUT_SECONDS}
-      - PORT:${PORT}
-      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
-      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+      - BUNNY_API_KEY=${BUNNY_API_KEY}
+      - PORT=${PORT:-8181}
+      - UPSTASH_REDIS_URL=${UPSTASH_REDIS_URL}
+      - UPSTASH_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN}
     restart: unless-stopped
