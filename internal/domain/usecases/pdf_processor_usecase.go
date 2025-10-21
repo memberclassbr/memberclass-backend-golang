@@ -744,3 +744,17 @@ func (u *pdfProcessorUseCase) GetLessonWithPDFAsset(ctx context.Context, lessonI
 
 	return lesson, nil
 }
+
+// GetPDFPagesByAssetID - Get PDF pages by asset ID
+func (u *pdfProcessorUseCase) GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*entities.LessonPDFPage, error) {
+	pages, err := u.lessonRepo.GetPDFPagesByAssetID(ctx, assetID)
+	if err != nil {
+		u.logger.Error(fmt.Sprintf("Error getting PDF pages for asset %s: %v", assetID, err))
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error getting PDF pages",
+		}
+	}
+
+	return pages, nil
+}
