@@ -18,4 +18,5 @@ type PdfProcessorUseCase interface {
 	SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error)
 	ValidateLessonHasPDF(ctx context.Context, lessonID string) error
 	GetLessonWithPDFAsset(ctx context.Context, lessonID string) (*entities.Lesson, error)
+	GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*entities.LessonPDFPage, error)
 }
