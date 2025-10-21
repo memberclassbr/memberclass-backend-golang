@@ -9,17 +9,20 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/usecases"
 )
 
 type LessonHandler struct {
-	useCase ports.PdfProcessorUseCase
-	logger  ports.Logger
+	useCase         ports.PdfProcessorUseCase
+	logger          ports.Logger
+	paginationUtils *usecases.PaginationUtils
 }
 
 func NewLessonHandler(useCase ports.PdfProcessorUseCase, logger ports.Logger) *LessonHandler {
 	return &LessonHandler{
-		useCase: useCase,
-		logger:  logger,
+		useCase:         useCase,
+		logger:          logger,
+		paginationUtils: usecases.NewPaginationUtils(),
 	}
 }
 
@@ -159,7 +162,65 @@ func (h *LessonHandler) RegeneratePDF(w http.ResponseWriter, r *http.Request) {
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
-// Helper methods
+// GetLessonsPage - GET /api/lessons/:lessonId/pdf-pages
+func (h *LessonHandler) GetLessonsPage(w http.ResponseWriter, r *http.Request) {
+
+	lessonID := chi.URLParam(r, "lessonId")
+	if lessonID == "" {
+		h.sendErrorResponse(w, http.StatusBadRequest, "lessonId is required")
+		return
+	}
+
+	lesson, err := h.useCase.GetLessonWithPDFAsset(r.Context(), lessonID)
+	if err != nil {
+		h.logger.Error("Error getting lesson with PDF asset: " + err.Error())
+		h.sendErrorResponse(w, http.StatusInternalServerError, "Error fetching lesson")
+		return
+	}
+
+	if lesson.PDFAsset == nil {
+
+		response := dto.LessonPDFPagesResponse{
+			LessonID:   lessonID,
+			Status:     "absent",
+			TotalPages: 0,
+			Pages:      []dto.LessonPDFPageInfo{},
+		}
+		h.sendJSONResponse(w, http.StatusOK, response)
+		return
+	}
+
+	pages, err := h.useCase.GetPDFPagesByAssetID(r.Context(), lesson.PDFAsset.ID)
+	if err != nil {
+		h.logger.Error("Error getting PDF pages: " + err.Error())
+		h.sendErrorResponse(w, http.StatusInternalServerError, "Error fetching PDF pages")
+		return
+	}
+
+	pageInfos := make([]dto.LessonPDFPageInfo, len(pages))
+	for i, page := range pages {
+		pageInfos[i] = dto.LessonPDFPageInfo{
+			PageNumber: page.PageNumber,
+			ImageURL:   page.ImageURL,
+			Width:      page.Width,
+			Height:     page.Height,
+		}
+	}
+
+	totalPages := 0
+	if lesson.PDFAsset.TotalPages != nil {
+		totalPages = *lesson.PDFAsset.TotalPages
+	}
+
+	response := dto.LessonPDFPagesResponse{
+		LessonID:   lessonID,
+		Status:     lesson.PDFAsset.Status,
+		TotalPages: totalPages,
+		Pages:      pageInfos,
+	}
+
+	h.sendJSONResponse(w, http.StatusOK, response)
+}
 
 func (h *LessonHandler) handleUseCaseError(w http.ResponseWriter, err error) {
 	var memberClassErr *memberclasserrors.MemberClassError
