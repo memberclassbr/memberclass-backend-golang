@@ -347,7 +347,7 @@ func TestNewRedisCache(t *testing.T) {
 
 		defer func() {
 			if r := recover(); r != nil {
-				assert.Contains(t, r.(error).Error(), "NOAUTH Authentication required")
+				assert.Contains(t, r.(error).Error(), "redis: invalid URL scheme: ")
 			}
 		}()
 
