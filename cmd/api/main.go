@@ -16,9 +16,12 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
 	"go.uber.org/fx"
 )
 
@@ -29,11 +32,16 @@ func main() {
 			logger.NewLogger,
 			database.NewDB,
 			cache.NewRedisCache,
+			storage.NewDigitalOceanSpaces,
 			rate_limiter.NewRateLimiterUpload,
 			tenant.NewTenantRepository,
+			lesson.NewLessonRepository,
+			ilovepdf.NewIlovePdfService,
+			usecases.NewPdfProcessorUseCase,
 			bunny.NewBunnyService,
 			usecases.NewTenantGetTenantBunnyCredentialsUseCase,
 			usecases.NewUploadVideoBunnyCdnUseCase,
+			internalhttp.NewLessonHandler,
 			internalhttp.NewVideoHandler,
 			router.NewRouter,
 		),

@@ -16,3 +16,7 @@ packages:
       UploadVideoBunnyCdnUseCase:
       TenantGetTenantBunnyCredentialsUseCase:
       TenantRepository:
+      PdfProcessorUseCase:
+      LessonRepository:
+      PdfProcessService:
+      Storage:
