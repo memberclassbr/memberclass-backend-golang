@@ -3,26 +3,26 @@ package entities
 import "time"
 
 type Lesson struct {
-	ID                     string          `json:"id"`
+	ID                     *string         `json:"id"`
 	CreatedAt              time.Time       `json:"createdAt"`
 	UpdatedAt              time.Time       `json:"updatedAt"`
-	Access                 int             `json:"access"`
-	ReferenceAccess        string          `json:"referenceAccess"`
-	Type                   string          `json:"type"`
-	Slug                   string          `json:"slug"`
-	Name                   string          `json:"name"`
+	Access                 *int            `json:"access"`
+	ReferenceAccess        *string         `json:"referenceAccess"`
+	Type                   *string         `json:"type"`
+	Slug                   *string         `json:"slug"`
+	Name                   *string         `json:"name"`
 	Published              bool            `json:"published"`
-	Order                  int             `json:"order"`
+	Order                  *int            `json:"order"`
 	MediaURL               *string         `json:"mediaUrl"`
-	FullHDStatus           string          `json:"fullHdStatus"`
-	FullHDURL              string          `json:"fullHdUrl"`
-	FullHDRetries          int             `json:"fullHdRetries"`
-	Thumbnail              string          `json:"thumbnail"`
-	Content                string          `json:"content"`
-	ModuleID               string          `json:"moduleId"`
-	CreatedBy              string          `json:"createdBy"`
+	FullHDStatus           *string         `json:"fullHdStatus"`
+	FullHDURL              *string         `json:"fullHdUrl"`
+	FullHDRetries          *int            `json:"fullHdRetries"`
+	Thumbnail              *string         `json:"thumbnail"`
+	Content                *string         `json:"content"`
+	ModuleID               *string         `json:"moduleId"`
+	CreatedBy              *string         `json:"createdBy"`
 	ShowDescriptionToggle  bool            `json:"showDescriptionToggle"`
-	BannersTitle           string          `json:"bannersTitle"`
+	BannersTitle           *string         `json:"bannersTitle"`
 	TranscriptionCompleted bool            `json:"transcriptionCompleted"`
 	PDFAsset               *LessonPDFAsset `json:"pdfAsset,omitempty"`
 }

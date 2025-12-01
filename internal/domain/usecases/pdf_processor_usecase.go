@@ -174,7 +174,7 @@ func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limi
 		defer close(jobChan)
 		for _, lesson := range lessons {
 			select {
-			case jobChan <- ProcessingJob{LessonID: lesson.ID, Lesson: lesson}:
+			case jobChan <- ProcessingJob{LessonID: *lesson.ID, Lesson: lesson}:
 			case <-ctx.Done():
 				return
 			}

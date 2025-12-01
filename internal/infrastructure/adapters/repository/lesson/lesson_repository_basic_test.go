@@ -55,7 +55,7 @@ func TestLessonRepository_GetByID_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Equal(t, "lesson-123", result.ID)
+	assert.Equal(t, "lesson-123", *result.ID)
 	assert.Equal(t, &mediaURL, result.MediaURL)
 	assert.NoError(t, mockDB.ExpectationsWereMet())
 }

@@ -1,0 +1,568 @@
+openapi: 3.0.3
+info:
+  title: MemberClass Backend API
+  description: |
+    API do backend MemberClass em Golang.
+    
+    Funcionalidades:
+    - Upload de vídeos para Bunny CDN
+    - Processamento de PDFs de aulas
+    - Gerenciamento de páginas de PDF
+  version: 1.0.0
+  contact:
+    name: MemberClass Team
+
+servers:
+  - url: http://localhost:8080
+    description: Servidor local de desenvolvimento
+  - url: https://api.memberclass.com
+    description: Servidor de produção
+
+tags:
+  - name: Videos
+    description: Endpoints para upload e gerenciamento de vídeos
+  - name: Lessons
+    description: Endpoints para processamento de PDFs e gerenciamento de aulas
+
+paths:
+  /api/v1/videos/upload:
+    post:
+      tags:
+        - Videos
+      summary: Upload de vídeo
+      description: |
+        Faz upload de um vídeo para o Bunny CDN.
+        
+        **Rate Limit:** Este endpoint possui controle de rate limit por tenant.
+      operationId: uploadVideo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - tenantId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Arquivo de vídeo a ser enviado
+                tenantId:
+                  type: string
+                  description: ID do tenant (obrigatório)
+                  example: "tenant-123"
+                title:
+                  type: string
+                  description: Título do vídeo (opcional - usa nome do arquivo se não informado)
+                  example: "Aula 01 - Introdução"
+      responses:
+        '200':
+          description: Upload realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadVideoResponse'
+              example:
+                ok: true
+                mediaUrl: "https://vz-abc123.b-cdn.net/video-guid/playlist.m3u8"
+                guid: "video-guid-123"
+                title: "Aula 01 - Introdução"
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                fileRequired:
+                  summary: Arquivo não enviado
+                  value:
+                    error: "Bad Request"
+                    message: "File is required"
+                tenantRequired:
+                  summary: Tenant ID não informado
+                  value:
+                    error: "Bad Request"
+                    message: "tenantId is required"
+        '404':
+          description: Tenant não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Not Found"
+                message: "Tenant not found"
+        '429':
+          description: Rate limit excedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Too Many Requests"
+                message: "Rate limit exceeded"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Upload failed"
+
+  /api/lessons/pdf-process:
+    post:
+      tags:
+        - Lessons
+      summary: Processar PDF de aula
+      description: |
+        Processa o PDF de uma aula específica, convertendo em imagens.
+        
+        **Actions disponíveis:**
+        - `lesson`: Processa o PDF de uma aula específica (requer lessonId)
+        - `retry`: Reprocessa assets que falharam anteriormente
+        - `cleanup`: Limpa páginas órfãs
+      operationId: processLessonPdf
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessLessonRequest'
+            examples:
+              processLesson:
+                summary: Processar uma aula específica
+                value:
+                  action: "lesson"
+                  lessonId: "lesson-123"
+              retryFailed:
+                summary: Reprocessar assets com falha
+                value:
+                  action: "retry"
+              cleanup:
+                summary: Limpar páginas órfãs
+                value:
+                  action: "cleanup"
+      responses:
+        '200':
+          description: Processamento realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessLessonResponse'
+              examples:
+                lessonProcessed:
+                  summary: Aula processada
+                  value:
+                    message: "Lesson processing completed"
+                    action: "lesson"
+                    result:
+                      success: true
+                      totalPages: 15
+                      processedPages: 15
+                retryCompleted:
+                  summary: Retry completado
+                  value:
+                    message: "Failed assets retry completed"
+                    action: "retry"
+                cleanupCompleted:
+                  summary: Cleanup completado
+                  value:
+                    message: "Cleanup completed"
+                    action: "cleanup"
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidAction:
+                  summary: Action inválida
+                  value:
+                    error: "Bad Request"
+                    message: "Invalid action. Use: retry, cleanup, or lesson"
+                lessonIdRequired:
+                  summary: Lesson ID obrigatório
+                  value:
+                    error: "Bad Request"
+                    message: "Lesson ID is required for lesson action"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/lessons/process-all-pdfs:
+    post:
+      tags:
+        - Lessons
+      summary: Processar todos os PDFs pendentes
+      description: |
+        Processa todos os PDFs de aulas que estão pendentes.
+        
+        Pode-se limitar o número de aulas a serem processadas através do parâmetro `limit`.
+      operationId: processAllPendingPdfs
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessAllRequest'
+            examples:
+              withLimit:
+                summary: Com limite de processamento
+                value:
+                  limit: 10
+              noLimit:
+                summary: Sem limite (processa todos)
+                value: {}
+      responses:
+        '200':
+          description: Processamento realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessAllResponse'
+              example:
+                message: "PDF processing completed"
+                processed: 5
+                total: 10
+                limit: 10
+                success: true
+                results:
+                  - success: true
+                    totalPages: 12
+                    processedPages: 12
+                  - success: true
+                    totalPages: 8
+                    processedPages: 8
+                  - success: false
+                    totalPages: 0
+                    processedPages: 0
+                    error: "PDF file not found"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/lessons/{lessonId}/pdf-regenerate:
+    post:
+      tags:
+        - Lessons
+      summary: Regenerar PDF de uma aula
+      description: |
+        Coloca na fila a regeneração do PDF de uma aula específica.
+        
+        Isso irá reprocessar o PDF da aula, gerando novas imagens das páginas.
+      operationId: regenerateLessonPdf
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          description: ID da aula
+          schema:
+            type: string
+          example: "lesson-123"
+      responses:
+        '200':
+          description: Regeneração enfileirada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegeneratePDFResponse'
+              example:
+                message: "PDF regeneration queued successfully"
+                lessonId: "lesson-123"
+                status: "pending"
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Bad Request"
+                message: "Lesson ID is required"
+        '404':
+          description: Aula não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Not Found"
+                message: "Lesson not found"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/lessons/{lessonId}/pdf-pages:
+    get:
+      tags:
+        - Lessons
+      summary: Obter páginas do PDF de uma aula
+      description: |
+        Retorna as páginas do PDF de uma aula específica.
+        
+        Retorna informações sobre cada página, incluindo URL da imagem, dimensões e número da página.
+        
+        **Status possíveis:**
+        - `completed`: PDF processado com sucesso
+        - `processing`: PDF ainda em processamento
+        - `pending`: PDF aguardando processamento
+        - `failed`: Falha no processamento
+        - `absent`: Aula não possui PDF
+      operationId: getLessonPdfPages
+      parameters:
+        - name: lessonId
+          in: path
+          required: true
+          description: ID da aula
+          schema:
+            type: string
+          example: "lesson-123"
+      responses:
+        '200':
+          description: Páginas retornadas com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonPDFPagesResponse'
+              examples:
+                completed:
+                  summary: PDF completamente processado
+                  value:
+                    lessonId: "lesson-123"
+                    status: "completed"
+                    totalPages: 3
+                    pages:
+                      - pageNumber: 1
+                        imageUrl: "https://cdn.example.com/lessons/lesson-123/page-1.jpg"
+                        width: 1920
+                        height: 1080
+                      - pageNumber: 2
+                        imageUrl: "https://cdn.example.com/lessons/lesson-123/page-2.jpg"
+                        width: 1920
+                        height: 1080
+                      - pageNumber: 3
+                        imageUrl: "https://cdn.example.com/lessons/lesson-123/page-3.jpg"
+                        width: 1920
+                        height: 1080
+                processing:
+                  summary: PDF em processamento
+                  value:
+                    lessonId: "lesson-789"
+                    status: "processing"
+                    totalPages: 10
+                    pages:
+                      - pageNumber: 1
+                        imageUrl: "https://cdn.example.com/lessons/lesson-789/page-1.jpg"
+                        width: 1920
+                        height: 1080
+                      - pageNumber: 2
+                        imageUrl: "https://cdn.example.com/lessons/lesson-789/page-2.jpg"
+                        width: 1920
+                        height: 1080
+                absent:
+                  summary: Aula sem PDF
+                  value:
+                    lessonId: "lesson-456"
+                    status: "absent"
+                    totalPages: 0
+                    pages: []
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Bad Request"
+                message: "lessonId is required"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Error fetching lesson"
+
+components:
+  schemas:
+    UploadVideoResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se o upload foi bem-sucedido
+        mediaUrl:
+          type: string
+          description: URL do vídeo no CDN
+        guid:
+          type: string
+          description: Identificador único do vídeo no Bunny
+        title:
+          type: string
+          description: Título do vídeo
+
+    ProcessLessonRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - lesson
+            - retry
+            - cleanup
+          description: |
+            Ação a ser executada:
+            - `lesson`: Processa uma aula específica
+            - `retry`: Reprocessa assets com falha
+            - `cleanup`: Limpa páginas órfãs
+        lessonId:
+          type: string
+          description: ID da aula (obrigatório quando action = "lesson")
+
+    ProcessLessonResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Mensagem de resultado
+        action:
+          type: string
+          description: Ação executada
+        result:
+          $ref: '#/components/schemas/ProcessLessonResult'
+
+    ProcessLessonResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Indica se o processamento foi bem-sucedido
+        totalPages:
+          type: integer
+          description: Total de páginas no PDF
+        processedPages:
+          type: integer
+          description: Número de páginas processadas
+        error:
+          type: string
+          description: Mensagem de erro (quando houver falha)
+
+    ProcessAllRequest:
+      type: object
+      properties:
+        limit:
+          type: integer
+          description: Número máximo de aulas a processar (opcional)
+          minimum: 1
+
+    ProcessAllResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Mensagem de resultado
+        processed:
+          type: integer
+          description: Número de aulas processadas
+        total:
+          type: integer
+          description: Total de aulas encontradas
+        limit:
+          type: integer
+          nullable: true
+          description: Limite aplicado (null se não especificado)
+        success:
+          type: boolean
+          description: Indica se houve processamento
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcessLessonResult'
+          description: Resultados individuais de cada aula processada
+
+    RegeneratePDFResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Mensagem de resultado
+        lessonId:
+          type: string
+          description: ID da aula
+        status:
+          type: string
+          description: Status da regeneração
+          enum:
+            - pending
+
+    LessonPDFPagesResponse:
+      type: object
+      properties:
+        lessonId:
+          type: string
+          description: ID da aula
+        status:
+          type: string
+          description: Status do processamento do PDF
+          enum:
+            - completed
+            - processing
+            - pending
+            - failed
+            - absent
+        totalPages:
+          type: integer
+          description: Total de páginas no PDF
+        pages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonPDFPageInfo'
+          description: Lista de páginas do PDF
+
+    LessonPDFPageInfo:
+      type: object
+      properties:
+        pageNumber:
+          type: integer
+          description: Número da página
+        imageUrl:
+          type: string
+          description: URL da imagem da página
+        width:
+          type: integer
+          nullable: true
+          description: Largura da imagem em pixels
+        height:
+          type: integer
+          nullable: true
+          description: Altura da imagem em pixels
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Tipo do erro HTTP
+        message:
+          type: string
+          description: Mensagem descritiva do erro
+

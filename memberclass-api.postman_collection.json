@@ -1,0 +1,743 @@
+{
+	"info": {
+		"_postman_id": "memberclass-backend-golang",
+		"name": "MemberClass Backend API",
+		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "tenantId",
+			"value": "your-tenant-id",
+			"type": "string"
+		},
+		{
+			"key": "lessonId",
+			"value": "your-lesson-id",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Videos",
+			"description": "Endpoints relacionados ao upload e gerenciamento de vídeos",
+			"item": [
+				{
+					"name": "Upload Video",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "",
+									"description": "Arquivo de vídeo a ser enviado"
+								},
+								{
+									"key": "tenantId",
+									"value": "{{tenantId}}",
+									"type": "text",
+									"description": "ID do tenant (obrigatório)"
+								},
+								{
+									"key": "title",
+									"value": "Meu Vídeo de Exemplo",
+									"type": "text",
+									"description": "Título do vídeo (opcional - usa nome do arquivo se não informado)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/videos/upload",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"videos",
+								"upload"
+							]
+						},
+						"description": "Faz upload de um vídeo para o Bunny CDN.\n\n**Rate Limit:** Este endpoint possui controle de rate limit por tenant.\n\n**Campos:**\n- `file` (obrigatório): Arquivo de vídeo\n- `tenantId` (obrigatório): ID do tenant\n- `title` (opcional): Título do vídeo"
+					},
+					"response": [
+						{
+							"name": "Upload Video - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "video.mp4"
+										},
+										{
+											"key": "tenantId",
+											"value": "tenant-123",
+											"type": "text"
+										},
+										{
+											"key": "title",
+											"value": "Aula 01 - Introdução",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/videos/upload",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"videos",
+										"upload"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": true,\n    \"mediaUrl\": \"https://vz-abc123.b-cdn.net/video-guid/playlist.m3u8\",\n    \"guid\": \"video-guid-123\",\n    \"title\": \"Aula 01 - Introdução\"\n}"
+						},
+						{
+							"name": "Upload Video - Tenant não encontrado",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "video.mp4"
+										},
+										{
+											"key": "tenantId",
+											"value": "invalid-tenant",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/videos/upload",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"videos",
+										"upload"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Not Found\",\n    \"message\": \"Tenant not found\"\n}"
+						},
+						{
+							"name": "Upload Video - Rate Limit Excedido",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "video.mp4"
+										},
+										{
+											"key": "tenantId",
+											"value": "tenant-123",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/videos/upload",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"videos",
+										"upload"
+									]
+								}
+							},
+							"status": "Too Many Requests",
+							"code": 429,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Too Many Requests\",\n    \"message\": \"Rate limit exceeded\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Lessons",
+			"description": "Endpoints relacionados ao processamento de PDFs e gerenciamento de aulas",
+			"item": [
+				{
+					"name": "Process Lesson PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"action\": \"lesson\",\n    \"lessonId\": \"{{lessonId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lessons/pdf-process",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lessons",
+								"pdf-process"
+							]
+						},
+						"description": "Processa o PDF de uma aula específica, convertendo em imagens.\n\n**Actions disponíveis:**\n- `lesson`: Processa o PDF de uma aula específica (requer lessonId)\n- `retry`: Reprocessa assets que falharam anteriormente\n- `cleanup`: Limpa páginas órfãs"
+					},
+					"response": [
+						{
+							"name": "Process Lesson - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"action\": \"lesson\",\n    \"lessonId\": \"lesson-123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/pdf-process",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"pdf-process"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"message\": \"Lesson processing completed\",\n    \"action\": \"lesson\",\n    \"result\": {\n        \"success\": true,\n        \"totalPages\": 15,\n        \"processedPages\": 15\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Retry Failed Assets",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"action\": \"retry\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lessons/pdf-process",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lessons",
+								"pdf-process"
+							]
+						},
+						"description": "Reprocessa todos os assets de PDF que falharam anteriormente."
+					},
+					"response": [
+						{
+							"name": "Retry - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"action\": \"retry\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/pdf-process",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"pdf-process"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"message\": \"Failed assets retry completed\",\n    \"action\": \"retry\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Cleanup Orphaned Pages",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"action\": \"cleanup\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lessons/pdf-process",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lessons",
+								"pdf-process"
+							]
+						},
+						"description": "Remove páginas de PDF órfãs (páginas sem associação com assets válidos)."
+					},
+					"response": [
+						{
+							"name": "Cleanup - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"action\": \"cleanup\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/pdf-process",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"pdf-process"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"message\": \"Cleanup completed\",\n    \"action\": \"cleanup\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Process All Pending PDFs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"limit\": 10\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lessons/process-all-pdfs",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lessons",
+								"process-all-pdfs"
+							]
+						},
+						"description": "Processa todos os PDFs de aulas pendentes.\n\n**Campos:**\n- `limit` (opcional): Número máximo de aulas a processar. Se não informado, processa todas."
+					},
+					"response": [
+						{
+							"name": "Process All - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/process-all-pdfs",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"process-all-pdfs"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"message\": \"PDF processing completed\",\n    \"processed\": 5,\n    \"total\": 10,\n    \"limit\": 10,\n    \"success\": true,\n    \"results\": [\n        {\n            \"success\": true,\n            \"totalPages\": 12,\n            \"processedPages\": 12\n        },\n        {\n            \"success\": true,\n            \"totalPages\": 8,\n            \"processedPages\": 8\n        },\n        {\n            \"success\": false,\n            \"totalPages\": 0,\n            \"processedPages\": 0,\n            \"error\": \"PDF file not found\"\n        }\n    ]\n}"
+						},
+						{
+							"name": "Process All - Sem limite",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/process-all-pdfs",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"process-all-pdfs"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"message\": \"PDF processing completed\",\n    \"processed\": 25,\n    \"total\": 25,\n    \"limit\": null,\n    \"success\": true,\n    \"results\": []\n}"
+						}
+					]
+				},
+				{
+					"name": "Regenerate Lesson PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/lessons/{{lessonId}}/pdf-regenerate",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lessons",
+								"{{lessonId}}",
+								"pdf-regenerate"
+							]
+						},
+						"description": "Coloca na fila a regeneração do PDF de uma aula específica.\n\nIsso irá reprocessar o PDF da aula, gerando novas imagens das páginas."
+					},
+					"response": [
+						{
+							"name": "Regenerate - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": ""
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/lesson-123/pdf-regenerate",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"lesson-123",
+										"pdf-regenerate"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"message\": \"PDF regeneration queued successfully\",\n    \"lessonId\": \"lesson-123\",\n    \"status\": \"pending\"\n}"
+						},
+						{
+							"name": "Regenerate - Lesson não encontrada",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": ""
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/invalid-lesson/pdf-regenerate",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"invalid-lesson",
+										"pdf-regenerate"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Not Found\",\n    \"message\": \"Lesson not found\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Lesson PDF Pages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/lessons/{{lessonId}}/pdf-pages",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"lessons",
+								"{{lessonId}}",
+								"pdf-pages"
+							]
+						},
+						"description": "Retorna as páginas do PDF de uma aula específica.\n\nRetorna informações sobre cada página, incluindo URL da imagem, dimensões e número da página."
+					},
+					"response": [
+						{
+							"name": "Get Pages - Sucesso com páginas",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/lesson-123/pdf-pages",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"lesson-123",
+										"pdf-pages"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"lessonId\": \"lesson-123\",\n    \"status\": \"completed\",\n    \"totalPages\": 3,\n    \"pages\": [\n        {\n            \"pageNumber\": 1,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-123/page-1.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        },\n        {\n            \"pageNumber\": 2,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-123/page-2.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        },\n        {\n            \"pageNumber\": 3,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-123/page-3.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        }\n    ]\n}"
+						},
+						{
+							"name": "Get Pages - PDF ausente",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/lesson-456/pdf-pages",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"lesson-456",
+										"pdf-pages"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"lessonId\": \"lesson-456\",\n    \"status\": \"absent\",\n    \"totalPages\": 0,\n    \"pages\": []\n}"
+						},
+						{
+							"name": "Get Pages - Processando",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/lessons/lesson-789/pdf-pages",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"lessons",
+										"lesson-789",
+										"pdf-pages"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"lessonId\": \"lesson-789\",\n    \"status\": \"processing\",\n    \"totalPages\": 10,\n    \"pages\": [\n        {\n            \"pageNumber\": 1,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-789/page-1.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        },\n        {\n            \"pageNumber\": 2,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-789/page-2.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        }\n    ]\n}"
+						}
+					]
+				}
+			]
+		}
+	]
+}
+
