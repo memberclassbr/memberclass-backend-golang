@@ -10,6 +10,7 @@ import (
 	"time"
 
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	"github.com/memberclass-backend-golang/internal/application/middlewares"
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/usecases"
@@ -21,6 +22,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
 	"go.uber.org/fx"
 )
@@ -33,16 +35,26 @@ func main() {
 			database.NewDB,
 			cache.NewRedisCache,
 			storage.NewDigitalOceanSpaces,
-			rate_limiter.NewRateLimiterUpload,
+
 			tenant.NewTenantRepository,
+			user.NewUserRepository,
 			lesson.NewLessonRepository,
+
+			rate_limiter.NewRateLimiterUpload,
 			ilovepdf.NewIlovePdfService,
-			usecases.NewPdfProcessorUseCase,
 			bunny.NewBunnyService,
+
+			usecases.NewValidateSessionUseCase,
+			usecases.NewPdfProcessorUseCase,
 			usecases.NewTenantGetTenantBunnyCredentialsUseCase,
 			usecases.NewUploadVideoBunnyCdnUseCase,
+
+			middlewares.NewRateLimitMiddleware,
+			middlewares.NewAuthMiddleware,
+
 			internalhttp.NewLessonHandler,
 			internalhttp.NewVideoHandler,
+
 			router.NewRouter,
 		),
 		fx.Invoke(startApplication),
