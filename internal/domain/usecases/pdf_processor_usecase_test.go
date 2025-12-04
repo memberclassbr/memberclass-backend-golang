@@ -51,18 +51,18 @@ func (m *mockLessonRepository) GetPendingPDFLessons(ctx context.Context, limit i
 			pending = append(pending, lesson)
 		}
 	}
-	
+
 	if limit > 0 && len(pending) > limit {
 		pending = pending[:limit]
 	}
-	
+
 	return pending, nil
 }
 
 func (m *mockLessonRepository) Update(ctx context.Context, lesson *entities.Lesson) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.lessons[lesson.ID] = lesson
+	m.lessons[*lesson.ID] = lesson
 	return nil
 }
 
@@ -136,7 +136,7 @@ func (m *mockLessonRepository) GetPDFPageByAssetAndNumber(ctx context.Context, a
 	if !exists {
 		return nil, memberclasserrors.ErrPDFPageNotFound
 	}
-	
+
 	for _, page := range pages {
 		if page.PageNumber == pageNumber {
 			return page, nil
@@ -266,7 +266,7 @@ func TestProcessAllPendingLessons_NoLessons(t *testing.T) {
 	pdfService := newMockPdfService()
 	storageService := &mockStorageService{}
 	logger := &mockLogger{}
-	
+
 	useCase := &pdfProcessorUseCase{
 		lessonRepo:     repo,
 		pdfService:     pdfService,
@@ -296,12 +296,12 @@ func TestProcessAllPendingLessons_WithLessons(t *testing.T) {
 	}
 
 	lessons := []*entities.Lesson{
-		{ID: "lesson1", MediaURL: stringPtr("http://example.com/doc1.pdf")},
-		{ID: "lesson2", MediaURL: stringPtr("http://example.com/doc2.pdf")},
+		{ID: stringPtr("lesson1"), MediaURL: stringPtr("http://example.com/doc1.pdf")},
+		{ID: stringPtr("lesson2"), MediaURL: stringPtr("http://example.com/doc2.pdf")},
 	}
 
 	for _, lesson := range lessons {
-		repo.lessons[lesson.ID] = lesson
+		repo.lessons[*lesson.ID] = lesson
 	}
 
 	ctx := context.Background()
@@ -327,7 +327,7 @@ func TestProcessLesson_Success(t *testing.T) {
 
 	lessonID := "lesson1"
 	lesson := &entities.Lesson{
-		ID:       lessonID,
+		ID:       &lessonID,
 		MediaURL: stringPtr("http://example.com/doc1.pdf"),
 	}
 	repo.lessons[lessonID] = lesson
@@ -354,7 +354,7 @@ func TestProcessLesson_NoMediaURL(t *testing.T) {
 
 	lessonID := "lesson1"
 	lesson := &entities.Lesson{
-		ID: lessonID,
+		ID: &lessonID,
 	}
 	repo.lessons[lessonID] = lesson
 
@@ -370,7 +370,7 @@ func TestProcessLesson_LessonNotFound(t *testing.T) {
 	pdfService := newMockPdfService()
 	storageService := &mockStorageService{}
 	logger := &mockLogger{}
-	
+
 	useCase := &pdfProcessorUseCase{
 		lessonRepo:     repo,
 		pdfService:     pdfService,
@@ -492,7 +492,7 @@ func TestCreateOrUpdatePDFAsset_Success(t *testing.T) {
 	pdfService := newMockPdfService()
 	storageService := &mockStorageService{}
 	logger := &mockLogger{}
-	
+
 	useCase := &pdfProcessorUseCase{
 		lessonRepo:     repo,
 		pdfService:     pdfService,
@@ -518,7 +518,7 @@ func TestValidateLessonHasPDF_Success(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID:       "lesson1",
+		ID:       stringPtr("lesson1"),
 		MediaURL: stringPtr("http://example.com/test.pdf"),
 		PDFAsset: &entities.LessonPDFAsset{
 			ID:       "asset1",
@@ -547,7 +547,7 @@ func TestValidateLessonHasPDF_NoPDF(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID: "lesson1",
+		ID: stringPtr("lesson1"),
 	}
 	repo.lessons["lesson1"] = lesson
 
@@ -570,7 +570,7 @@ func TestGetLessonWithPDFAsset_Success(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID: "lesson1",
+		ID: stringPtr("lesson1"),
 		PDFAsset: &entities.LessonPDFAsset{
 			ID:       "asset1",
 			LessonID: "lesson1",
@@ -578,7 +578,7 @@ func TestGetLessonWithPDFAsset_Success(t *testing.T) {
 		},
 	}
 	repo.lessons["lesson1"] = lesson
-	
+
 	useCase := &pdfProcessorUseCase{
 		lessonRepo:     repo,
 		pdfService:     pdfService,
@@ -590,7 +590,8 @@ func TestGetLessonWithPDFAsset_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Equal(t, "lesson1", result.ID)
+	assert.NotNil(t, result.ID)
+	assert.Equal(t, "lesson1", *result.ID)
 	assert.NotNil(t, result.PDFAsset)
 }
 
@@ -656,7 +657,7 @@ func TestRegeneratePDF_Success(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID:       "lesson1",
+		ID:       stringPtr("lesson1"),
 		MediaURL: stringPtr("http://example.com/test.pdf"),
 		PDFAsset: &entities.LessonPDFAsset{
 			ID:       "asset1",
@@ -738,7 +739,7 @@ func TestProcessLesson_PdfServiceError(t *testing.T) {
 
 	lessonID := "lesson1"
 	lesson := &entities.Lesson{
-		ID:       lessonID,
+		ID:       &lessonID,
 		MediaURL: stringPtr("http://example.com/doc1.pdf"),
 	}
 	repo.lessons[lessonID] = lesson
@@ -815,15 +816,15 @@ func TestProcessAllPendingLessons_WithLimit(t *testing.T) {
 	logger := &mockLogger{}
 
 	lessons := []*entities.Lesson{
-		{ID: "lesson1", MediaURL: stringPtr("http://example.com/doc1.pdf")},
-		{ID: "lesson2", MediaURL: stringPtr("http://example.com/doc2.pdf")},
-		{ID: "lesson3", MediaURL: stringPtr("http://example.com/doc3.pdf")},
-		{ID: "lesson4", MediaURL: stringPtr("http://example.com/doc4.pdf")},
-		{ID: "lesson5", MediaURL: stringPtr("http://example.com/doc5.pdf")},
+		{ID: stringPtr("lesson1"), MediaURL: stringPtr("http://example.com/doc1.pdf")},
+		{ID: stringPtr("lesson2"), MediaURL: stringPtr("http://example.com/doc2.pdf")},
+		{ID: stringPtr("lesson3"), MediaURL: stringPtr("http://example.com/doc3.pdf")},
+		{ID: stringPtr("lesson4"), MediaURL: stringPtr("http://example.com/doc4.pdf")},
+		{ID: stringPtr("lesson5"), MediaURL: stringPtr("http://example.com/doc5.pdf")},
 	}
 
 	for _, lesson := range lessons {
-		repo.lessons[lesson.ID] = lesson
+		repo.lessons[*lesson.ID] = lesson
 	}
 
 	useCase := &pdfProcessorUseCase{
@@ -893,7 +894,7 @@ func TestRegeneratePDF_NoMediaURL(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID: "lesson1",
+		ID: stringPtr("lesson1"),
 	}
 	repo.lessons["lesson1"] = lesson
 
@@ -916,7 +917,7 @@ func TestRegeneratePDF_NoPDFAsset(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID:       "lesson1",
+		ID:       stringPtr("lesson1"),
 		MediaURL: stringPtr("http://example.com/test.pdf"),
 	}
 	repo.lessons["lesson1"] = lesson
@@ -958,7 +959,7 @@ func TestValidateLessonHasPDF_NoMediaURL(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID: "lesson1",
+		ID: stringPtr("lesson1"),
 	}
 	repo.lessons["lesson1"] = lesson
 
@@ -1019,7 +1020,7 @@ func TestCreateOrUpdatePDFAsset_NoMediaURL(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID: "lesson1",
+		ID: stringPtr("lesson1"),
 	}
 	repo.lessons["lesson1"] = lesson
 
@@ -1191,7 +1192,7 @@ func TestProcessLesson_SavePagesError(t *testing.T) {
 	logger := &mockLogger{}
 
 	lesson := &entities.Lesson{
-		ID:       "lesson1",
+		ID:       stringPtr("lesson1"),
 		MediaURL: stringPtr("http://example.com/doc1.pdf"),
 	}
 	repo.lessons["lesson1"] = lesson
