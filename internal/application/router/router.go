@@ -4,9 +4,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http"
-
 	"github.com/memberclass-backend-golang/internal/application/middlewares"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
 )
 
 type Router struct {
@@ -14,9 +12,15 @@ type Router struct {
 	videoHandler        *http.VideoHandler
 	lessonHandler       *http.LessonHandler
 	rateLimitMiddleware *middlewares.RateLimitMiddleware
+	authMiddleware      *middlewares.AuthMiddleware
 }
 
-func NewRouter(videoHandler *http.VideoHandler, lessonHandler *http.LessonHandler, rateLimiter ports.RateLimiterUpload, logger ports.Logger) *Router {
+func NewRouter(
+	videoHandler *http.VideoHandler,
+	lessonHandler *http.LessonHandler,
+	rateLimitMiddleware *middlewares.RateLimitMiddleware,
+	authMiddleware *middlewares.AuthMiddleware,
+) *Router {
 	router := chi.NewRouter()
 
 	router.Use(middleware.Logger)
@@ -24,13 +28,12 @@ func NewRouter(videoHandler *http.VideoHandler, lessonHandler *http.LessonHandle
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 
-	rateLimitMiddleware := middlewares.NewRateLimitMiddleware(rateLimiter, logger)
-
 	return &Router{
 		Router:              router,
 		videoHandler:        videoHandler,
 		lessonHandler:       lessonHandler,
 		rateLimitMiddleware: rateLimitMiddleware,
+		authMiddleware:      authMiddleware,
 	}
 }
 
@@ -46,7 +49,6 @@ func (r *Router) SetupRoutes() {
 
 	})
 
-	//routes for frontend nextJS
 	r.Route("/api", func(router chi.Router) {
 		router.Route("/lessons", func(router chi.Router) {
 			router.Post("/pdf-process", r.lessonHandler.ProcessLesson)
