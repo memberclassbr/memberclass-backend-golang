@@ -101,7 +101,7 @@ func TestGetLessonsPage_Success(t *testing.T) {
 	// Setup
 	mockUseCase := new(MockPdfProcessorUseCase)
 	mockLogger := new(MockLogger)
-	
+
 	handler := &LessonHandler{
 		useCase:         mockUseCase,
 		logger:          mockLogger,
@@ -110,10 +110,10 @@ func TestGetLessonsPage_Success(t *testing.T) {
 
 	lessonID := "test-lesson-001"
 	assetID := "test-asset-001"
-	
+
 	// Mock lesson with PDF asset
 	lesson := &entities.Lesson{
-		ID: lessonID,
+		ID: &lessonID,
 		PDFAsset: &entities.LessonPDFAsset{
 			ID:         assetID,
 			LessonID:   lessonID,
@@ -156,7 +156,7 @@ func TestGetLessonsPage_Success(t *testing.T) {
 
 	// Create request
 	req := httptest.NewRequest("GET", "/api/lessons/"+lessonID+"/pdf-pages", nil)
-	
+
 	// Add lessonId to URL params
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("lessonId", lessonID)
@@ -192,7 +192,7 @@ func TestGetLessonsPage_NoAsset(t *testing.T) {
 	// Setup
 	mockUseCase := new(MockPdfProcessorUseCase)
 	mockLogger := new(MockLogger)
-	
+
 	handler := &LessonHandler{
 		useCase:         mockUseCase,
 		logger:          mockLogger,
@@ -200,10 +200,10 @@ func TestGetLessonsPage_NoAsset(t *testing.T) {
 	}
 
 	lessonID := "test-lesson-001"
-	
+
 	// Mock lesson without PDF asset
 	lesson := &entities.Lesson{
-		ID:       lessonID,
+		ID:       &lessonID,
 		PDFAsset: nil,
 	}
 
@@ -212,7 +212,7 @@ func TestGetLessonsPage_NoAsset(t *testing.T) {
 
 	// Create request
 	req := httptest.NewRequest("GET", "/api/lessons/"+lessonID+"/pdf-pages", nil)
-	
+
 	// Add lessonId to URL params
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("lessonId", lessonID)
@@ -242,7 +242,7 @@ func TestGetLessonsPage_MissingLessonId(t *testing.T) {
 	// Setup
 	mockUseCase := new(MockPdfProcessorUseCase)
 	mockLogger := new(MockLogger)
-	
+
 	handler := &LessonHandler{
 		useCase:         mockUseCase,
 		logger:          mockLogger,
@@ -269,7 +269,7 @@ func TestGetLessonsPage_LessonNotFound(t *testing.T) {
 	// Setup
 	mockUseCase := new(MockPdfProcessorUseCase)
 	mockLogger := new(MockLogger)
-	
+
 	handler := &LessonHandler{
 		useCase:         mockUseCase,
 		logger:          mockLogger,
@@ -277,7 +277,7 @@ func TestGetLessonsPage_LessonNotFound(t *testing.T) {
 	}
 
 	lessonID := "nonexistent-lesson"
-	
+
 	// Setup expectations
 	mockUseCase.On("GetLessonWithPDFAsset", mock.Anything, lessonID).Return((*entities.Lesson)(nil), &memberclasserrors.MemberClassError{
 		Code:    404,
@@ -287,7 +287,7 @@ func TestGetLessonsPage_LessonNotFound(t *testing.T) {
 
 	// Create request
 	req := httptest.NewRequest("GET", "/api/lessons/"+lessonID+"/pdf-pages", nil)
-	
+
 	// Add lessonId to URL params
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("lessonId", lessonID)
