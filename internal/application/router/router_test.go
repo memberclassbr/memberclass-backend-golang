@@ -7,39 +7,43 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	httpHandlers "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	"github.com/memberclass-backend-golang/internal/application/middlewares"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-func TestNewRouter(t *testing.T) {
+func createTestRouter(t *testing.T) *Router {
 	mockVideoHandler := &httpHandlers.VideoHandler{}
 	mockLessonHandler := &httpHandlers.LessonHandler{}
-	mockRateLimiter := &mocks.MockRateLimiterUpload{}
 	mockLogger := &mocks.MockLogger{}
+	mockRateLimiter := &mocks.MockRateLimiterUpload{}
+	mockSessionValidator := &mocks.MockSessionValidatorUseCase{}
 
-	router := NewRouter(mockVideoHandler, mockLessonHandler, mockRateLimiter, mockLogger)
+	mockLogger.On("Error", mock.Anything).Return().Maybe()
+	mockLogger.On("Warn", mock.Anything).Return().Maybe()
+	mockLogger.On("Info", mock.Anything).Return().Maybe()
+	mockLogger.On("Debug", mock.Anything).Return().Maybe()
+
+	rateLimitMiddleware := middlewares.NewRateLimitMiddleware(mockRateLimiter, mockLogger)
+	authMiddleware := middlewares.NewAuthMiddleware(mockLogger, mockSessionValidator)
+
+	return NewRouter(mockVideoHandler, mockLessonHandler, rateLimitMiddleware, authMiddleware)
+}
+
+func TestNewRouter(t *testing.T) {
+	router := createTestRouter(t)
 
 	assert.NotNil(t, router)
 	assert.NotNil(t, router.Router)
-	assert.Equal(t, mockVideoHandler, router.videoHandler)
-	assert.Equal(t, mockLessonHandler, router.lessonHandler)
+	assert.NotNil(t, router.videoHandler)
+	assert.NotNil(t, router.lessonHandler)
 	assert.NotNil(t, router.rateLimitMiddleware)
+	assert.NotNil(t, router.authMiddleware)
 }
 
 func TestRouter_SetupRoutes(t *testing.T) {
-	mockVideoHandler := &httpHandlers.VideoHandler{}
-	mockLessonHandler := &httpHandlers.LessonHandler{}
-	mockRateLimiter := &mocks.MockRateLimiterUpload{}
-	mockLogger := &mocks.MockLogger{}
-
-	// Mock logger methods to avoid panics
-	mockLogger.On("Error", mock.AnythingOfType("string")).Return().Maybe()
-	mockLogger.On("Warn", mock.AnythingOfType("string")).Return().Maybe()
-	mockLogger.On("Info", mock.AnythingOfType("string")).Return().Maybe()
-	mockLogger.On("Debug", mock.AnythingOfType("string")).Return().Maybe()
-
-	router := NewRouter(mockVideoHandler, mockLessonHandler, mockRateLimiter, mockLogger)
+	router := createTestRouter(t)
 	router.SetupRoutes()
 
 	// Test that routes are properly configured by making requests
@@ -80,36 +84,21 @@ func TestRouter_SetupRoutes(t *testing.T) {
 }
 
 func TestRouter_MiddlewareConfiguration(t *testing.T) {
-	mockVideoHandler := &httpHandlers.VideoHandler{}
-	mockLessonHandler := &httpHandlers.LessonHandler{}
-	mockRateLimiter := &mocks.MockRateLimiterUpload{}
-	mockLogger := &mocks.MockLogger{}
-
-	router := NewRouter(mockVideoHandler, mockLessonHandler, mockRateLimiter, mockLogger)
+	router := createTestRouter(t)
 	router.SetupRoutes()
 
-	// Test that middleware is properly configured by checking if the router has middleware
-	// We can't directly test middleware execution without more complex setup,
-	// but we can verify the router is properly configured
 	assert.NotNil(t, router.Router)
 	
-	// Test a simple request to verify the router is working
 	req := httptest.NewRequest("GET", "/api/lessons", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	// Should return 404 for non-existent route, which means the router is working
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestRouter_RouteStructure(t *testing.T) {
-	mockVideoHandler := &httpHandlers.VideoHandler{}
-	mockLessonHandler := &httpHandlers.LessonHandler{}
-	mockRateLimiter := &mocks.MockRateLimiterUpload{}
-	mockLogger := &mocks.MockLogger{}
-
-	router := NewRouter(mockVideoHandler, mockLessonHandler, mockRateLimiter, mockLogger)
+	router := createTestRouter(t)
 	router.SetupRoutes()
 
 	// Test that the route structure is correct by checking if specific routes exist
@@ -141,49 +130,30 @@ func TestRouter_RouteStructure(t *testing.T) {
 }
 
 func TestRouter_ChiRouterIntegration(t *testing.T) {
-	mockVideoHandler := &httpHandlers.VideoHandler{}
-	mockLessonHandler := &httpHandlers.LessonHandler{}
-	mockRateLimiter := &mocks.MockRateLimiterUpload{}
-	mockLogger := &mocks.MockLogger{}
-
-	router := NewRouter(mockVideoHandler, mockLessonHandler, mockRateLimiter, mockLogger)
+	router := createTestRouter(t)
 	router.SetupRoutes()
 
-	// Test that the router implements http.Handler interface
 	var handler http.Handler = router
 	assert.NotNil(t, handler)
 
-	// Test basic HTTP handling
 	req := httptest.NewRequest("GET", "/nonexistent", nil)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
 
-	// Should return 404 for non-existent route
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestRouter_MiddlewareOrder(t *testing.T) {
-	mockVideoHandler := &httpHandlers.VideoHandler{}
-	mockLessonHandler := &httpHandlers.LessonHandler{}
-	mockRateLimiter := &mocks.MockRateLimiterUpload{}
-	mockLogger := &mocks.MockLogger{}
-
-	router := NewRouter(mockVideoHandler, mockLessonHandler, mockRateLimiter, mockLogger)
+	router := createTestRouter(t)
 	router.SetupRoutes()
 
-	// Test that middleware is applied in the correct order
-	// We can verify this by checking that the router has middleware configured
-	// The exact middleware order is tested by the chi framework itself
 	assert.NotNil(t, router.Router)
 	
-	// Make a request to verify middleware is working
 	req := httptest.NewRequest("GET", "/api/lessons", nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
 
-	// The request should be processed (even if it returns 404)
-	// This indicates that middleware is properly configured
 	assert.NotEqual(t, 0, w.Code)
 }
