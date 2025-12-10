@@ -9,17 +9,21 @@ import (
 
 type Router struct {
 	chi.Router
-	videoHandler        *http.VideoHandler
-	lessonHandler       *http.LessonHandler
-	rateLimitMiddleware *middlewares.RateLimitMiddleware
-	authMiddleware      *middlewares.AuthMiddleware
+	videoHandler           *http.VideoHandler
+	lessonHandler          *http.LessonHandler
+	commentHandler         *http.CommentHandler
+	rateLimitMiddleware    *middlewares.RateLimitMiddleware
+	authMiddleware         *middlewares.AuthMiddleware
+	authExternalMiddleware *middlewares.AuthExternalMiddleware
 }
 
 func NewRouter(
 	videoHandler *http.VideoHandler,
 	lessonHandler *http.LessonHandler,
+	commentHandler *http.CommentHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
 	authMiddleware *middlewares.AuthMiddleware,
+	authExternalMiddleware *middlewares.AuthExternalMiddleware,
 ) *Router {
 	router := chi.NewRouter()
 
@@ -29,11 +33,13 @@ func NewRouter(
 	router.Use(middleware.RealIP)
 
 	return &Router{
-		Router:              router,
-		videoHandler:        videoHandler,
-		lessonHandler:       lessonHandler,
-		rateLimitMiddleware: rateLimitMiddleware,
-		authMiddleware:      authMiddleware,
+		Router:                 router,
+		videoHandler:           videoHandler,
+		lessonHandler:          lessonHandler,
+		commentHandler:         commentHandler,
+		rateLimitMiddleware:    rateLimitMiddleware,
+		authMiddleware:         authMiddleware,
+		authExternalMiddleware: authExternalMiddleware,
 	}
 }
 
@@ -47,6 +53,15 @@ func (r *Router) SetupRoutes() {
 			).Post("/upload", r.videoHandler.UploadVideo)
 		})
 
+		router.Route("/comments", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Get("/", r.commentHandler.GetComments)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Patch("/{commentID}", r.commentHandler.UpdateComment)
+		})
+
 	})
 
 	r.Route("/api", func(router chi.Router) {
@@ -58,5 +73,6 @@ func (r *Router) SetupRoutes() {
 				router.Get("/pdf-pages", r.lessonHandler.GetLessonsPage)
 			})
 		})
+
 	})
 }
