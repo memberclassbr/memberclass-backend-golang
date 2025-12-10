@@ -16,9 +16,12 @@ import (
 func createTestRouter(t *testing.T) *Router {
 	mockVideoHandler := &httpHandlers.VideoHandler{}
 	mockLessonHandler := &httpHandlers.LessonHandler{}
+	mockCommentHandler := &httpHandlers.CommentHandler{}
+	mockUserActivityHandler := &httpHandlers.UserActivityHandler{}
 	mockLogger := &mocks.MockLogger{}
 	mockRateLimiter := &mocks.MockRateLimiterUpload{}
 	mockSessionValidator := &mocks.MockSessionValidatorUseCase{}
+	mockApiTokenUseCase := &mocks.MockApiTokenUseCase{}
 
 	mockLogger.On("Error", mock.Anything).Return().Maybe()
 	mockLogger.On("Warn", mock.Anything).Return().Maybe()
@@ -27,8 +30,9 @@ func createTestRouter(t *testing.T) *Router {
 
 	rateLimitMiddleware := middlewares.NewRateLimitMiddleware(mockRateLimiter, mockLogger)
 	authMiddleware := middlewares.NewAuthMiddleware(mockLogger, mockSessionValidator)
+	authExternalMiddleware := middlewares.NewAuthExternalMiddleware(mockApiTokenUseCase)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, rateLimitMiddleware, authMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, rateLimitMiddleware, authMiddleware, authExternalMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
