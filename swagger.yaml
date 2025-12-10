@@ -23,6 +23,8 @@ tags:
     description: Endpoints para upload e gerenciamento de vídeos
   - name: Lessons
     description: Endpoints para processamento de PDFs e gerenciamento de aulas
+  - name: Comments
+    description: Endpoints para gerenciamento de comentários
 
 paths:
   /api/v1/videos/upload:
@@ -400,6 +402,175 @@ paths:
                 error: "Internal Server Error"
                 message: "Error fetching lesson"
 
+  /api/v1/comments:
+    get:
+      tags:
+        - Comments
+      summary: Listar comentários
+      description: |
+        Retorna uma lista paginada de comentários do tenant.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Paginação:** Suporta parâmetros de paginação via query string.
+      operationId: getComments
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          description: "Tamanho da página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: sortBy
+          in: query
+          required: false
+          description: "Campo para ordenação (padrão: createdAt)"
+          schema:
+            type: string
+            default: "createdAt"
+        - name: sortDir
+          in: query
+          required: false
+          description: "Direção da ordenação (asc ou desc, padrão: desc)"
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: "desc"
+      responses:
+        '200':
+          description: Lista de comentários retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentsPaginationResponse'
+              example:
+                data:
+                  - id: "comment-123"
+                    question: "Qual é a dúvida?"
+                    answer: "Esta é a resposta"
+                    published: true
+                    updatedAt: "2024-01-15T10:30:00Z"
+                    lessonName: "Aula 01"
+                    courseName: "Curso de Go"
+                    username: "João Silva"
+                    userEmail: "joao@example.com"
+                pagination:
+                  page: 1
+                  pageSize: 10
+                  total: 25
+                  totalPages: 3
+                  hasNext: true
+                  hasPrev: false
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
+  /api/v1/comments/{commentID}:
+    patch:
+      tags:
+        - Comments
+      summary: Atualizar comentário (parcial)
+      description: |
+        Atualiza parcialmente a resposta e o status de publicação de um comentário específico.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      operationId: updateCommentPartial
+      parameters:
+        - name: commentID
+          in: path
+          required: true
+          description: ID do comentário
+          schema:
+            type: string
+          example: "comment-123"
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCommentRequest'
+            example:
+              answer: "Esta é a resposta para o comentário"
+              published: true
+      responses:
+        '200':
+          description: Comentário atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Comentário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   schemas:
     UploadVideoResponse:
@@ -565,5 +736,115 @@ components:
         message:
           type: string
           description: Mensagem descritiva do erro
+
+    UnauthorizedResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: false
+        error:
+          type: string
+          description: Mensagem de erro
+          example: "API key invalid"
+        errorCode:
+          type: string
+          description: Código do erro
+          example: "INVALID_API_KEY"
+
+    UpdateCommentRequest:
+      type: object
+      required:
+        - answer
+      properties:
+        answer:
+          type: string
+          description: Resposta para o comentário
+          example: "Esta é a resposta para o comentário"
+        published:
+          type: boolean
+          description: Indica se o comentário deve ser publicado
+          example: true
+
+    CommentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID do comentário
+          example: "comment-123"
+        question:
+          type: string
+          description: Pergunta do comentário
+          example: "Qual é a dúvida?"
+        answer:
+          type: string
+          description: Resposta do comentário
+          example: "Esta é a resposta para o comentário"
+        published:
+          type: boolean
+          description: Indica se o comentário está publicado
+          example: true
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data e hora da última atualização
+          example: "2024-01-15T10:30:00Z"
+        lessonName:
+          type: string
+          description: Nome da aula
+          example: ""
+        courseName:
+          type: string
+          description: Nome do curso
+          example: ""
+        username:
+          type: string
+          description: Nome do usuário
+          example: ""
+        userEmail:
+          type: string
+          description: Email do usuário
+          example: ""
+
+    CommentsPaginationResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+          description: Lista de comentários
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Número da página atual
+          example: 1
+        pageSize:
+          type: integer
+          description: Tamanho da página
+          example: 10
+        total:
+          type: integer
+          description: Total de registros
+          example: 25
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 3
+        hasNext:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrev:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
 
 
