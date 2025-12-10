@@ -3,6 +3,8 @@
 package mocks
 
 import (
+	context "context"
+
 	entities "github.com/memberclass-backend-golang/internal/domain/entities"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -132,6 +134,113 @@ func (_c *MockTenantRepository_FindByID_Call) Return(_a0 *entities.Tenant, _a1 e
 }
 
 func (_c *MockTenantRepository_FindByID_Call) RunAndReturn(run func(string) (*entities.Tenant, error)) *MockTenantRepository_FindByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// FindTenantByToken provides a mock function with given fields: ctx, token
+func (_m *MockTenantRepository) FindTenantByToken(ctx context.Context, token string) (*entities.Tenant, error) {
+	ret := _m.Called(ctx, token)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindTenantByToken")
+	}
+
+	var r0 *entities.Tenant
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*entities.Tenant, error)); ok {
+		return rf(ctx, token)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) *entities.Tenant); ok {
+		r0 = rf(ctx, token)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*entities.Tenant)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, token)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockTenantRepository_FindTenantByToken_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindTenantByToken'
+type MockTenantRepository_FindTenantByToken_Call struct {
+	*mock.Call
+}
+
+// FindTenantByToken is a helper method to define mock.On call
+//   - ctx context.Context
+//   - token string
+func (_e *MockTenantRepository_Expecter) FindTenantByToken(ctx interface{}, token interface{}) *MockTenantRepository_FindTenantByToken_Call {
+	return &MockTenantRepository_FindTenantByToken_Call{Call: _e.mock.On("FindTenantByToken", ctx, token)}
+}
+
+func (_c *MockTenantRepository_FindTenantByToken_Call) Run(run func(ctx context.Context, token string)) *MockTenantRepository_FindTenantByToken_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockTenantRepository_FindTenantByToken_Call) Return(_a0 *entities.Tenant, _a1 error) *MockTenantRepository_FindTenantByToken_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockTenantRepository_FindTenantByToken_Call) RunAndReturn(run func(context.Context, string) (*entities.Tenant, error)) *MockTenantRepository_FindTenantByToken_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateTokenApiAuth provides a mock function with given fields: ctx, tenantID, tokenHash
+func (_m *MockTenantRepository) UpdateTokenApiAuth(ctx context.Context, tenantID string, tokenHash string) error {
+	ret := _m.Called(ctx, tenantID, tokenHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTokenApiAuth")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = rf(ctx, tenantID, tokenHash)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockTenantRepository_UpdateTokenApiAuth_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTokenApiAuth'
+type MockTenantRepository_UpdateTokenApiAuth_Call struct {
+	*mock.Call
+}
+
+// UpdateTokenApiAuth is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - tokenHash string
+func (_e *MockTenantRepository_Expecter) UpdateTokenApiAuth(ctx interface{}, tenantID interface{}, tokenHash interface{}) *MockTenantRepository_UpdateTokenApiAuth_Call {
+	return &MockTenantRepository_UpdateTokenApiAuth_Call{Call: _e.mock.On("UpdateTokenApiAuth", ctx, tenantID, tokenHash)}
+}
+
+func (_c *MockTenantRepository_UpdateTokenApiAuth_Call) Run(run func(ctx context.Context, tenantID string, tokenHash string)) *MockTenantRepository_UpdateTokenApiAuth_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockTenantRepository_UpdateTokenApiAuth_Call) Return(_a0 error) *MockTenantRepository_UpdateTokenApiAuth_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockTenantRepository_UpdateTokenApiAuth_Call) RunAndReturn(run func(context.Context, string, string) error) *MockTenantRepository_UpdateTokenApiAuth_Call {
 	_c.Call.Return(run)
 	return _c
 }

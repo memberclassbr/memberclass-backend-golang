@@ -247,6 +247,65 @@ func (_c *MockPdfProcessorUseCase_GetLessonWithPDFAsset_Call) RunAndReturn(run f
 	return _c
 }
 
+// GetPDFPagesByAssetID provides a mock function with given fields: ctx, assetID
+func (_m *MockPdfProcessorUseCase) GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*entities.LessonPDFPage, error) {
+	ret := _m.Called(ctx, assetID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPDFPagesByAssetID")
+	}
+
+	var r0 []*entities.LessonPDFPage
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]*entities.LessonPDFPage, error)); ok {
+		return rf(ctx, assetID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) []*entities.LessonPDFPage); ok {
+		r0 = rf(ctx, assetID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*entities.LessonPDFPage)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, assetID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetPDFPagesByAssetID'
+type MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call struct {
+	*mock.Call
+}
+
+// GetPDFPagesByAssetID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - assetID string
+func (_e *MockPdfProcessorUseCase_Expecter) GetPDFPagesByAssetID(ctx interface{}, assetID interface{}) *MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call {
+	return &MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call{Call: _e.mock.On("GetPDFPagesByAssetID", ctx, assetID)}
+}
+
+func (_c *MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call) Run(run func(ctx context.Context, assetID string)) *MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call) Return(_a0 []*entities.LessonPDFPage, _a1 error) *MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call) RunAndReturn(run func(context.Context, string) ([]*entities.LessonPDFPage, error)) *MockPdfProcessorUseCase_GetPDFPagesByAssetID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ProcessAllPendingLessons provides a mock function with given fields: ctx, limit
 func (_m *MockPdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limit int) (*dto.BatchProcessResult, error) {
 	ret := _m.Called(ctx, limit)
