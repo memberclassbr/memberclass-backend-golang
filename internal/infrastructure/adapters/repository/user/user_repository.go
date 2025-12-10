@@ -22,14 +22,13 @@ func NewUserRepository(db *sql.DB, log ports.Logger) ports.UserRepository {
 }
 
 func (r *UserRepository) FindByID(userID string) (*entities.User, error) {
-	query := `SELECT id, name, username, phone, email, "emailVerified", image, 
+	query := `SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = $1`
 
 	var user entities.User
 	err := r.db.QueryRow(query, userID).Scan(
 		&user.ID,
-		&user.Name,
 		&user.Username,
 		&user.Phone,
 		&user.Email,
@@ -48,6 +47,38 @@ func (r *UserRepository) FindByID(userID string) (*entities.User, error) {
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error finding user",
+		}
+	}
+
+	return &user, nil
+}
+
+func (r *UserRepository) FindByEmail(email string) (*entities.User, error) {
+	query := `SELECT id, username, phone, email, "emailVerified", image, 
+		"createdAt", "updatedAt", referrals 
+		FROM "User" WHERE email = $1`
+
+	var user entities.User
+	err := r.db.QueryRow(query, email).Scan(
+		&user.ID,
+		&user.Username,
+		&user.Phone,
+		&user.Email,
+		&user.EmailVerified,
+		&user.Image,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.Referrals,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, memberclasserrors.ErrUserNotFound
+		}
+		r.log.Error("Error finding user by email: " + err.Error())
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error finding user by email",
 		}
 	}
 
