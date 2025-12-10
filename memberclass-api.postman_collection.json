@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "memberclass-backend-golang",
 		"name": "MemberClass Backend API",
-		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF",
+		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -19,6 +19,16 @@
 		{
 			"key": "lessonId",
 			"value": "your-lesson-id",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "your-api-key",
+			"type": "string"
+		},
+		{
+			"key": "commentId",
+			"value": "your-comment-id",
 			"type": "string"
 		}
 	],
@@ -733,6 +743,375 @@
 								}
 							],
 							"body": "{\n    \"lessonId\": \"lesson-789\",\n    \"status\": \"processing\",\n    \"totalPages\": 10,\n    \"pages\": [\n        {\n            \"pageNumber\": 1,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-789/page-1.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        },\n        {\n            \"pageNumber\": 2,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-789/page-2.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        }\n    ]\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Comments",
+			"description": "Endpoints relacionados ao gerenciamento de comentários",
+			"item": [
+				{
+					"name": "Get Comments",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/comments?page=1&pageSize=10&sortBy=updatedAt&sortDir=desc",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"comments"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1)"
+								},
+								{
+									"key": "pageSize",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, máximo: 100)"
+								},
+								{
+									"key": "sortBy",
+									"value": "updatedAt",
+									"description": "Campo para ordenação (padrão: createdAt)"
+								},
+								{
+									"key": "sortDir",
+									"value": "desc",
+									"description": "Direção da ordenação: asc ou desc (padrão: desc)"
+								}
+							]
+						},
+						"description": "Lista todos os comentários do tenant autenticado com paginação.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Query Parameters:**\n- `page` (opcional): Número da página (padrão: 1)\n- `pageSize` (opcional): Itens por página (padrão: 10, máximo: 100)\n- `sortBy` (opcional): Campo para ordenação (padrão: createdAt)\n- `sortDir` (opcional): Direção da ordenação: asc ou desc (padrão: desc)"
+					},
+					"response": [
+						{
+							"name": "Get Comments - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments?page=1&pageSize=10&sortBy=updatedAt&sortDir=desc",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "10"
+										},
+										{
+											"key": "sortBy",
+											"value": "updatedAt"
+										},
+										{
+											"key": "sortDir",
+											"value": "desc"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"data\": [\n        {\n            \"id\": \"comment-123\",\n            \"question\": \"Qual é a diferença entre X e Y?\",\n            \"answer\": \"A diferença principal é...\",\n            \"published\": true,\n            \"updatedAt\": \"2024-01-15T10:30:00Z\",\n            \"lessonName\": \"Introdução ao Golang\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"João Silva\",\n            \"userEmail\": \"joao@example.com\"\n        },\n        {\n            \"id\": \"comment-456\",\n            \"question\": \"Como funciona o defer?\",\n            \"answer\": \"\",\n            \"published\": false,\n            \"updatedAt\": \"2024-01-14T15:20:00Z\",\n            \"lessonName\": \"Conceitos Avançados\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"Maria Santos\",\n            \"userEmail\": \"maria@example.com\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"pageSize\": 10,\n        \"total\": 25,\n        \"totalPages\": 3,\n        \"hasNext\": true,\n        \"hasPrev\": false\n    }\n}"
+						},
+						{
+							"name": "Get Comments - Sem API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Comments - API Key Inválida",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "invalid-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Update Comment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"answer\": \"Esta é a resposta para o comentário do usuário.\",\n    \"published\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/comments/{{commentId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"comments",
+								"{{commentId}}"
+							]
+						},
+						"description": "Atualiza a resposta de um comentário específico.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Campos:**\n- `answer` (obrigatório): Texto da resposta ao comentário\n- `published` (opcional): Se o comentário deve ser publicado (padrão: false)"
+					},
+					"response": [
+						{
+							"name": "Update Comment - Sucesso",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"answer\": \"Esta é a resposta para o comentário do usuário.\",\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/comment-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"comment-123"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"id\": \"comment-123\",\n    \"question\": \"Qual é a diferença entre X e Y?\",\n    \"answer\": \"Esta é a resposta para o comentário do usuário.\",\n    \"published\": true,\n    \"updatedAt\": \"2024-01-15T10:30:00Z\",\n    \"lessonName\": \"Introdução ao Golang\",\n    \"courseName\": \"Curso de Go\",\n    \"username\": \"João Silva\",\n    \"userEmail\": \"joao@example.com\"\n}"
+						},
+						{
+							"name": "Update Comment - Sem API Key",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"answer\": \"Resposta\",\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/comment-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"comment-123"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Update Comment - Comentário não encontrado",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"answer\": \"Resposta\",\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/invalid-comment-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"invalid-comment-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Not Found\",\n    \"message\": \"Comment not found\"\n}"
+						},
+						{
+							"name": "Update Comment - Answer obrigatório",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/comment-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"comment-123"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Bad Request\",\n    \"message\": \"campo 'answer' é obrigatório e deve ser uma string\"\n}"
 						}
 					]
 				}
