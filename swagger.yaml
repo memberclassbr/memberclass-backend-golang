@@ -8,6 +8,7 @@ info:
     - Upload de vídeos para Bunny CDN
     - Processamento de PDFs de aulas
     - Gerenciamento de páginas de PDF
+    - Consulta de atividades de acesso dos usuários
   version: 1.0.0
   contact:
     name: MemberClass Team
@@ -25,6 +26,8 @@ tags:
     description: Endpoints para processamento de PDFs e gerenciamento de aulas
   - name: Comments
     description: Endpoints para gerenciamento de comentários
+  - name: User Activities
+    description: Endpoints para consulta de atividades de acesso dos usuários
 
 paths:
   /api/v1/videos/upload:
@@ -501,6 +504,115 @@ paths:
                 error: "Internal Server Error"
                 message: "Internal server error"
 
+  /api/v1/user/activities:
+    get:
+      tags:
+        - User Activities
+      summary: Listar atividades de acesso do usuário
+      description: |
+        Retorna uma lista paginada de atividades de acesso de um usuário específico.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Cache:** Este endpoint utiliza cache Redis com TTL de 5 minutos para melhorar a performance.
+        
+        **Paginação:** Suporta parâmetros de paginação via query string.
+      operationId: getUserActivities
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: email
+          in: query
+          required: true
+          description: Email do usuário
+          schema:
+            type: string
+            format: email
+          example: "user@example.com"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Lista de atividades retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResponse'
+              example:
+                email: "user@example.com"
+                access:
+                  - data: "2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'"
+                  - data: "2024-01-14T15:20:00Z - Acessou o curso 'Curso de Go'"
+                  - data: "2024-01-13T09:10:00Z - Completou a lição 'Variáveis e Tipos'"
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 25
+                  totalPages: 3
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emailRequired:
+                  summary: Email não informado
+                  value:
+                    error: "Bad Request"
+                    message: "email parameter is required"
+                invalidPage:
+                  summary: Página inválida
+                  value:
+                    error: "Bad Request"
+                    message: "page must be a positive integer"
+                invalidLimit:
+                  summary: Limite inválido
+                  value:
+                    error: "Bad Request"
+                    message: "limit must be between 1 and 100"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
   /api/v1/comments/{commentID}:
     patch:
       tags:
@@ -846,5 +958,57 @@ components:
           type: boolean
           description: Indica se há página anterior
           example: false
+
+    AccessData:
+      type: object
+      properties:
+        data:
+          type: string
+          description: Dados da atividade de acesso
+          example: "2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'"
+
+    ActivityPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Número da página atual
+          example: 1
+        limit:
+          type: integer
+          description: Limite de itens por página
+          example: 10
+        totalCount:
+          type: integer
+          description: Total de registros
+          example: 25
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 3
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
+    ActivityResponse:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+          example: "user@example.com"
+        access:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessData'
+          description: Lista de atividades de acesso
+        pagination:
+          $ref: '#/components/schemas/ActivityPagination'
 
 
