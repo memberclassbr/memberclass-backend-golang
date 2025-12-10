@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -95,6 +96,54 @@ func (t *TenantRepository) FindBunnyInfoByID(tenantID string) (*entities.Tenant,
 	}
 
 	return &tenant, nil
+}
+
+func (t *TenantRepository) FindTenantByToken(ctx context.Context, token string) (*entities.Tenant, error) {
+
+	//TODO: create index to token_api_auth
+	query := `
+  SELECT id, name 
+  FROM "Tenant" 
+  WHERE token_api_auth = $1 
+  LIMIT 1
+`
+
+	var tenant entities.Tenant
+	err := t.db.QueryRowContext(ctx, query, token).Scan(
+		&tenant.ID,
+		&tenant.Name)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, memberclasserrors.ErrTenantNotFound
+		}
+		t.log.Error(err.Error())
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error finding tenant with token",
+		}
+	}
+	return &tenant, nil
+}
+
+func (t *TenantRepository) UpdateTokenApiAuth(ctx context.Context, tenantID, tokenHash string) error {
+
+	if tenantID == "" || tokenHash == "" {
+		return errors.New("error: tenantID or tokenHash is empty")
+	}
+
+	query := `UPDATE "Tenant" SET token_api_auth = $1 WHERE id = $2`
+
+	_, err := t.db.ExecContext(ctx, query, tokenHash, tenantID)
+	if err != nil {
+		t.log.Error(err.Error())
+		return &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error updating token api auth",
+		}
+	}
+
+	return nil
+
 }
 
 func NewTenantRepository(db *sql.DB, log ports.Logger) ports.TenantRepository {
