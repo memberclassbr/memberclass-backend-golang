@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "memberclass-backend-golang",
 		"name": "MemberClass Backend API",
-		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários",
+		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -29,6 +29,11 @@
 		{
 			"key": "commentId",
 			"value": "your-comment-id",
+			"type": "string"
+		},
+		{
+			"key": "email",
+			"value": "user@example.com",
 			"type": "string"
 		}
 	],
@@ -1112,6 +1117,223 @@
 								}
 							],
 							"body": "{\n    \"error\": \"Bad Request\",\n    \"message\": \"campo 'answer' é obrigatório e deve ser uma string\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User Activities",
+			"description": "Endpoints relacionados às atividades de acesso dos usuários",
+			"item": [
+				{
+					"name": "Get User Activities",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/user/activities?email={{email}}&page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"activities"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "{{email}}",
+									"description": "Email do usuário (obrigatório)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, máximo: 100)"
+								}
+							]
+						},
+						"description": "Lista as atividades de acesso de um usuário com paginação.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Cache:** Este endpoint utiliza cache Redis com TTL de 5 minutos.\n\n**Query Parameters:**\n- `email` (obrigatório): Email do usuário\n- `page` (opcional): Número da página (padrão: 1)\n- `limit` (opcional): Itens por página (padrão: 10, máximo: 100)"
+					},
+					"response": [
+						{
+							"name": "Get Activities - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"access\": [\n        {\n            \"data\": \"2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'\"\n        },\n        {\n            \"data\": \"2024-01-14T15:20:00Z - Acessou o curso 'Curso de Go'\"\n        },\n        {\n            \"data\": \"2024-01-13T09:10:00Z - Completou a lição 'Variáveis e Tipos'\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 25,\n        \"totalPages\": 3,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Activities - Sem API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities?email=user@example.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Activities - Email obrigatório",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Bad Request\",\n    \"message\": \"email parameter is required\"\n}"
+						},
+						{
+							"name": "Get Activities - Página vazia",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"access\": [],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 0,\n        \"totalPages\": 0,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
 						}
 					]
 				}
