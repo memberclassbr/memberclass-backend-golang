@@ -20,3 +20,6 @@ packages:
       LessonRepository:
       PdfProcessService:
       Storage:
+      CommentRepository:
+      CommentUseCase:
+      ApiTokenUseCase:
