@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 )
 
@@ -25,7 +26,7 @@ func NewCommentUseCase(logger ports.Logger, commentRepository ports.CommentRepos
 	}
 }
 
-func (uc *CommentUseCase) UpdateAnswer(ctx context.Context, commentID, tenantID string, req dto.UpdateCommentRequest) (*dto.CommentResponse, error) {
+func (uc *CommentUseCase) UpdateAnswer(ctx context.Context, commentID, tenantID string, req request.UpdateCommentRequest) (*dto.CommentResponse, error) {
 	if req.Answer == "" {
 		return nil, ErrAnswerRequired
 	}

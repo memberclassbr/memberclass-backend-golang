@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/usecases"
@@ -25,7 +26,7 @@ type MockCommentUseCase struct {
 	mock.Mock
 }
 
-func (m *MockCommentUseCase) UpdateAnswer(ctx context.Context, commentID, tenantID string, req dto.UpdateCommentRequest) (*dto.CommentResponse, error) {
+func (m *MockCommentUseCase) UpdateAnswer(ctx context.Context, commentID, tenantID string, req request.UpdateCommentRequest) (*dto.CommentResponse, error) {
 	args := m.Called(ctx, commentID, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -193,7 +194,7 @@ func TestCommentHandler_UpdateComment_Success(t *testing.T) {
 	tenantID := "tenant-123"
 	tenant := &entities.Tenant{ID: tenantID}
 
-	requestBody := dto.UpdateCommentRequest{
+	requestBody := request.UpdateCommentRequest{
 		Answer:    "Updated answer",
 		Published: boolPtr(true),
 	}
@@ -345,7 +346,7 @@ func TestCommentHandler_UpdateComment_CommentNotFound(t *testing.T) {
 	tenantID := "tenant-123"
 	tenant := &entities.Tenant{ID: tenantID}
 
-	requestBody := dto.UpdateCommentRequest{
+	requestBody := request.UpdateCommentRequest{
 		Answer: "Updated answer",
 	}
 
@@ -385,7 +386,7 @@ func TestCommentHandler_UpdateComment_AnswerRequired(t *testing.T) {
 	tenantID := "tenant-123"
 	tenant := &entities.Tenant{ID: tenantID}
 
-	requestBody := dto.UpdateCommentRequest{
+	requestBody := request.UpdateCommentRequest{
 		Answer: "",
 	}
 
@@ -425,7 +426,7 @@ func TestCommentHandler_UpdateComment_UnexpectedError(t *testing.T) {
 	tenantID := "tenant-123"
 	tenant := &entities.Tenant{ID: tenantID}
 
-	requestBody := dto.UpdateCommentRequest{
+	requestBody := request.UpdateCommentRequest{
 		Answer: "Updated answer",
 	}
 

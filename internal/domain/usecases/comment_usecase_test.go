@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/mocks"
@@ -97,7 +98,7 @@ func TestCommentUseCase_UpdateAnswer_Success(t *testing.T) {
 		UserEmail:  "user1@test.com",
 	}
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer:    answer,
 		Published: &published,
 	}
@@ -126,7 +127,7 @@ func TestCommentUseCase_UpdateAnswer_EmptyAnswer(t *testing.T) {
 	commentID := "comment-123"
 	tenantID := "tenant-123"
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer: "",
 	}
 
@@ -147,7 +148,7 @@ func TestCommentUseCase_UpdateAnswer_CommentNotFound(t *testing.T) {
 	tenantID := "tenant-123"
 	answer := "Updated answer"
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer: answer,
 	}
 
@@ -172,7 +173,7 @@ func TestCommentUseCase_UpdateAnswer_CommentNil(t *testing.T) {
 	tenantID := "tenant-123"
 	answer := "Updated answer"
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer: answer,
 	}
 
@@ -197,7 +198,7 @@ func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnFind(t *testing.T) {
 	tenantID := "tenant-123"
 	answer := "Updated answer"
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer: answer,
 	}
 
@@ -229,7 +230,7 @@ func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnUpdate(t *testing.T) {
 		Question: &question,
 	}
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer: answer,
 	}
 
@@ -270,7 +271,7 @@ func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnFindDetails(t *testing.T) 
 		UpdatedAt: time.Now(),
 	}
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer: answer,
 	}
 
@@ -324,7 +325,7 @@ func TestCommentUseCase_UpdateAnswer_PublishedNil(t *testing.T) {
 		UserEmail:  "user1@test.com",
 	}
 
-	req := dto.UpdateCommentRequest{
+	req := request.UpdateCommentRequest{
 		Answer:    answer,
 		Published: nil,
 	}
@@ -451,4 +452,3 @@ func TestCommentUseCase_GetComments_EmptyResult(t *testing.T) {
 
 	mockRepo.AssertExpectations(t)
 }
-
