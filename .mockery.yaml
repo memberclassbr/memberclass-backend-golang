@@ -23,3 +23,5 @@ packages:
       CommentRepository:
       CommentUseCase:
       ApiTokenUseCase:
+      UserActivityRepository:
+      UserActivityUseCase:

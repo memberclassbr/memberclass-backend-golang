@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/usecases"
@@ -75,7 +76,7 @@ func (h *CommentHandler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req dto.UpdateCommentRequest
+	var req request.UpdateCommentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.sendErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -128,4 +129,3 @@ func (h *CommentHandler) sendJSONResponse(w http.ResponseWriter, code int, data 
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(data)
 }
-

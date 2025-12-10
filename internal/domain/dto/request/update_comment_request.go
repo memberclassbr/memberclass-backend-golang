@@ -1,4 +1,4 @@
-package dto
+package request
 
 type UpdateCommentRequest struct {
 	Answer    string `json:"answer"`

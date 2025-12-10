@@ -32,6 +32,14 @@ func (m *MockUserRepository) ExistsByID(userID string) (bool, error) {
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockUserRepository) FindByEmail(email string) (*entities.User, error) {
+	args := m.Called(email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*entities.User), args.Error(1)
+}
+
 func (m *MockUserRepository) BelongsToTenant(userID string, tenantID string) (bool, error) {
 	args := m.Called(userID, tenantID)
 	return args.Bool(0), args.Error(1)
