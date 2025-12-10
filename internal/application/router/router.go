@@ -12,6 +12,7 @@ type Router struct {
 	videoHandler           *http.VideoHandler
 	lessonHandler          *http.LessonHandler
 	commentHandler         *http.CommentHandler
+	userActivityHandler    *http.UserActivityHandler
 	rateLimitMiddleware    *middlewares.RateLimitMiddleware
 	authMiddleware         *middlewares.AuthMiddleware
 	authExternalMiddleware *middlewares.AuthExternalMiddleware
@@ -21,6 +22,7 @@ func NewRouter(
 	videoHandler *http.VideoHandler,
 	lessonHandler *http.LessonHandler,
 	commentHandler *http.CommentHandler,
+	userActivityHandler *http.UserActivityHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
 	authMiddleware *middlewares.AuthMiddleware,
 	authExternalMiddleware *middlewares.AuthExternalMiddleware,
@@ -37,6 +39,7 @@ func NewRouter(
 		videoHandler:           videoHandler,
 		lessonHandler:          lessonHandler,
 		commentHandler:         commentHandler,
+		userActivityHandler:    userActivityHandler,
 		rateLimitMiddleware:    rateLimitMiddleware,
 		authMiddleware:         authMiddleware,
 		authExternalMiddleware: authExternalMiddleware,
@@ -60,6 +63,12 @@ func (r *Router) SetupRoutes() {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
 			).Patch("/{commentID}", r.commentHandler.UpdateComment)
+		})
+
+		router.Route("/user", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Get("/activities", r.userActivityHandler.GetUserActivities)
 		})
 
 	})
