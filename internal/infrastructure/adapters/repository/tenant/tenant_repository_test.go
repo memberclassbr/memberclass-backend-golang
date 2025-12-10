@@ -1,6 +1,7 @@
 package tenant
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -208,6 +209,186 @@ func TestTenantRepository_FindBunnyInfoByID(t *testing.T) {
 				assert.Equal(t, tt.expectedTenant.ID, result.ID)
 				assert.Equal(t, tt.expectedTenant.BunnyLibraryApiKey, result.BunnyLibraryApiKey)
 				assert.Equal(t, tt.expectedTenant.BunnyLibraryID, result.BunnyLibraryID)
+			}
+			assert.NoError(t, sqlMock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestTenantRepository_FindTenantByToken(t *testing.T) {
+	tests := []struct {
+		name          string
+		token         string
+		mockSetup     func(sqlmock.Sqlmock)
+		expectedError error
+		expectedTenant *entities.Tenant
+	}{
+		{
+			name:  "should return tenant when found by token",
+			token:  "token-hash-123",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				rows := sqlmock.NewRows([]string{"id", "name"}).
+					AddRow("tenant-123", "Test Tenant")
+				sqlMock.ExpectQuery(`SELECT id, name`).
+					WithArgs("token-hash-123").
+					WillReturnRows(rows)
+			},
+			expectedError: nil,
+			expectedTenant: &entities.Tenant{
+				ID:   "tenant-123",
+				Name: "Test Tenant",
+			},
+		},
+		{
+			name:  "should return ErrTenantNotFound when tenant does not exist",
+			token:  "non-existent-token",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectQuery(`SELECT id, name`).
+					WithArgs("non-existent-token").
+					WillReturnError(sql.ErrNoRows)
+			},
+			expectedError: memberclasserrors.ErrTenantNotFound,
+			expectedTenant: nil,
+		},
+		{
+			name:  "should return MemberClassError when database error occurs",
+			token:  "token-hash-123",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectQuery(`SELECT id, name`).
+					WithArgs("token-hash-123").
+					WillReturnError(errors.New("database connection error"))
+			},
+			expectedError: &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error finding tenant with token",
+			},
+			expectedTenant: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, sqlMock, err := sqlmock.New()
+			assert.NoError(t, err)
+			defer db.Close()
+
+			mockLogger := mocks.NewMockLogger(t)
+			if tt.expectedError != nil && !errors.Is(tt.expectedError, memberclasserrors.ErrTenantNotFound) {
+				mockLogger.EXPECT().Error(mock.Anything).Return()
+			}
+
+			repository := NewTenantRepository(db, mockLogger)
+			tt.mockSetup(sqlMock)
+
+			result, err := repository.FindTenantByToken(context.Background(), tt.token)
+
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				if errors.Is(tt.expectedError, memberclasserrors.ErrTenantNotFound) {
+					assert.Equal(t, memberclasserrors.ErrTenantNotFound, err)
+				} else {
+					assert.Equal(t, tt.expectedError, err)
+				}
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Equal(t, tt.expectedTenant.ID, result.ID)
+				assert.Equal(t, tt.expectedTenant.Name, result.Name)
+			}
+			assert.NoError(t, sqlMock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestTenantRepository_UpdateTokenApiAuth(t *testing.T) {
+	tests := []struct {
+		name          string
+		tenantID      string
+		tokenHash     string
+		mockSetup     func(sqlmock.Sqlmock)
+		expectedError error
+	}{
+		{
+			name:      "should update token successfully",
+			tenantID:  "tenant-123",
+			tokenHash: "token-hash-123",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectExec(`UPDATE "Tenant" SET token_api_auth`).
+					WithArgs("token-hash-123", "tenant-123").
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			},
+			expectedError: nil,
+		},
+		{
+			name:      "should return error when tenantID is empty",
+			tenantID:  "",
+			tokenHash: "token-hash-123",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+			},
+			expectedError: errors.New("error: tenantID or tokenHash is empty"),
+		},
+		{
+			name:      "should return error when tokenHash is empty",
+			tenantID:  "tenant-123",
+			tokenHash: "",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+			},
+			expectedError: errors.New("error: tenantID or tokenHash is empty"),
+		},
+		{
+			name:      "should return error when both are empty",
+			tenantID:  "",
+			tokenHash: "",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+			},
+			expectedError: errors.New("error: tenantID or tokenHash is empty"),
+		},
+		{
+			name:      "should return MemberClassError when database error occurs",
+			tenantID:  "tenant-123",
+			tokenHash: "token-hash-123",
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectExec(`UPDATE "Tenant" SET token_api_auth`).
+					WithArgs("token-hash-123", "tenant-123").
+					WillReturnError(errors.New("database connection error"))
+			},
+			expectedError: &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error updating token api auth",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, sqlMock, err := sqlmock.New()
+			assert.NoError(t, err)
+			defer db.Close()
+
+			mockLogger := mocks.NewMockLogger(t)
+			if tt.expectedError != nil {
+				validationErr := errors.New("error: tenantID or tokenHash is empty")
+				if tt.expectedError.Error() == validationErr.Error() {
+				} else {
+					mockLogger.EXPECT().Error(mock.Anything).Return()
+				}
+			}
+
+			repository := NewTenantRepository(db, mockLogger)
+			tt.mockSetup(sqlMock)
+
+			err = repository.UpdateTokenApiAuth(context.Background(), tt.tenantID, tt.tokenHash)
+
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				if errors.Is(tt.expectedError, errors.New("error: tenantID or tokenHash is empty")) {
+					assert.Equal(t, tt.expectedError.Error(), err.Error())
+				} else {
+					assert.Equal(t, tt.expectedError, err)
+				}
+			} else {
+				assert.NoError(t, err)
 			}
 			assert.NoError(t, sqlMock.ExpectationsWereMet())
 		})
