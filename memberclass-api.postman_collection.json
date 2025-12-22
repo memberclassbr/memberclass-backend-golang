@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "memberclass-backend-golang",
 		"name": "MemberClass Backend API",
-		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários",
+		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários\n- Compras e reembolsos dos usuários",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -1334,6 +1334,328 @@
 								}
 							],
 							"body": "{\n    \"email\": \"user@example.com\",\n    \"access\": [],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 0,\n        \"totalPages\": 0,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User Purchases",
+			"description": "Endpoints relacionados às compras e reembolsos dos usuários",
+			"item": [
+				{
+					"name": "Get User Purchases",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/purchases?email={{email}}&page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"purchases"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "{{email}}",
+									"description": "Email do usuário (obrigatório)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, máximo: 100)"
+								},
+								{
+									"key": "type",
+									"value": "",
+									"description": "Tipo de transação: 'purchase' ou 'refund' (opcional)"
+								}
+							]
+						},
+						"description": "Lista as compras e reembolsos de um usuário com paginação.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos).\n\n**Query Parameters:**\n- `email` (obrigatório): Email do usuário\n- `page` (opcional): Número da página (padrão: 1)\n- `limit` (opcional): Itens por página (padrão: 10, máximo: 100)\n- `type` (opcional): Filtrar por tipo: 'purchase' ou 'refund'"
+					},
+					"response": [
+						{
+							"name": "Get Purchases - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"purchases\": [\n        {\n            \"id\": \"purchase-123\",\n            \"amount\": 99.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-15T10:30:00Z\"\n        },\n        {\n            \"id\": \"purchase-456\",\n            \"amount\": 149.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-14T15:20:00Z\"\n        },\n        {\n            \"id\": \"refund-789\",\n            \"amount\": 99.90,\n            \"status\": \"completed\",\n            \"type\": \"refund\",\n            \"createdAt\": \"2024-01-13T09:10:00Z\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 15,\n        \"totalPages\": 2,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Purchases - Filtrado por tipo",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com&page=1&limit=10&type=purchase",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "type",
+											"value": "purchase"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"purchases\": [\n        {\n            \"id\": \"purchase-123\",\n            \"amount\": 99.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-15T10:30:00Z\"\n        },\n        {\n            \"id\": \"purchase-456\",\n            \"amount\": 149.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-14T15:20:00Z\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 12,\n        \"totalPages\": 2,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Purchases - Sem API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Purchases - Email obrigatório",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"email é obrigatório\",\n    \"errorCode\": \"MISSING_EMAIL\"\n}"
+						},
+						{
+							"name": "Get Purchases - Usuário não encontrado",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=invalid@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "invalid@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Usuário não encontrado ou não pertence ao tenant autenticado\",\n    \"errorCode\": \"USER_NOT_FOUND\"\n}"
+						},
+						{
+							"name": "Get Purchases - Lista vazia",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"purchases\": [],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 0,\n        \"totalPages\": 0,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
 						}
 					]
 				}
