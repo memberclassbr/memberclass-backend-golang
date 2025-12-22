@@ -9,6 +9,7 @@ info:
     - Processamento de PDFs de aulas
     - Gerenciamento de páginas de PDF
     - Consulta de atividades de acesso dos usuários
+    - Consulta de compras e reembolsos dos usuários
   version: 1.0.0
   contact:
     name: MemberClass Team
@@ -28,6 +29,8 @@ tags:
     description: Endpoints para gerenciamento de comentários
   - name: User Activities
     description: Endpoints para consulta de atividades de acesso dos usuários
+  - name: User Purchases
+    description: Endpoints para consulta de compras e reembolsos dos usuários
 
 paths:
   /api/v1/videos/upload:
@@ -613,6 +616,146 @@ paths:
                 error: "Internal Server Error"
                 message: "Internal server error"
 
+  /api/v1/users/purchases:
+    get:
+      tags:
+        - User Purchases
+      summary: Listar compras e reembolsos do usuário
+      description: |
+        Retorna uma lista paginada de compras e reembolsos de um usuário específico.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos) para melhorar a performance.
+        
+        **Paginação:** Suporta parâmetros de paginação via query string.
+        
+        **Filtro por tipo:** É possível filtrar as transações por tipo (purchase ou refund) usando o parâmetro `type`.
+      operationId: getUserPurchases
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: email
+          in: query
+          required: true
+          description: Email do usuário
+          schema:
+            type: string
+            format: email
+          example: "user@example.com"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: type
+          in: query
+          required: false
+          description: "Filtrar por tipo de transação: 'purchase' ou 'refund'"
+          schema:
+            type: string
+            enum:
+              - purchase
+              - refund
+          example: "purchase"
+      responses:
+        '200':
+          description: Lista de compras e reembolsos retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPurchasesResponse'
+              example:
+                purchases:
+                  - id: "event-123"
+                    type: "purchase"
+                    createdAt: "2024-01-15T10:30:00.000Z"
+                    updatedAt: "2024-01-15T10:30:00.000Z"
+                  - id: "event-456"
+                    type: "purchase"
+                    createdAt: "2024-01-14T15:20:00.000Z"
+                    updatedAt: "2024-01-14T15:20:00.000Z"
+                  - id: "event-789"
+                    type: "refund"
+                    createdAt: "2024-01-13T09:10:00.000Z"
+                    updatedAt: "2024-01-13T09:10:00.000Z"
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 15
+                  totalPages: 2
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                emailRequired:
+                  summary: Email não informado
+                  value:
+                    ok: false
+                    error: "email é obrigatório"
+                    errorCode: "MISSING_EMAIL"
+                invalidPage:
+                  summary: Página inválida
+                  value:
+                    error: "Bad Request"
+                    message: "page must be a positive integer"
+                invalidLimit:
+                  summary: Limite inválido
+                  value:
+                    error: "Bad Request"
+                    message: "limit must be between 1 and 100"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado ou não pertence ao tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado ou não pertence ao tenant autenticado"
+                errorCode: "USER_NOT_FOUND"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
   /api/v1/comments/{commentID}:
     patch:
       tags:
@@ -1010,5 +1153,57 @@ components:
           description: Lista de atividades de acesso
         pagination:
           $ref: '#/components/schemas/ActivityPagination'
+
+    UserPurchaseData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID do evento de compra/reembolso
+          example: "event-123"
+        type:
+          type: string
+          description: Tipo da transação (purchase ou refund)
+          enum:
+            - purchase
+            - refund
+          example: "purchase"
+        createdAt:
+          type: string
+          format: date-time
+          description: Data e hora da criação da transação
+          example: "2024-01-15T10:30:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data e hora da última atualização da transação
+          example: "2024-01-15T10:30:00.000Z"
+
+    UserPurchasesResponse:
+      type: object
+      properties:
+        purchases:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserPurchaseData'
+          description: Lista de compras e reembolsos
+        pagination:
+          $ref: '#/components/schemas/ActivityPagination'
+
+    CustomErrorResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: false
+        error:
+          type: string
+          description: Mensagem de erro
+          example: "email é obrigatório"
+        errorCode:
+          type: string
+          description: Código do erro
+          example: "MISSING_EMAIL"
 
 
