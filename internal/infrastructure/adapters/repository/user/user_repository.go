@@ -1,9 +1,12 @@
 package user
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
+	"github.com/lib/pq"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -118,5 +121,81 @@ func (r *UserRepository) BelongsToTenant(userID string, tenantID string) (bool, 
 	}
 
 	return belongs, nil
+}
+
+func (r *UserRepository) FindPurchasesByUserAndTenant(ctx context.Context, userID, tenantID string, purchaseTypes []string, page, limit int) ([]response.UserPurchaseData, int64, error) {
+	offset := (page - 1) * limit
+
+	typesFilter := []string{"purchase", "refund"}
+	if len(purchaseTypes) > 0 {
+		typesFilter = purchaseTypes
+	}
+
+	query := `
+		WITH filtered AS (
+			SELECT id, "createdAt", type
+			FROM "UserEvent"
+			WHERE "usersOnTenantsUserId" = $1 
+			  AND "usersOnTenantsTenantId" = $2
+			  AND type = ANY($3)
+		),
+		paginated AS (
+			SELECT * FROM filtered
+			ORDER BY "createdAt" DESC
+			LIMIT $4 OFFSET $5
+		)
+		SELECT 
+			p.id, 
+			p.type,
+			TO_CHAR(p."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') as "createdAt",
+			TO_CHAR(p."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.000"Z"') as "updatedAt",
+			(SELECT COUNT(*) FROM filtered) as total_count
+		FROM paginated p
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID, tenantID, pq.Array(typesFilter), limit, offset)
+	if err != nil {
+		r.log.Error("Error finding purchases: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error finding purchases",
+		}
+	}
+	defer rows.Close()
+
+	purchases := make([]response.UserPurchaseData, 0)
+	var total int64
+
+	for rows.Next() {
+		var purchase response.UserPurchaseData
+		if err := rows.Scan(
+			&purchase.ID,
+			&purchase.Type,
+			&purchase.CreatedAt,
+			&purchase.UpdatedAt,
+			&total,
+		); err != nil {
+			r.log.Error("Error scanning purchase: " + err.Error())
+			return nil, 0, &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error scanning purchase",
+			}
+		}
+		purchases = append(purchases, purchase)
+	}
+
+	if err = rows.Err(); err != nil {
+		r.log.Error("Error iterating purchases: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error iterating purchases",
+		}
+	}
+
+	if len(purchases) == 0 {
+		return purchases, 0, nil
+	}
+
+	return purchases, total, nil
 }
 
