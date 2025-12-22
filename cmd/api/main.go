@@ -55,6 +55,7 @@ func main() {
 			usecases.NewCommentUseCase,
 			usecases.NewApiTokenTenantUseCase,
 			usecases.NewUserActivityUseCase,
+			usecases.NewUserPurchaseUseCase,
 
 			middlewares.NewRateLimitMiddleware,
 			middlewares.NewAuthMiddleware,
@@ -64,6 +65,7 @@ func main() {
 			internalhttp.NewVideoHandler,
 			internalhttp.NewCommentHandler,
 			internalhttp.NewUserActivityHandler,
+			internalhttp.NewUserPurchaseHandler,
 
 			router.NewRouter,
 		),
