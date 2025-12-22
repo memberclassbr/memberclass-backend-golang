@@ -13,6 +13,7 @@ type Router struct {
 	lessonHandler          *http.LessonHandler
 	commentHandler         *http.CommentHandler
 	userActivityHandler    *http.UserActivityHandler
+	userPurchaseHandler   *http.UserPurchaseHandler
 	rateLimitMiddleware    *middlewares.RateLimitMiddleware
 	authMiddleware         *middlewares.AuthMiddleware
 	authExternalMiddleware *middlewares.AuthExternalMiddleware
@@ -23,6 +24,7 @@ func NewRouter(
 	lessonHandler *http.LessonHandler,
 	commentHandler *http.CommentHandler,
 	userActivityHandler *http.UserActivityHandler,
+	userPurchaseHandler *http.UserPurchaseHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
 	authMiddleware *middlewares.AuthMiddleware,
 	authExternalMiddleware *middlewares.AuthExternalMiddleware,
@@ -40,6 +42,7 @@ func NewRouter(
 		lessonHandler:          lessonHandler,
 		commentHandler:         commentHandler,
 		userActivityHandler:    userActivityHandler,
+		userPurchaseHandler:    userPurchaseHandler,
 		rateLimitMiddleware:    rateLimitMiddleware,
 		authMiddleware:         authMiddleware,
 		authExternalMiddleware: authExternalMiddleware,
@@ -69,6 +72,12 @@ func (r *Router) SetupRoutes() {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
 			).Get("/activities", r.userActivityHandler.GetUserActivities)
+		})
+
+		router.Route("/users", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Get("/purchases", r.userPurchaseHandler.GetUserPurchases)
 		})
 
 	})
