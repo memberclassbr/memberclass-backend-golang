@@ -26,3 +26,12 @@ packages:
       UserActivityRepository:
       UserActivityUseCase:
       UserPurchaseUseCase:
+      UserInformationsUseCase:
+      SocialCommentUseCase:
+      PostSocialUseCase:
+      ActivitySummaryUseCase:
+      LessonsCompletedUseCase:
+      UserRepository:
+      SocialCommentRepository:
+      PostSocialRepository:
+      TopicRepository:
