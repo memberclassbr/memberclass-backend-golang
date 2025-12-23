@@ -22,6 +22,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
 		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
 		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
+		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
 		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 		user_activity "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user_activity"
@@ -42,6 +43,8 @@ func main() {
 			user.NewUserRepository,
 			lesson.NewLessonRepository,
 			comment.NewCommentRepository,
+			comment.NewSocialCommentRepository,
+			topic.NewTopicRepository,
 			user_activity.NewUserActivityRepository,
 
 			rate_limiter.NewRateLimiterUpload,
@@ -56,6 +59,10 @@ func main() {
 			usecases.NewApiTokenTenantUseCase,
 			usecases.NewUserActivityUseCase,
 			usecases.NewUserPurchaseUseCase,
+			usecases.NewUserInformationsUseCase,
+			usecases.NewSocialCommentUseCase,
+			usecases.NewActivitySummaryUseCase,
+			usecases.NewLessonsCompletedUseCase,
 
 			middlewares.NewRateLimitMiddleware,
 			middlewares.NewAuthMiddleware,
@@ -66,6 +73,10 @@ func main() {
 			internalhttp.NewCommentHandler,
 			internalhttp.NewUserActivityHandler,
 			internalhttp.NewUserPurchaseHandler,
+			internalhttp.NewUserInformationsHandler,
+			internalhttp.NewSocialCommentHandler,
+			internalhttp.NewActivitySummaryHandler,
+			internalhttp.NewLessonsCompletedHandler,
 
 			router.NewRouter,
 		),

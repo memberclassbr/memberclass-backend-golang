@@ -9,14 +9,18 @@ import (
 
 type Router struct {
 	chi.Router
-	videoHandler           *http.VideoHandler
-	lessonHandler          *http.LessonHandler
-	commentHandler         *http.CommentHandler
-	userActivityHandler    *http.UserActivityHandler
-	userPurchaseHandler   *http.UserPurchaseHandler
-	rateLimitMiddleware    *middlewares.RateLimitMiddleware
-	authMiddleware         *middlewares.AuthMiddleware
-	authExternalMiddleware *middlewares.AuthExternalMiddleware
+	videoHandler            *http.VideoHandler
+	lessonHandler           *http.LessonHandler
+	commentHandler          *http.CommentHandler
+	userActivityHandler     *http.UserActivityHandler
+	userPurchaseHandler     *http.UserPurchaseHandler
+	userInformationsHandler *http.UserInformationsHandler
+	socialCommentHandler    *http.SocialCommentHandler
+	activitySummaryHandler  *http.ActivitySummaryHandler
+	lessonsCompletedHandler  *http.LessonsCompletedHandler
+	rateLimitMiddleware     *middlewares.RateLimitMiddleware
+	authMiddleware          *middlewares.AuthMiddleware
+	authExternalMiddleware  *middlewares.AuthExternalMiddleware
 }
 
 func NewRouter(
@@ -25,6 +29,10 @@ func NewRouter(
 	commentHandler *http.CommentHandler,
 	userActivityHandler *http.UserActivityHandler,
 	userPurchaseHandler *http.UserPurchaseHandler,
+	userInformationsHandler *http.UserInformationsHandler,
+	socialCommentHandler *http.SocialCommentHandler,
+	activitySummaryHandler *http.ActivitySummaryHandler,
+	lessonsCompletedHandler *http.LessonsCompletedHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
 	authMiddleware *middlewares.AuthMiddleware,
 	authExternalMiddleware *middlewares.AuthExternalMiddleware,
@@ -37,15 +45,19 @@ func NewRouter(
 	router.Use(middleware.RealIP)
 
 	return &Router{
-		Router:                 router,
-		videoHandler:           videoHandler,
-		lessonHandler:          lessonHandler,
-		commentHandler:         commentHandler,
-		userActivityHandler:    userActivityHandler,
-		userPurchaseHandler:    userPurchaseHandler,
-		rateLimitMiddleware:    rateLimitMiddleware,
-		authMiddleware:         authMiddleware,
-		authExternalMiddleware: authExternalMiddleware,
+		Router:                  router,
+		videoHandler:            videoHandler,
+		lessonHandler:           lessonHandler,
+		commentHandler:          commentHandler,
+		userActivityHandler:     userActivityHandler,
+		userPurchaseHandler:     userPurchaseHandler,
+		userInformationsHandler: userInformationsHandler,
+		socialCommentHandler:    socialCommentHandler,
+		activitySummaryHandler:  activitySummaryHandler,
+		lessonsCompletedHandler: lessonsCompletedHandler,
+		rateLimitMiddleware:     rateLimitMiddleware,
+		authMiddleware:          authMiddleware,
+		authExternalMiddleware:  authExternalMiddleware,
 	}
 }
 
@@ -71,13 +83,28 @@ func (r *Router) SetupRoutes() {
 		router.Route("/user", func(router chi.Router) {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+			).Get("/informations", r.userInformationsHandler.GetUserInformations)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
 			).Get("/activities", r.userActivityHandler.GetUserActivities)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Get("/activity/summary", r.activitySummaryHandler.GetActivitySummary)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Get("/lessons/completed", r.lessonsCompletedHandler.GetLessonsCompleted)
 		})
 
 		router.Route("/users", func(router chi.Router) {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
 			).Get("/purchases", r.userPurchaseHandler.GetUserPurchases)
+		})
+
+		router.Route("/social", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Post("/", r.socialCommentHandler.CreateOrUpdatePost)
 		})
 
 	})
