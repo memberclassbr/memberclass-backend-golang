@@ -1,27 +1,39 @@
 package dto
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 type CommentResponse struct {
-	ID         string    `json:"id"`
-	Question   string    `json:"question"`
-	Answer     string    `json:"answer"`
-	Published  bool      `json:"published"`
-	UpdatedAt  time.Time `json:"updatedAt"`
-	LessonName string    `json:"lessonName"`
-	CourseName string    `json:"courseName"`
-	UserName   string    `json:"username"`
-	UserEmail  string    `json:"userEmail"`
+	ID         string     `json:"id"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+	LessonName string     `json:"lessonName"`
+	CourseName string     `json:"courseName"`
+	Published  *bool      `json:"published"`
+	Question   string     `json:"question"`
+	Answer     *string    `json:"answer"`
+	Username   string     `json:"username"`
+	UserEmail  string     `json:"userEmail"`
 }
 
 type CommentsPaginationResponse struct {
-	Data       []CommentResponse `json:"data"`
-	Pagination PaginationMeta    `json:"pagination"`
+	Comments   []CommentResponse      `json:"comments"`
+	Pagination CommentsPaginationMeta `json:"pagination"`
 }
 
-func NewCommentsPaginationResponse(data []*CommentResponse, total int64, req *PaginationRequest) *CommentsPaginationResponse {
-	pageSize := req.GetLimit()
-	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+type CommentsPaginationMeta struct {
+	Page        int   `json:"page"`
+	Limit       int   `json:"limit"`
+	TotalCount  int64 `json:"totalCount"`
+	TotalPages  int   `json:"totalPages"`
+	HasNextPage bool  `json:"hasNextPage"`
+	HasPrevPage bool  `json:"hasPrevPage"`
+}
+
+func NewCommentsPaginationResponse(data []*CommentResponse, total int64, page, limit int) *CommentsPaginationResponse {
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 
 	comments := make([]CommentResponse, len(data))
 	for i, c := range data {
@@ -29,14 +41,14 @@ func NewCommentsPaginationResponse(data []*CommentResponse, total int64, req *Pa
 	}
 
 	return &CommentsPaginationResponse{
-		Data: comments,
-		Pagination: PaginationMeta{
-			Page:       req.Page,
-			PageSize:   pageSize,
-			Total:      total,
-			TotalPages: totalPages,
-			HasNext:    req.Page < totalPages,
-			HasPrev:    req.Page > 1,
+		Comments: comments,
+		Pagination: CommentsPaginationMeta{
+			Page:        page,
+			Limit:       limit,
+			TotalCount:  total,
+			TotalPages:  totalPages,
+			HasNextPage: page < totalPages,
+			HasPrevPage: page > 1,
 		},
 	}
 }

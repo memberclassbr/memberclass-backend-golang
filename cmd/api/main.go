@@ -57,7 +57,9 @@ func main() {
 			usecases.NewPdfProcessorUseCase,
 			usecases.NewTenantGetTenantBunnyCredentialsUseCase,
 			usecases.NewUploadVideoBunnyCdnUseCase,
-			usecases.NewCommentUseCase,
+			func(logger ports.Logger, commentRepo ports.CommentRepository, userRepo ports.UserRepository) ports.CommentUseCase {
+				return usecases.NewCommentUseCase(logger, commentRepo, userRepo)
+			},
 			usecases.NewApiTokenTenantUseCase,
 			usecases.NewUserActivityUseCase,
 			usecases.NewUserPurchaseUseCase,

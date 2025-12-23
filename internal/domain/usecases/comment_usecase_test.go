@@ -43,19 +43,25 @@ func (m *MockCommentRepository) FindByIDAndTenantWithDetails(ctx context.Context
 	return args.Get(0).(*dto.CommentResponse), args.Error(1)
 }
 
-func (m *MockCommentRepository) FindAllByTenant(ctx context.Context, tenantID string, pagination *dto.PaginationRequest) ([]*dto.CommentResponse, int64, error) {
-	args := m.Called(ctx, tenantID, pagination)
+func (m *MockCommentRepository) FindAllByTenant(ctx context.Context, tenantID string, req *request.GetCommentsRequest) ([]*dto.CommentResponse, int64, error) {
+	args := m.Called(ctx, tenantID, req)
 	if args.Get(0) == nil {
 		return nil, args.Get(1).(int64), args.Error(2)
 	}
 	return args.Get(0).([]*dto.CommentResponse), args.Get(1).(int64), args.Error(2)
 }
 
+func (m *MockCommentRepository) FindUserByEmailAndTenant(ctx context.Context, email, tenantID string) (string, error) {
+	args := m.Called(ctx, email, tenantID)
+	return args.String(0), args.Error(1)
+}
+
 func TestNewCommentUseCase(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	assert.NotNil(t, useCase)
 }
@@ -63,8 +69,9 @@ func TestNewCommentUseCase(t *testing.T) {
 func TestCommentUseCase_UpdateAnswer_Success(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -88,13 +95,14 @@ func TestCommentUseCase_UpdateAnswer_Success(t *testing.T) {
 
 	response := &dto.CommentResponse{
 		ID:         commentID,
-		Question:   "Test question?",
-		Answer:     answer,
-		Published:  published,
+		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
+		Question:   "Test question?",
+		Answer:     &answer,
+		Published:  &published,
 		LessonName: "Lesson 1",
 		CourseName: "Course 1",
-		UserName:   "User 1",
+		Username:   "User 1",
 		UserEmail:  "user1@test.com",
 	}
 
@@ -112,8 +120,10 @@ func TestCommentUseCase_UpdateAnswer_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, commentID, result.ID)
-	assert.Equal(t, answer, result.Answer)
-	assert.Equal(t, published, result.Published)
+	assert.NotNil(t, result.Answer)
+	assert.Equal(t, answer, *result.Answer)
+	assert.NotNil(t, result.Published)
+	assert.Equal(t, published, *result.Published)
 
 	mockRepo.AssertExpectations(t)
 }
@@ -121,8 +131,9 @@ func TestCommentUseCase_UpdateAnswer_Success(t *testing.T) {
 func TestCommentUseCase_UpdateAnswer_EmptyAnswer(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -141,8 +152,9 @@ func TestCommentUseCase_UpdateAnswer_EmptyAnswer(t *testing.T) {
 func TestCommentUseCase_UpdateAnswer_CommentNotFound(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -166,8 +178,9 @@ func TestCommentUseCase_UpdateAnswer_CommentNotFound(t *testing.T) {
 func TestCommentUseCase_UpdateAnswer_CommentNil(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -191,8 +204,9 @@ func TestCommentUseCase_UpdateAnswer_CommentNil(t *testing.T) {
 func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnFind(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -217,8 +231,9 @@ func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnFind(t *testing.T) {
 func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnUpdate(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -250,8 +265,9 @@ func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnUpdate(t *testing.T) {
 func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnFindDetails(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -292,8 +308,9 @@ func TestCommentUseCase_UpdateAnswer_RepositoryErrorOnFindDetails(t *testing.T) 
 func TestCommentUseCase_UpdateAnswer_PublishedNil(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	commentID := "comment-123"
 	tenantID := "tenant-123"
@@ -313,15 +330,17 @@ func TestCommentUseCase_UpdateAnswer_PublishedNil(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
+	publishedFalse := false
 	response := &dto.CommentResponse{
 		ID:         commentID,
-		Question:   "Test question?",
-		Answer:     answer,
-		Published:  false,
+		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
+		Question:   "Test question?",
+		Answer:     &answer,
+		Published:  &publishedFalse,
 		LessonName: "Lesson 1",
 		CourseName: "Course 1",
-		UserName:   "User 1",
+		Username:   "User 1",
 		UserEmail:  "user1@test.com",
 	}
 
@@ -338,7 +357,8 @@ func TestCommentUseCase_UpdateAnswer_PublishedNil(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Equal(t, false, result.Published)
+	assert.NotNil(t, result.Published)
+	assert.Equal(t, false, *result.Published)
 
 	mockRepo.AssertExpectations(t)
 }
@@ -346,54 +366,59 @@ func TestCommentUseCase_UpdateAnswer_PublishedNil(t *testing.T) {
 func TestCommentUseCase_GetComments_Success(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	tenantID := "tenant-123"
-	pagination := &dto.PaginationRequest{
-		Page:     1,
-		PageSize: 10,
-		SortBy:   "updatedAt",
-		SortDir:  "desc",
+	req := &request.GetCommentsRequest{
+		Page:  1,
+		Limit: 10,
 	}
 
+	answer1 := "Answer 1"
+	answer2 := "Answer 2"
+	published1 := true
+	published2 := false
 	comments := []*dto.CommentResponse{
 		{
 			ID:         "comment-1",
-			Question:   "Question 1?",
-			Answer:     "Answer 1",
-			Published:  true,
+			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
+			Question:   "Question 1?",
+			Answer:     &answer1,
+			Published:  &published1,
 			LessonName: "Lesson 1",
 			CourseName: "Course 1",
-			UserName:   "User 1",
+			Username:   "User 1",
 			UserEmail:  "user1@test.com",
 		},
 		{
 			ID:         "comment-2",
-			Question:   "Question 2?",
-			Answer:     "Answer 2",
-			Published:  false,
+			CreatedAt:  time.Now(),
 			UpdatedAt:  time.Now(),
+			Question:   "Question 2?",
+			Answer:     &answer2,
+			Published:  &published2,
 			LessonName: "Lesson 2",
 			CourseName: "Course 2",
-			UserName:   "User 2",
+			Username:   "User 2",
 			UserEmail:  "user2@test.com",
 		},
 	}
 
 	total := int64(2)
 
-	mockRepo.On("FindAllByTenant", mock.Anything, tenantID, pagination).Return(comments, total, nil)
+	mockRepo.On("FindAllByTenant", mock.Anything, tenantID, req).Return(comments, total, nil)
 
-	result, err := useCase.GetComments(context.Background(), tenantID, pagination)
+	result, err := useCase.GetComments(context.Background(), tenantID, req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Equal(t, 2, len(result.Data))
-	assert.Equal(t, int64(2), result.Pagination.Total)
+	assert.Equal(t, 2, len(result.Comments))
+	assert.Equal(t, int64(2), result.Pagination.TotalCount)
 	assert.Equal(t, 1, result.Pagination.Page)
-	assert.Equal(t, 10, result.Pagination.PageSize)
+	assert.Equal(t, 10, result.Pagination.Limit)
 
 	mockRepo.AssertExpectations(t)
 }
@@ -401,21 +426,20 @@ func TestCommentUseCase_GetComments_Success(t *testing.T) {
 func TestCommentUseCase_GetComments_RepositoryError(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	tenantID := "tenant-123"
-	pagination := &dto.PaginationRequest{
-		Page:     1,
-		PageSize: 10,
-		SortBy:   "updatedAt",
-		SortDir:  "desc",
+	req := &request.GetCommentsRequest{
+		Page:  1,
+		Limit: 10,
 	}
 
 	repoError := errors.New("database error")
-	mockRepo.On("FindAllByTenant", mock.Anything, tenantID, pagination).Return(nil, int64(0), repoError)
+	mockRepo.On("FindAllByTenant", mock.Anything, tenantID, req).Return(nil, int64(0), repoError)
 
-	result, err := useCase.GetComments(context.Background(), tenantID, pagination)
+	result, err := useCase.GetComments(context.Background(), tenantID, req)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -427,28 +451,27 @@ func TestCommentUseCase_GetComments_RepositoryError(t *testing.T) {
 func TestCommentUseCase_GetComments_EmptyResult(t *testing.T) {
 	mockLogger := mocks.NewMockLogger(t)
 	mockRepo := new(MockCommentRepository)
+	mockUserRepo := mocks.NewMockUserRepository(t)
 
-	useCase := NewCommentUseCase(mockLogger, mockRepo)
+	useCase := NewCommentUseCase(mockLogger, mockRepo, mockUserRepo)
 
 	tenantID := "tenant-123"
-	pagination := &dto.PaginationRequest{
-		Page:     1,
-		PageSize: 10,
-		SortBy:   "updatedAt",
-		SortDir:  "desc",
+	req := &request.GetCommentsRequest{
+		Page:  1,
+		Limit: 10,
 	}
 
 	comments := []*dto.CommentResponse{}
 	total := int64(0)
 
-	mockRepo.On("FindAllByTenant", mock.Anything, tenantID, pagination).Return(comments, total, nil)
+	mockRepo.On("FindAllByTenant", mock.Anything, tenantID, req).Return(comments, total, nil)
 
-	result, err := useCase.GetComments(context.Background(), tenantID, pagination)
+	result, err := useCase.GetComments(context.Background(), tenantID, req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
-	assert.Equal(t, 0, len(result.Data))
-	assert.Equal(t, int64(0), result.Pagination.Total)
+	assert.Equal(t, 0, len(result.Comments))
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 
 	mockRepo.AssertExpectations(t)
 }

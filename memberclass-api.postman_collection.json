@@ -770,7 +770,7 @@
 							}
 						],
 						"url": {
-							"raw": "{{baseUrl}}/api/v1/comments?page=1&pageSize=10&sortBy=updatedAt&sortDir=desc",
+							"raw": "{{baseUrl}}/api/v1/comments?page=1&limit=10&email=user@example.com&status=approved&courseId=course-123&answered=true",
 							"host": [
 								"{{baseUrl}}"
 							],
@@ -783,26 +783,40 @@
 								{
 									"key": "page",
 									"value": "1",
-									"description": "Número da página (padrão: 1)"
+									"description": "Número da página (padrão: 1, mínimo: 1)"
 								},
 								{
-									"key": "pageSize",
+									"key": "limit",
 									"value": "10",
-									"description": "Itens por página (padrão: 10, máximo: 100)"
+									"description": "Itens por página (padrão: 10, mínimo: 1, máximo: 100)"
 								},
 								{
-									"key": "sortBy",
-									"value": "updatedAt",
-									"description": "Campo para ordenação (padrão: createdAt)"
+									"key": "email",
+									"value": "user@example.com",
+									"description": "Filtra por email do usuário (busca parcial, case insensitive)",
+									"disabled": true
 								},
 								{
-									"key": "sortDir",
-									"value": "desc",
-									"description": "Direção da ordenação: asc ou desc (padrão: desc)"
+									"key": "status",
+									"value": "approved",
+									"description": "Filtra por status: pendent, approved ou rejected",
+									"disabled": true
+								},
+								{
+									"key": "courseId",
+									"value": "course-123",
+									"description": "Filtra por ID do curso",
+									"disabled": true
+								},
+								{
+									"key": "answered",
+									"value": "true",
+									"description": "Filtra por comentários respondidos: true ou false",
+									"disabled": true
 								}
 							]
 						},
-						"description": "Lista todos os comentários do tenant autenticado com paginação.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Query Parameters:**\n- `page` (opcional): Número da página (padrão: 1)\n- `pageSize` (opcional): Itens por página (padrão: 10, máximo: 100)\n- `sortBy` (opcional): Campo para ordenação (padrão: createdAt)\n- `sortDir` (opcional): Direção da ordenação: asc ou desc (padrão: desc)"
+						"description": "Lista todos os comentários do tenant autenticado com paginação e filtros opcionais.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Query Parameters:**\n- `page` (opcional): Número da página (padrão: 1, mínimo: 1)\n- `limit` (opcional): Itens por página (padrão: 10, mínimo: 1, máximo: 100)\n- `email` (opcional): Filtra por email do usuário (busca parcial, case insensitive)\n- `status` (opcional): Filtra por status do comentário (`pendent`, `approved`, `rejected`)\n- `courseId` (opcional): Filtra por ID do curso\n- `answered` (opcional): Filtra por comentários respondidos (`true` ou `false`)\n\n**Ordenação:** Os comentários são sempre ordenados por `createdAt` em ordem decrescente."
 					},
 					"response": [
 						{
@@ -854,7 +868,7 @@
 									"value": "application/json"
 								}
 							],
-							"body": "{\n    \"data\": [\n        {\n            \"id\": \"comment-123\",\n            \"question\": \"Qual é a diferença entre X e Y?\",\n            \"answer\": \"A diferença principal é...\",\n            \"published\": true,\n            \"updatedAt\": \"2024-01-15T10:30:00Z\",\n            \"lessonName\": \"Introdução ao Golang\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"João Silva\",\n            \"userEmail\": \"joao@example.com\"\n        },\n        {\n            \"id\": \"comment-456\",\n            \"question\": \"Como funciona o defer?\",\n            \"answer\": \"\",\n            \"published\": false,\n            \"updatedAt\": \"2024-01-14T15:20:00Z\",\n            \"lessonName\": \"Conceitos Avançados\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"Maria Santos\",\n            \"userEmail\": \"maria@example.com\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"pageSize\": 10,\n        \"total\": 25,\n        \"totalPages\": 3,\n        \"hasNext\": true,\n        \"hasPrev\": false\n    }\n}"
+							"body": "{\n    \"comments\": [\n        {\n            \"id\": \"comment-123\",\n            \"createdAt\": \"2024-01-15T10:30:00Z\",\n            \"updatedAt\": \"2024-01-15T11:00:00Z\",\n            \"question\": \"Qual é a diferença entre X e Y?\",\n            \"answer\": \"A diferença principal é...\",\n            \"published\": true,\n            \"lessonName\": \"Introdução ao Golang\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"João Silva\",\n            \"userEmail\": \"joao@example.com\"\n        },\n        {\n            \"id\": \"comment-456\",\n            \"createdAt\": \"2024-01-14T15:20:00Z\",\n            \"updatedAt\": \"2024-01-14T15:20:00Z\",\n            \"question\": \"Como funciona o defer?\",\n            \"answer\": null,\n            \"published\": null,\n            \"lessonName\": \"Conceitos Avançados\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"Maria Santos\",\n            \"userEmail\": \"maria@example.com\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 25,\n        \"totalPages\": 3,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
 						},
 						{
 							"name": "Get Comments - Sem API Key",

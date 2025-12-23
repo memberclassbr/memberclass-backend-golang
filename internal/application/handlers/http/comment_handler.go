@@ -15,41 +15,45 @@ import (
 )
 
 type CommentHandler struct {
-	useCase         ports.CommentUseCase
-	logger          ports.Logger
-	paginationUtils *usecases.PaginationUtils
+	useCase ports.CommentUseCase
+	logger  ports.Logger
 }
 
 func NewCommentHandler(useCase ports.CommentUseCase, logger ports.Logger) *CommentHandler {
 	return &CommentHandler{
-		useCase:         useCase,
-		logger:          logger,
-		paginationUtils: usecases.NewPaginationUtils(),
+		useCase: useCase,
+		logger:  logger,
 	}
 }
 
 func (h *CommentHandler) GetComments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		h.sendCustomErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
 	tenant := constants.GetTenantFromContext(r.Context())
 	if tenant == nil {
-		h.sendErrorResponse(w, http.StatusUnauthorized, "Tenant not found in context")
+		h.sendCustomErrorResponse(w, http.StatusUnauthorized, "API key inválida", "INVALID_API_KEY")
 		return
 	}
 
-	queryParams := make(map[string]string)
-	for key, values := range r.URL.Query() {
-		if len(values) > 0 {
-			queryParams[key] = values[0]
-		}
+	parsedReq, err := request.ParseGetCommentsRequest(r.URL.Query())
+	if err != nil {
+		h.sendCustomErrorResponse(w, http.StatusBadRequest, "Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100", "INVALID_PAGINATION")
+		return
 	}
 
-	pagination := h.paginationUtils.ParsePaginationFromQuery(queryParams)
+	if err := parsedReq.Validate(); err != nil {
+		if err.Error() == "page deve ser >= 1" || err.Error() == "limit deve ser entre 1 e 100" {
+			h.sendCustomErrorResponse(w, http.StatusBadRequest, "Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100", "INVALID_PAGINATION")
+			return
+		}
+		h.sendCustomErrorResponse(w, http.StatusBadRequest, err.Error(), "INVALID_REQUEST")
+		return
+	}
 
-	response, err := h.useCase.GetComments(r.Context(), tenant.ID, pagination)
+	response, err := h.useCase.GetComments(r.Context(), tenant.ID, parsedReq)
 	if err != nil {
 		h.handleUseCaseError(w, err)
 		return
@@ -60,25 +64,25 @@ func (h *CommentHandler) GetComments(w http.ResponseWriter, r *http.Request) {
 
 func (h *CommentHandler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPatch {
-		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		h.sendCustomErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
 	commentID := chi.URLParam(r, "commentID")
 	if commentID == "" {
-		h.sendErrorResponse(w, http.StatusBadRequest, "Comment ID is required")
+		h.sendCustomErrorResponse(w, http.StatusBadRequest, "Comment ID is required", "INVALID_REQUEST")
 		return
 	}
 
 	tenant := constants.GetTenantFromContext(r.Context())
 	if tenant == nil {
-		h.sendErrorResponse(w, http.StatusUnauthorized, "Tenant not found in context")
+		h.sendCustomErrorResponse(w, http.StatusUnauthorized, "API key inválida", "INVALID_API_KEY")
 		return
 	}
 
 	var req request.UpdateCommentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.sendErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		h.sendCustomErrorResponse(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
 		return
 	}
 
@@ -88,28 +92,46 @@ func (h *CommentHandler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.sendJSONResponse(w, http.StatusOK, response)
+	// Formato de resposta: {ok: true, comment: {...}}
+	result := map[string]interface{}{
+		"ok":      true,
+		"comment": response,
+	}
+
+	h.sendJSONResponse(w, http.StatusOK, result)
 }
 
 func (h *CommentHandler) handleUseCaseError(w http.ResponseWriter, err error) {
 	var memberClassErr *memberclasserrors.MemberClassError
 	if errors.As(err, &memberClassErr) {
-		h.sendErrorResponse(w, memberClassErr.Code, memberClassErr.Message)
+		errorCode := "INTERNAL_ERROR"
+		if memberClassErr.Code == 404 {
+			if memberClassErr.Message == "Usuário não encontrado" {
+				errorCode = "USER_NOT_FOUND"
+			} else if memberClassErr.Message == "Usuário não está associado a este tenant" {
+				errorCode = "USER_NOT_IN_TENANT"
+			} else {
+				errorCode = "COMMENT_NOT_FOUND"
+			}
+		} else if memberClassErr.Code == 400 {
+			errorCode = "INVALID_REQUEST"
+		}
+		h.sendCustomErrorResponse(w, memberClassErr.Code, memberClassErr.Message, errorCode)
 		return
 	}
 
 	if errors.Is(err, usecases.ErrCommentNotFound) {
-		h.sendErrorResponse(w, http.StatusNotFound, "Comment not found")
+		h.sendCustomErrorResponse(w, http.StatusNotFound, "Comentário não encontrado ou não pertence a este tenant", "COMMENT_NOT_FOUND")
 		return
 	}
 
 	if errors.Is(err, usecases.ErrAnswerRequired) {
-		h.sendErrorResponse(w, http.StatusBadRequest, err.Error())
+		h.sendCustomErrorResponse(w, http.StatusBadRequest, "Campo 'answer' é obrigatório e deve ser uma string", "INVALID_REQUEST")
 		return
 	}
 
 	h.logger.Error("Unexpected error: " + err.Error())
-	h.sendErrorResponse(w, http.StatusInternalServerError, "Internal server error")
+	h.sendCustomErrorResponse(w, http.StatusInternalServerError, "Erro interno do servidor", "INTERNAL_ERROR")
 }
 
 func (h *CommentHandler) sendErrorResponse(w http.ResponseWriter, code int, message string) {
@@ -119,6 +141,19 @@ func (h *CommentHandler) sendErrorResponse(w http.ResponseWriter, code int, mess
 	response := dto.ErrorResponse{
 		Error:   http.StatusText(code),
 		Message: message,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *CommentHandler) sendCustomErrorResponse(w http.ResponseWriter, code int, message, errorCode string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+
+	response := map[string]interface{}{
+		"ok":        false,
+		"error":     message,
+		"errorCode": errorCode,
 	}
 
 	json.NewEncoder(w).Encode(response)

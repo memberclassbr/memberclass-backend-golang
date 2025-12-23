@@ -424,11 +424,17 @@ paths:
         - Comments
       summary: Listar comentários
       description: |
-        Retorna uma lista paginada de comentários do tenant.
+        Retorna uma lista paginada de comentários do tenant com filtros opcionais.
         
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
         
-        **Paginação:** Suporta parâmetros de paginação via query string.
+        **Filtros disponíveis:**
+        - `email`: Filtra por email do usuário (busca parcial, case insensitive)
+        - `status`: Filtra por status do comentário (`pendent`, `approved`, `rejected`)
+        - `courseId`: Filtra por ID do curso
+        - `answered`: Filtra por comentários respondidos (`true` ou `false`)
+        
+        **Paginação:** Suporta parâmetros `page` e `limit` via query string.
       operationId: getComments
       parameters:
         - name: mc-api-key
@@ -441,37 +447,55 @@ paths:
         - name: page
           in: query
           required: false
-          description: "Número da página (padrão: 1)"
+          description: "Número da página (padrão: 1, mínimo: 1)"
           schema:
             type: integer
             minimum: 1
             default: 1
-        - name: pageSize
+        - name: limit
           in: query
           required: false
-          description: "Tamanho da página (padrão: 10, máximo: 100)"
+          description: "Tamanho da página (padrão: 10, mínimo: 1, máximo: 100)"
           schema:
             type: integer
             minimum: 1
             maximum: 100
             default: 10
-        - name: sortBy
+        - name: email
           in: query
           required: false
-          description: "Campo para ordenação (padrão: createdAt)"
+          description: "Filtra por email do usuário (busca parcial, case insensitive)"
           schema:
             type: string
-            default: "createdAt"
-        - name: sortDir
+          example: "user@example.com"
+        - name: status
           in: query
           required: false
-          description: "Direção da ordenação (asc ou desc, padrão: desc)"
+          description: "Filtra por status do comentário"
           schema:
             type: string
             enum:
-              - asc
-              - desc
-            default: "desc"
+              - pendent
+              - approved
+              - rejected
+          example: "approved"
+        - name: courseId
+          in: query
+          required: false
+          description: "Filtra por ID do curso"
+          schema:
+            type: string
+          example: "course-123"
+        - name: answered
+          in: query
+          required: false
+          description: "Filtra por comentários respondidos"
+          schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
+          example: "true"
       responses:
         '200':
           description: Lista de comentários retornada com sucesso
@@ -480,23 +504,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/CommentsPaginationResponse'
               example:
-                data:
+                comments:
                   - id: "comment-123"
+                    createdAt: "2024-01-15T10:30:00Z"
+                    updatedAt: "2024-01-15T11:00:00Z"
                     question: "Qual é a dúvida?"
                     answer: "Esta é a resposta"
                     published: true
-                    updatedAt: "2024-01-15T10:30:00Z"
                     lessonName: "Aula 01"
                     courseName: "Curso de Go"
                     username: "João Silva"
                     userEmail: "joao@example.com"
                 pagination:
                   page: 1
-                  pageSize: 10
-                  total: 25
+                  limit: 10
+                  totalCount: 25
                   totalPages: 3
-                  hasNext: true
-                  hasPrev: false
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                error: "Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100"
+                errorCode: "INVALID_PAGINATION"
         '401':
           description: Não autorizado
           content:
@@ -505,8 +540,18 @@ paths:
                 $ref: '#/components/schemas/UnauthorizedResponse'
               example:
                 ok: false
-                error: "API key invalid"
+                error: "API key inválida"
                 errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado ou não associado ao tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado"
+                errorCode: "USER_NOT_FOUND"
         '500':
           description: Erro interno do servidor
           content:
@@ -514,8 +559,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
-                error: "Internal Server Error"
-                message: "Internal server error"
+                ok: false
+                error: "Erro interno do servidor"
+                errorCode: "INTERNAL_ERROR"
 
   /api/v1/user/activities:
     get:
@@ -1651,44 +1697,87 @@ components:
           type: string
           description: ID do comentário
           example: "comment-123"
+        createdAt:
+          type: string
+          format: date-time
+          description: Data e hora de criação (ISO 8601)
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data e hora da última atualização (ISO 8601)
+          example: "2024-01-15T11:00:00Z"
         question:
           type: string
           description: Pergunta do comentário
           example: "Qual é a dúvida?"
         answer:
           type: string
-          description: Resposta do comentário
+          nullable: true
+          description: Resposta do comentário (null se não respondido)
           example: "Esta é a resposta para o comentário"
         published:
           type: boolean
-          description: Indica se o comentário está publicado
+          nullable: true
+          description: Indica se o comentário está publicado (null = pendente, true = aprovado, false = rejeitado)
           example: true
-        updatedAt:
-          type: string
-          format: date-time
-          description: Data e hora da última atualização
-          example: "2024-01-15T10:30:00Z"
         lessonName:
           type: string
           description: Nome da aula
-          example: ""
+          example: "Aula 01"
         courseName:
           type: string
           description: Nome do curso
-          example: ""
+          example: "Curso de Go"
         username:
           type: string
           description: Nome do usuário
-          example: ""
+          example: "João Silva"
         userEmail:
           type: string
           description: Email do usuário
-          example: ""
+          example: "joao@example.com"
 
     CommentsPaginationResponse:
       type: object
       properties:
-        data:
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+          description: Lista de comentários
+        pagination:
+          $ref: '#/components/schemas/CommentsPaginationMeta'
+
+    CommentsPaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Página atual
+          example: 1
+        limit:
+          type: integer
+          description: Limite de itens por página
+          example: 10
+        totalCount:
+          type: integer
+          format: int64
+          description: Total de comentários
+          example: 25
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 3
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
           type: array
           items:
             $ref: '#/components/schemas/CommentResponse'

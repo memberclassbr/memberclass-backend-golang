@@ -9,10 +9,12 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestNewCommentRepository(t *testing.T) {
@@ -192,10 +194,11 @@ func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 				answer := "Test answer"
 				updatedAt := time.Now()
 
+				createdAt := time.Now()
 				rows := sqlmock.NewRows([]string{
-					"id", "question", "answer", "published", "updatedAt", "lesson_name", "course_name", "user_name", "user_email",
+					"id", "createdAt", "updatedAt", "published", "question", "answer", "lesson_name", "course_name", "user_name", "user_email",
 				}).AddRow(
-					"comment-123", question, answer, true, updatedAt, "Lesson 1", "Course 1", "User 1", "user1@test.com",
+					"comment-123", createdAt, updatedAt, true, question, answer, "Lesson 1", "Course 1", "User 1", "user1@test.com",
 				)
 				sqlMock.ExpectQuery(`SELECT`).
 					WithArgs("comment-123", "tenant-123").
@@ -204,12 +207,14 @@ func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 			expectedError: nil,
 			expectedResponse: &dto.CommentResponse{
 				ID:         "comment-123",
+				CreatedAt:  time.Now(),
+				UpdatedAt:  time.Now(),
 				Question:   "Test question?",
-				Answer:     "Test answer",
-				Published:  true,
+				Answer:     stringPtr("Test answer"),
+				Published:  boolPtr(true),
 				LessonName: "Lesson 1",
 				CourseName: "Course 1",
-				UserName:   "User 1",
+				Username:   "User 1",
 				UserEmail:  "user1@test.com",
 			},
 		},
@@ -268,7 +273,7 @@ func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 				assert.Equal(t, tt.expectedResponse.Published, result.Published)
 				assert.Equal(t, tt.expectedResponse.LessonName, result.LessonName)
 				assert.Equal(t, tt.expectedResponse.CourseName, result.CourseName)
-				assert.Equal(t, tt.expectedResponse.UserName, result.UserName)
+				assert.Equal(t, tt.expectedResponse.Username, result.Username)
 				assert.Equal(t, tt.expectedResponse.UserEmail, result.UserEmail)
 			}
 			assert.NoError(t, sqlMock.ExpectationsWereMet())
@@ -363,32 +368,33 @@ func TestCommentRepository_Update(t *testing.T) {
 
 func TestCommentRepository_FindAllByTenant(t *testing.T) {
 	tests := []struct {
-		name          string
-		tenantID      string
-		pagination    *dto.PaginationRequest
-		mockSetup     func(sqlmock.Sqlmock)
-		expectedError error
-		expectedCount int
-		expectedTotal int64
+		name              string
+		tenantID          string
+		req               *request.GetCommentsRequest
+		mockSetup         func(sqlmock.Sqlmock)
+		expectedError     error
+		expectedCount     int
+		expectedTotal     int64
+		expectLoggerError bool
 	}{
 		{
 			name:     "should return comments with pagination",
 			tenantID:  "tenant-123",
-			pagination: &dto.PaginationRequest{
-				Page:     1,
-				PageSize: 10,
-				SortBy:   "updatedAt",
-				SortDir:  "desc",
+			req: &request.GetCommentsRequest{
+				Page:  1,
+				Limit: 10,
 			},
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				createdAt1 := time.Now()
+				createdAt2 := time.Now().Add(-1 * time.Hour)
 				updatedAt1 := time.Now()
 				updatedAt2 := time.Now().Add(-1 * time.Hour)
 
 				rows := sqlmock.NewRows([]string{
-					"id", "question", "answer", "published", "updatedAt", "lesson_name", "course_name", "user_name", "user_email",
+					"id", "createdAt", "updatedAt", "published", "question", "answer", "lesson_name", "course_name", "user_name", "user_email",
 				}).
-					AddRow("comment-1", "Question 1?", "Answer 1", true, updatedAt1, "Lesson 1", "Course 1", "User 1", "user1@test.com").
-					AddRow("comment-2", "Question 2?", "Answer 2", false, updatedAt2, "Lesson 2", "Course 2", "User 2", "user2@test.com")
+					AddRow("comment-1", createdAt1, updatedAt1, true, "Question 1?", "Answer 1", "Lesson 1", "Course 1", "User 1", "user1@test.com").
+					AddRow("comment-2", createdAt2, updatedAt2, false, "Question 2?", "Answer 2", "Lesson 2", "Course 2", "User 2", "user2@test.com")
 
 				sqlMock.ExpectQuery(`SELECT`).
 					WithArgs("tenant-123", 10, 0).
@@ -406,15 +412,13 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 		{
 			name:     "should return empty list when no comments found",
 			tenantID:  "tenant-123",
-			pagination: &dto.PaginationRequest{
-				Page:     1,
-				PageSize: 10,
-				SortBy:   "updatedAt",
-				SortDir:  "desc",
+			req: &request.GetCommentsRequest{
+				Page:  1,
+				Limit: 10,
 			},
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{
-					"id", "question", "answer", "published", "updatedAt", "lesson_name", "course_name", "user_name", "user_email",
+					"id", "createdAt", "updatedAt", "published", "question", "answer", "lesson_name", "course_name", "user_name", "user_email",
 				})
 
 				sqlMock.ExpectQuery(`SELECT`).
@@ -433,37 +437,38 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 		{
 			name:     "should return error when query fails",
 			tenantID:  "tenant-123",
-			pagination: &dto.PaginationRequest{
-				Page:     1,
-				PageSize: 10,
-				SortBy:   "updatedAt",
-				SortDir:  "desc",
+			req: &request.GetCommentsRequest{
+				Page:  1,
+				Limit: 10,
 			},
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				sqlMock.ExpectQuery(`SELECT`).
 					WithArgs("tenant-123", 10, 0).
 					WillReturnError(errors.New("database connection error"))
 			},
-			expectedError: errors.New("database connection error"),
+			expectedError: &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error finding comments",
+			},
 			expectedCount: 0,
 			expectedTotal: 0,
+			expectLoggerError: true,
 		},
 		{
 			name:     "should return error when count query fails",
 			tenantID:  "tenant-123",
-			pagination: &dto.PaginationRequest{
-				Page:     1,
-				PageSize: 10,
-				SortBy:   "updatedAt",
-				SortDir:  "desc",
+			req: &request.GetCommentsRequest{
+				Page:  1,
+				Limit: 10,
 			},
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				createdAt := time.Now()
 				updatedAt := time.Now()
 
 				rows := sqlmock.NewRows([]string{
-					"id", "question", "answer", "published", "updatedAt", "lesson_name", "course_name", "user_name", "user_email",
+					"id", "createdAt", "updatedAt", "published", "question", "answer", "lesson_name", "course_name", "user_name", "user_email",
 				}).
-					AddRow("comment-1", "Question 1?", "Answer 1", true, updatedAt, "Lesson 1", "Course 1", "User 1", "user1@test.com")
+					AddRow("comment-1", createdAt, updatedAt, true, "Question 1?", "Answer 1", "Lesson 1", "Course 1", "User 1", "user1@test.com")
 
 				sqlMock.ExpectQuery(`SELECT`).
 					WithArgs("tenant-123", 10, 0).
@@ -473,27 +478,42 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 					WithArgs("tenant-123").
 					WillReturnError(errors.New("count query error"))
 			},
-			expectedError: errors.New("count query error"),
+			expectedError: &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error counting comments",
+			},
 			expectedCount: 0,
 			expectedTotal: 0,
+			expectLoggerError: true,
 		},
 	}
 
-	for _, tt := range tests {
+		for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, sqlMock, err := sqlmock.New()
 			assert.NoError(t, err)
 			defer db.Close()
 
 			mockLogger := mocks.NewMockLogger(t)
+			if tt.expectLoggerError {
+				mockLogger.On("Error", mock.AnythingOfType("string")).Return()
+			}
 			repository := NewCommentRepository(db, mockLogger)
 			tt.mockSetup(sqlMock)
 
-			result, total, err := repository.FindAllByTenant(context.Background(), tt.tenantID, tt.pagination)
+			result, total, err := repository.FindAllByTenant(context.Background(), tt.tenantID, tt.req)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)
-				assert.Equal(t, tt.expectedError.Error(), err.Error())
+				var memberClassErr *memberclasserrors.MemberClassError
+				if errors.As(tt.expectedError, &memberClassErr) {
+					var actualErr *memberclasserrors.MemberClassError
+					assert.True(t, errors.As(err, &actualErr))
+					assert.Equal(t, memberClassErr.Code, actualErr.Code)
+					assert.Equal(t, memberClassErr.Message, actualErr.Message)
+				} else {
+					assert.Equal(t, tt.expectedError.Error(), err.Error())
+				}
 				assert.Nil(t, result)
 				assert.Equal(t, int64(0), total)
 			} else {
@@ -506,6 +526,17 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 				assert.Equal(t, tt.expectedTotal, total)
 			}
 			assert.NoError(t, sqlMock.ExpectationsWereMet())
+			if tt.expectLoggerError {
+				mockLogger.AssertExpectations(t)
+			}
 		})
 	}
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
+
+func boolPtr(b bool) *bool {
+	return &b
 }
