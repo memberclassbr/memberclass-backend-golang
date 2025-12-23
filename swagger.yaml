@@ -31,6 +31,14 @@ tags:
     description: Endpoints para consulta de atividades de acesso dos usuários
   - name: User Purchases
     description: Endpoints para consulta de compras e reembolsos dos usuários
+  - name: User Informations
+    description: Endpoints para consulta de informações dos usuários
+  - name: Social
+    description: Endpoints para criar e atualizar posts na comunidade (social)
+  - name: Activity Summary
+    description: Endpoints para consulta de resumo de atividades
+  - name: Lessons Completed
+    description: Endpoints para consulta de aulas completadas
 
 paths:
   /api/v1/videos/upload:
@@ -616,6 +624,298 @@ paths:
                 error: "Internal Server Error"
                 message: "Internal server error"
 
+  /api/v1/user/activity/summary:
+    get:
+      tags:
+        - Activity Summary
+      summary: Resumo de atividade dos usuários
+      description: |
+        Retorna um resumo de atividade dos usuários de um tenant, mostrando o email e o último acesso de cada usuário.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Regras de Data:**
+        - Se `startDate` e `endDate` não informados → últimos 31 dias
+        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `endDate` sem `startDate` → erro
+        - Se `startDate > endDate` → erro
+        - Período máximo: **31 dias**
+        
+        **noAccess:** Se `true`, retorna usuários SEM atividade no período. Se `false` (padrão), retorna usuários COM atividade.
+      operationId: getActivitySummary
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: startDate
+          in: query
+          required: false
+          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-01T00:00:00Z"
+        - name: endDate
+          in: query
+          required: false
+          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-31T23:59:59Z"
+        - name: noAccess
+          in: query
+          required: false
+          description: "Se `true`, retorna usuários SEM atividade no período"
+          schema:
+            type: boolean
+          example: false
+      responses:
+        '200':
+          description: Resumo de atividades retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivitySummaryResponse'
+              example:
+                users:
+                  - email: "usuario@email.com"
+                    ultimoAcesso: "2025-12-10T14:30:00.000Z"
+                  - email: "outro@email.com"
+                    ultimoAcesso: null
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 150
+                  totalPages: 15
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                invalidPagination:
+                  summary: Paginação inválida
+                  value:
+                    ok: false
+                    error: "page deve ser >= 1"
+                    errorCode: "INVALID_PAGINATION"
+                invalidDateFormat:
+                  summary: Formato de data inválido
+                  value:
+                    ok: false
+                    error: "formato de data inválido para startDate"
+                    errorCode: "INVALID_DATE_FORMAT"
+                invalidDateRange:
+                  summary: Período inválido
+                  value:
+                    ok: false
+                    error: "período máximo de 31 dias"
+                    errorCode: "INVALID_DATE_RANGE"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
+  /api/v1/user/lessons/completed:
+    get:
+      tags:
+        - Lessons Completed
+      summary: Listar aulas completadas por usuário
+      description: |
+        Retorna as aulas concluídas por um usuário específico, com informações do curso e data de conclusão.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Regras de Data:**
+        - Se `startDate` e `endDate` não informados → últimos 31 dias
+        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `endDate` sem `startDate` → erro
+        - Se `startDate > endDate` → erro
+        - Período máximo: **31 dias**
+        
+        **Cache:** Esta rota **NÃO usa cache** no Redis (dados em tempo real por usuário).
+      operationId: getLessonsCompleted
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: email
+          in: query
+          required: true
+          description: Email do usuário
+          schema:
+            type: string
+            format: email
+          example: "user@example.com"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: startDate
+          in: query
+          required: false
+          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-01T00:00:00Z"
+        - name: endDate
+          in: query
+          required: false
+          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-31T23:59:59Z"
+        - name: courseId
+          in: query
+          required: false
+          description: "Filtrar por curso específico"
+          schema:
+            type: string
+          example: "course-123"
+      responses:
+        '200':
+          description: Lista de aulas completadas retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonsCompletedResponse'
+              example:
+                ok: true
+                data:
+                  completedLessons:
+                    - courseName: "Curso de JavaScript"
+                      lessonName: "Introdução ao JS"
+                      completedAt: "2025-12-10T14:30:00.000Z"
+                    - courseName: "Curso de JavaScript"
+                      lessonName: "Variáveis e Tipos"
+                      completedAt: "2025-12-09T10:15:00.000Z"
+                  pagination:
+                    page: 1
+                    limit: 10
+                    totalCount: 25
+                    totalPages: 3
+                    hasNextPage: true
+                    hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingEmail:
+                  summary: Email não informado
+                  value:
+                    ok: false
+                    error: "Parâmetro email é obrigatório"
+                    errorCode: "MISSING_EMAIL"
+                invalidPagination:
+                  summary: Paginação inválida
+                  value:
+                    ok: false
+                    error: "page deve ser >= 1"
+                    errorCode: "INVALID_PAGINATION"
+                invalidDateFormat:
+                  summary: Formato de data inválido
+                  value:
+                    ok: false
+                    error: "formato de data inválido para startDate"
+                    errorCode: "INVALID_DATE_FORMAT"
+                invalidDateRange:
+                  summary: Período inválido
+                  value:
+                    ok: false
+                    error: "período máximo de 31 dias"
+                    errorCode: "INVALID_DATE_RANGE"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado ou não pertence a este tenant"
+                errorCode: "USER_NOT_IN_TENANT"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
   /api/v1/users/purchases:
     get:
       tags:
@@ -746,6 +1046,179 @@ paths:
                 ok: false
                 error: "Usuário não encontrado ou não pertence ao tenant autenticado"
                 errorCode: "USER_NOT_FOUND"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
+  /api/v1/social:
+    post:
+      tags:
+        - Social
+      summary: Criar ou atualizar post
+      description: |
+        Cria um novo post em um tópico ou atualiza um post existente, com validação de tenant, usuário e permissões.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Fluxo:**
+        1. Se `postId` for fornecido, atualiza o post existente (apenas owner ou dono do post)
+        2. Se `postId` não for fornecido, cria um novo post no tópico especificado
+        
+        **Validações de Permissão:**
+        - Se `topic.onlyAdmin = true`, apenas owners podem postar
+        - Se o tópico tem deliveries vinculadas, usuário deve ter pelo menos uma delivery em comum
+        - Owners podem postar em qualquer tópico
+      operationId: createOrUpdatePost
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSocialCommentRequest'
+            examples:
+              createPost:
+                summary: Criar novo post
+                value:
+                  userId: "user-123"
+                  topicId: "topic-456"
+                  title: "Meu primeiro post"
+                  content: "Este é o conteúdo do meu post"
+                  image: "https://example.com/image.jpg"
+                  videoEmbed: "https://youtube.com/watch?v=123"
+              updatePost:
+                summary: Atualizar post existente
+                value:
+                  userId: "user-123"
+                  postId: "post-789"
+                  title: "Título atualizado"
+                  content: "Conteúdo atualizado"
+                  image: "https://example.com/new-image.jpg"
+      responses:
+        '200':
+          description: Post criado ou atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialCommentResponse'
+              examples:
+                createSuccess:
+                  summary: Post criado
+                  value:
+                    ok: true
+                    id: "post-123"
+                updateSuccess:
+                  summary: Post atualizado
+                  value:
+                    ok: true
+                    id: "post-789"
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingUser:
+                  summary: userId não informado
+                  value:
+                    ok: false
+                    error: "userId é obrigatório"
+                    errorCode: "MISSING_USER"
+                missingTopic:
+                  summary: topicId não informado para criar
+                  value:
+                    ok: false
+                    error: "topicId é obrigatório para criar post"
+                    errorCode: "MISSING_TOPIC"
+                missingTitle:
+                  summary: title não informado
+                  value:
+                    ok: false
+                    error: "title é obrigatório"
+                    errorCode: "MISSING_TITLE"
+                missingContent:
+                  summary: content não informado
+                  value:
+                    ok: false
+                    error: "content é obrigatório"
+                    errorCode: "MISSING_CONTENT"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingApiKey:
+                  summary: API key não informada
+                  value:
+                    ok: false
+                    error: "Header mc-api-key é obrigatório"
+                    errorCode: "MISSING_API_KEY"
+                invalidApiKey:
+                  summary: API key inválida
+                  value:
+                    ok: false
+                    error: "API key invalid"
+                    errorCode: "INVALID_API_KEY"
+        '403':
+          description: Permissão negada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                permissionDenied:
+                  summary: Usuário não pertence ao tenant
+                  value:
+                    ok: false
+                    error: "Usuário não pertence ao tenant"
+                    errorCode: "PERMISSION_DENIED"
+                noAccessToTopic:
+                  summary: Sem acesso ao tópico
+                  value:
+                    ok: false
+                    error: "Você não tem acesso para publicar neste tópico"
+                    errorCode: "NO_ACCESS_TO_TOPIC"
+                cannotEditPost:
+                  summary: Sem permissão para editar
+                  value:
+                    ok: false
+                    error: "Você não tem autorização para fazer esta ação"
+                    errorCode: "PERMISSION_DENIED"
+        '404':
+          description: Recurso não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                postNotFound:
+                  summary: Post não encontrado
+                  value:
+                    ok: false
+                    error: "Post não encontrado"
+                    errorCode: "POST_NOT_FOUND"
+                topicNotFound:
+                  summary: Tópico não existe
+                  value:
+                    ok: false
+                    error: "Tópico não existe"
+                    errorCode: "TOPIC_NOT_FOUND"
         '500':
           description: Erro interno do servidor
           content:
@@ -1205,5 +1678,232 @@ components:
           type: string
           description: Código do erro
           example: "MISSING_EMAIL"
+
+    UserInformationsResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID do usuário
+          example: "user-123"
+        username:
+          type: string
+          nullable: true
+          description: Nome de usuário
+          example: "joaosilva"
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+          example: "user@example.com"
+        emailVerified:
+          type: string
+          format: date-time
+          nullable: true
+          description: Data de verificação do email
+          example: "2024-01-15T10:30:00Z"
+        image:
+          type: string
+          nullable: true
+          description: URL da imagem do perfil
+          example: "https://example.com/avatar.jpg"
+        phone:
+          type: string
+          nullable: true
+          description: Telefone do usuário
+          example: "+5511999999999"
+        referrals:
+          type: integer
+          nullable: true
+          description: Número de indicações
+          example: 5
+        createdAt:
+          type: string
+          format: date-time
+          description: Data de criação
+          example: "2024-01-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data de atualização
+          example: "2024-01-15T10:30:00Z"
+
+    CreateSocialCommentRequest:
+      type: object
+      required:
+        - userId
+        - title
+        - content
+      properties:
+        userId:
+          type: string
+          description: ID do usuário que está criando/atualizando o post
+          example: "user-123"
+        topicId:
+          type: string
+          description: ID do tópico (obrigatório para criar post)
+          example: "topic-456"
+        postId:
+          type: string
+          description: ID do post (obrigatório para atualizar post)
+          example: "post-789"
+        tenantId:
+          type: string
+          description: ID do tenant (opcional, obtido do contexto)
+          example: "tenant-123"
+        title:
+          type: string
+          description: Título do post
+          example: "Meu primeiro post"
+        content:
+          type: string
+          description: Conteúdo do post
+          example: "Este é o conteúdo do meu post"
+        image:
+          type: string
+          nullable: true
+          description: URL da imagem do post (opcional)
+          example: "https://example.com/image.jpg"
+        videoEmbed:
+          type: string
+          nullable: true
+          description: URL do vídeo embed (opcional)
+          example: "https://youtube.com/watch?v=123"
+
+    SocialCommentResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: true
+        id:
+          type: string
+          description: ID do post criado ou atualizado
+          example: "post-123"
+
+    UserActivitySummary:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+          example: "usuario@email.com"
+        ultimoAcesso:
+          type: string
+          format: date-time
+          nullable: true
+          description: Data do último acesso no período
+          example: "2025-12-10T14:30:00.000Z"
+
+    ActivitySummaryPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Página atual
+          example: 1
+        limit:
+          type: integer
+          description: Itens por página
+          example: 10
+        totalCount:
+          type: integer
+          description: Total de itens
+          example: 150
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 15
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
+    ActivitySummaryResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserActivitySummary'
+          description: Lista de usuários com suas atividades
+        pagination:
+          $ref: '#/components/schemas/ActivitySummaryPagination'
+
+    CompletedLesson:
+      type: object
+      properties:
+        courseName:
+          type: string
+          description: Nome do curso
+          example: "Curso de JavaScript"
+        lessonName:
+          type: string
+          description: Nome da aula
+          example: "Introdução ao JS"
+        completedAt:
+          type: string
+          format: date-time
+          description: Data de conclusão
+          example: "2025-12-10T14:30:00.000Z"
+
+    LessonsCompletedData:
+      type: object
+      properties:
+        completedLessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompletedLesson'
+          description: Lista de aulas completadas
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              description: Página atual
+              example: 1
+            limit:
+              type: integer
+              description: Itens por página
+              example: 10
+            totalCount:
+              type: integer
+              description: Total de itens
+              example: 25
+            totalPages:
+              type: integer
+              description: Total de páginas
+              example: 3
+            hasNextPage:
+              type: boolean
+              description: Indica se há próxima página
+              example: true
+            hasPrevPage:
+              type: boolean
+              description: Indica se há página anterior
+              example: false
+
+    LessonsCompletedResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: true
+        data:
+          $ref: '#/components/schemas/LessonsCompletedData'
+        lessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonCompletedData'
+          description: Lista de aulas completadas
+        pagination:
+          $ref: '#/components/schemas/ActivityPagination'
 
 
