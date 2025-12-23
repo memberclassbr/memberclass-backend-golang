@@ -35,3 +35,5 @@ packages:
       SocialCommentRepository:
       PostSocialRepository:
       TopicRepository:
+      StudentReportRepository:
+      StudentReportUseCase:
