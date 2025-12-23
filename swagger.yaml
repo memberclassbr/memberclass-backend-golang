@@ -39,6 +39,8 @@ tags:
     description: Endpoints para consulta de resumo de atividades
   - name: Lessons Completed
     description: Endpoints para consulta de aulas completadas
+  - name: Student Report
+    description: Endpoints para relatório de alunos do tenant
 
 paths:
   /api/v1/videos/upload:
@@ -1299,6 +1301,153 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/student/report:
+    get:
+      tags:
+        - Student Report
+      summary: Relatório de alunos do tenant
+      description: |
+        Retorna um relatório detalhado dos alunos de um tenant, incluindo informações de cadastro, entregas vinculadas, acessos e aulas assistidas.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos). A chave de cache é gerada usando MD5 hash dos parâmetros.
+        
+        **Filtros de Data:**
+        - `startDate` e `endDate` são opcionais
+        - Se ambos forem fornecidos, `startDate` não pode ser maior que `endDate`
+        - O filtro é aplicado no campo `assignedAt` (data de cadastro) de UsersOnTenants
+        
+        **Formato de Data:** ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)
+      operationId: getStudentReport
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1, mínimo: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, mínimo: 1, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: startDate
+          in: query
+          required: false
+          description: "Data inicial para filtrar por data de cadastro (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-15T00:00:00Z"
+        - name: endDate
+          in: query
+          required: false
+          description: "Data final para filtrar por data de cadastro (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-12-31T23:59:59Z"
+      responses:
+        '200':
+          description: Relatório retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentReportResponse'
+              example:
+                alunos:
+                  - aluno_id_member_class: "user-123"
+                    email: "aluno@example.com"
+                    cpf: "12345678900"
+                    data_cadastro: "2024-01-15T10:30:00.000Z"
+                    entregas_vinculadas:
+                      - "Entrega 1"
+                      - "Entrega 2"
+                    ultimo_acesso: "2024-01-20T15:45:00.000Z"
+                    quantidade_aulas_assistidas: 2
+                    aulas_assistidas:
+                      - aula_id: "lesson-123"
+                        titulo: "Aula 1 - Introdução"
+                        data_assistida: "2024-01-18T14:00:00.000Z"
+                      - aula_id: "lesson-456"
+                        titulo: "Aula 2 - Conceitos Básicos"
+                        data_assistida: "2024-01-19T10:00:00.000Z"
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 150
+                  totalPages: 15
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                invalidPagination:
+                  summary: Paginação inválida
+                  value:
+                    ok: false
+                    error: "Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100"
+                    errorCode: "INVALID_PAGINATION"
+                invalidDateFormat:
+                  summary: Formato de data inválido
+                  value:
+                    ok: false
+                    error: "Formato de data inválido para startDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+                    errorCode: "INVALID_DATE_FORMAT"
+                invalidDateRange:
+                  summary: Período inválido
+                  value:
+                    ok: false
+                    error: "startDate não pode ser maior que endDate"
+                    errorCode: "INVALID_DATE_RANGE"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingApiKey:
+                  summary: API key não informada
+                  value:
+                    ok: false
+                    error: "Header mc-api-key é obrigatório"
+                    errorCode: "MISSING_API_KEY"
+                invalidApiKey:
+                  summary: API key inválida
+                  value:
+                    ok: false
+                    error: "API key inválida"
+                    errorCode: "INVALID_API_KEY"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "Erro interno do servidor"
+                errorCode: "INTERNAL_ERROR"
+
 components:
   schemas:
     UploadVideoResponse:
@@ -1905,5 +2054,106 @@ components:
           description: Lista de aulas completadas
         pagination:
           $ref: '#/components/schemas/ActivityPagination'
+
+    StudentReportResponse:
+      type: object
+      properties:
+        alunos:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentReport'
+          description: Lista de alunos do tenant
+        pagination:
+          $ref: '#/components/schemas/StudentReportPagination'
+
+    StudentReport:
+      type: object
+      properties:
+        aluno_id_member_class:
+          type: string
+          description: ID do aluno no MemberClass
+          example: "user-123"
+        email:
+          type: string
+          format: email
+          description: Email do aluno
+          example: "aluno@example.com"
+        cpf:
+          type: string
+          description: CPF do aluno (pode ser vazio)
+          example: "12345678900"
+        data_cadastro:
+          type: string
+          format: date-time
+          description: Data de cadastro do aluno
+          example: "2024-01-15T10:30:00.000Z"
+        entregas_vinculadas:
+          type: array
+          items:
+            type: string
+          description: Lista de nomes das entregas vinculadas ao aluno
+          example:
+            - "Entrega 1"
+            - "Entrega 2"
+        ultimo_acesso:
+          type: string
+          format: date-time
+          nullable: true
+          description: Data e hora do último acesso (null se nunca acessou)
+          example: "2024-01-20T15:45:00.000Z"
+        quantidade_aulas_assistidas:
+          type: integer
+          description: Quantidade total de aulas assistidas
+          example: 10
+        aulas_assistidas:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonWatched'
+          description: Lista de aulas assistidas pelo aluno
+
+    LessonWatched:
+      type: object
+      properties:
+        aula_id:
+          type: string
+          description: ID da aula
+          example: "lesson-123"
+        titulo:
+          type: string
+          description: Título da aula
+          example: "Aula 1 - Introdução"
+        data_assistida:
+          type: string
+          format: date-time
+          description: Data e hora em que a aula foi assistida
+          example: "2024-01-18T14:00:00.000Z"
+
+    StudentReportPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Número da página atual
+          example: 1
+        limit:
+          type: integer
+          description: Itens por página
+          example: 10
+        totalCount:
+          type: integer
+          description: Total de registros
+          example: 150
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 15
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
 
 

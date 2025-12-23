@@ -2394,6 +2394,289 @@
 					]
 				}
 			]
+		},
+		{
+			"name": "Student Report",
+			"description": "Endpoints relacionados ao relatório de alunos do tenant",
+			"item": [
+				{
+					"name": "Get Student Report",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"description": "API key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"student",
+								"report"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1, mínimo: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, mínimo: 1, máximo: 100)"
+								},
+								{
+									"key": "startDate",
+									"value": "2024-01-01T00:00:00Z",
+									"description": "Data inicial para filtrar por data de cadastro (ISO 8601, opcional)"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-12-31T23:59:59Z",
+									"description": "Data final para filtrar por data de cadastro (ISO 8601, opcional)"
+								}
+							]
+						},
+						"description": "Retorna um relatório detalhado dos alunos de um tenant, incluindo informações de cadastro, entregas vinculadas, acessos e aulas assistidas.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos). A chave de cache é gerada usando MD5 hash dos parâmetros.\n\n**Filtros de Data:**\n- `startDate` e `endDate` são opcionais\n- Se ambos forem fornecidos, `startDate` não pode ser maior que `endDate`\n- O filtro é aplicado no campo `assignedAt` (data de cadastro) de UsersOnTenants\n\n**Formato de Data:** ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+					},
+					"response": [
+						{
+							"name": "Get Student Report - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"alunos\": [\n        {\n            \"aluno_id_member_class\": \"user-123\",\n            \"email\": \"aluno@example.com\",\n            \"cpf\": \"12345678900\",\n            \"data_cadastro\": \"2024-01-15T10:30:00.000Z\",\n            \"entregas_vinculadas\": [\n                \"Entrega 1\",\n                \"Entrega 2\"\n            ],\n            \"ultimo_acesso\": \"2024-01-20T15:45:00.000Z\",\n            \"quantidade_aulas_assistidas\": 2,\n            \"aulas_assistidas\": [\n                {\n                    \"aula_id\": \"lesson-123\",\n                    \"titulo\": \"Aula 1 - Introdução\",\n                    \"data_assistida\": \"2024-01-18T14:00:00.000Z\"\n                },\n                {\n                    \"aula_id\": \"lesson-456\",\n                    \"titulo\": \"Aula 2 - Conceitos Básicos\",\n                    \"data_assistida\": \"2024-01-19T10:00:00.000Z\"\n                }\n            ]\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 150,\n        \"totalPages\": 15,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Student Report - Sem autenticação",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Student Report - Paginação inválida",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=0&limit=200",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "200"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100\",\n    \"errorCode\": \"INVALID_PAGINATION\"\n}"
+						},
+						{
+							"name": "Get Student Report - Formato de data inválido",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10&startDate=2024-01-01",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "startDate",
+											"value": "2024-01-01"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Formato de data inválido para startDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)\",\n    \"errorCode\": \"INVALID_DATE_FORMAT\"\n}"
+						},
+						{
+							"name": "Get Student Report - Período inválido",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10&startDate=2024-12-31T23:59:59Z&endDate=2024-01-01T00:00:00Z",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "startDate",
+											"value": "2024-12-31T23:59:59Z"
+										},
+										{
+											"key": "endDate",
+											"value": "2024-01-01T00:00:00Z"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"startDate não pode ser maior que endDate\",\n    \"errorCode\": \"INVALID_DATE_RANGE\"\n}"
+						}
+					]
+				}
+			]
 		}
 	]
 }
