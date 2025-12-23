@@ -26,6 +26,7 @@ import (
 		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 		user_activity "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user_activity"
+		student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
 	"go.uber.org/fx"
 )
@@ -46,6 +47,7 @@ func main() {
 			comment.NewSocialCommentRepository,
 			topic.NewTopicRepository,
 			user_activity.NewUserActivityRepository,
+			student_report.NewStudentReportRepository,
 
 			rate_limiter.NewRateLimiterUpload,
 			ilovepdf.NewIlovePdfService,
@@ -63,6 +65,7 @@ func main() {
 			usecases.NewSocialCommentUseCase,
 			usecases.NewActivitySummaryUseCase,
 			usecases.NewLessonsCompletedUseCase,
+			usecases.NewStudentReportUseCase,
 
 			middlewares.NewRateLimitMiddleware,
 			middlewares.NewAuthMiddleware,
@@ -77,6 +80,7 @@ func main() {
 			internalhttp.NewSocialCommentHandler,
 			internalhttp.NewActivitySummaryHandler,
 			internalhttp.NewLessonsCompletedHandler,
+			internalhttp.NewStudentReportHandler,
 
 			router.NewRouter,
 		),

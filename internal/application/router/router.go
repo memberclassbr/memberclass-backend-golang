@@ -18,6 +18,7 @@ type Router struct {
 	socialCommentHandler    *http.SocialCommentHandler
 	activitySummaryHandler  *http.ActivitySummaryHandler
 	lessonsCompletedHandler  *http.LessonsCompletedHandler
+	studentReportHandler     *http.StudentReportHandler
 	rateLimitMiddleware     *middlewares.RateLimitMiddleware
 	authMiddleware          *middlewares.AuthMiddleware
 	authExternalMiddleware  *middlewares.AuthExternalMiddleware
@@ -33,6 +34,7 @@ func NewRouter(
 	socialCommentHandler *http.SocialCommentHandler,
 	activitySummaryHandler *http.ActivitySummaryHandler,
 	lessonsCompletedHandler *http.LessonsCompletedHandler,
+	studentReportHandler *http.StudentReportHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
 	authMiddleware *middlewares.AuthMiddleware,
 	authExternalMiddleware *middlewares.AuthExternalMiddleware,
@@ -55,6 +57,7 @@ func NewRouter(
 		socialCommentHandler:    socialCommentHandler,
 		activitySummaryHandler:  activitySummaryHandler,
 		lessonsCompletedHandler: lessonsCompletedHandler,
+		studentReportHandler:    studentReportHandler,
 		rateLimitMiddleware:     rateLimitMiddleware,
 		authMiddleware:          authMiddleware,
 		authExternalMiddleware:  authExternalMiddleware,
@@ -105,6 +108,12 @@ func (r *Router) SetupRoutes() {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
 			).Post("/", r.socialCommentHandler.CreateOrUpdatePost)
+		})
+
+		router.Route("/student", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Get("/report", r.studentReportHandler.GetStudentReport)
 		})
 
 	})
