@@ -2,7 +2,9 @@ package ports
 
 import (
 	"context"
+	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 )
 
@@ -23,4 +25,5 @@ type LessonRepository interface {
 	GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*entities.LessonPDFPage, error)
 	DeletePDFPage(ctx context.Context, pageID string) error
 	DeletePDFPagesByAssetID(ctx context.Context, assetID string) error
+	FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error)
 }

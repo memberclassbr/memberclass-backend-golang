@@ -4,8 +4,10 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/stretchr/testify/assert"
@@ -182,6 +184,10 @@ func (m *mockLessonRepository) DeletePDFPagesByAssetID(ctx context.Context, asse
 	defer m.mu.Unlock()
 	delete(m.pdfPages, assetID)
 	return nil
+}
+
+func (m *mockLessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error) {
+	return []response.CompletedLesson{}, int64(0), nil
 }
 
 type mockPdfService struct {
@@ -1425,4 +1431,8 @@ func (m *mockLessonRepositoryWithError) DeletePDFPage(ctx context.Context, pageI
 
 func (m *mockLessonRepositoryWithError) DeletePDFPagesByAssetID(ctx context.Context, assetID string) error {
 	return assert.AnError
+}
+
+func (m *mockLessonRepositoryWithError) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error) {
+	return nil, int64(0), assert.AnError
 }
