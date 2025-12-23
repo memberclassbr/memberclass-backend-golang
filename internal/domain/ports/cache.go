@@ -11,5 +11,6 @@ type Cache interface {
 	Increment(ctx context.Context, key string, value int64) (int64, error)
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
+	TTL(ctx context.Context, key string) (time.Duration, error)
 	Close() error
 }
