@@ -19,6 +19,10 @@ func createTestRouter(t *testing.T) *Router {
 	mockCommentHandler := &httpHandlers.CommentHandler{}
 	mockUserActivityHandler := &httpHandlers.UserActivityHandler{}
 	mockUserPurchaseHandler := &httpHandlers.UserPurchaseHandler{}
+	mockUserInformationsHandler := &httpHandlers.UserInformationsHandler{}
+	mockSocialCommentHandler := &httpHandlers.SocialCommentHandler{}
+	mockActivitySummaryHandler := &httpHandlers.ActivitySummaryHandler{}
+	mockLessonsCompletedHandler := &httpHandlers.LessonsCompletedHandler{}
 	mockLogger := &mocks.MockLogger{}
 	mockRateLimiter := &mocks.MockRateLimiterUpload{}
 	mockSessionValidator := &mocks.MockSessionValidatorUseCase{}
@@ -33,7 +37,7 @@ func createTestRouter(t *testing.T) *Router {
 	authMiddleware := middlewares.NewAuthMiddleware(mockLogger, mockSessionValidator)
 	authExternalMiddleware := middlewares.NewAuthExternalMiddleware(mockApiTokenUseCase)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, rateLimitMiddleware, authMiddleware, authExternalMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, rateLimitMiddleware, authMiddleware, authExternalMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
