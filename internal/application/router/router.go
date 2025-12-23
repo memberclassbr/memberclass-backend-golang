@@ -9,19 +9,21 @@ import (
 
 type Router struct {
 	chi.Router
-	videoHandler            *http.VideoHandler
-	lessonHandler           *http.LessonHandler
-	commentHandler          *http.CommentHandler
-	userActivityHandler     *http.UserActivityHandler
-	userPurchaseHandler     *http.UserPurchaseHandler
-	userInformationsHandler *http.UserInformationsHandler
-	socialCommentHandler    *http.SocialCommentHandler
-	activitySummaryHandler  *http.ActivitySummaryHandler
-	lessonsCompletedHandler  *http.LessonsCompletedHandler
-	studentReportHandler     *http.StudentReportHandler
-	rateLimitMiddleware     *middlewares.RateLimitMiddleware
-	authMiddleware          *middlewares.AuthMiddleware
-	authExternalMiddleware  *middlewares.AuthExternalMiddleware
+	videoHandler              *http.VideoHandler
+	lessonHandler             *http.LessonHandler
+	commentHandler            *http.CommentHandler
+	userActivityHandler       *http.UserActivityHandler
+	userPurchaseHandler       *http.UserPurchaseHandler
+	userInformationsHandler   *http.UserInformationsHandler
+	socialCommentHandler      *http.SocialCommentHandler
+	activitySummaryHandler    *http.ActivitySummaryHandler
+	lessonsCompletedHandler   *http.LessonsCompletedHandler
+	studentReportHandler      *http.StudentReportHandler
+	rateLimitMiddleware       *middlewares.RateLimitMiddleware
+	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware
+	rateLimitIPMiddleware     *middlewares.RateLimitIPMiddleware
+	authMiddleware            *middlewares.AuthMiddleware
+	authExternalMiddleware    *middlewares.AuthExternalMiddleware
 }
 
 func NewRouter(
@@ -36,6 +38,8 @@ func NewRouter(
 	lessonsCompletedHandler *http.LessonsCompletedHandler,
 	studentReportHandler *http.StudentReportHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
+	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware,
+	rateLimitIPMiddleware *middlewares.RateLimitIPMiddleware,
 	authMiddleware *middlewares.AuthMiddleware,
 	authExternalMiddleware *middlewares.AuthExternalMiddleware,
 ) *Router {
@@ -47,20 +51,22 @@ func NewRouter(
 	router.Use(middleware.RealIP)
 
 	return &Router{
-		Router:                  router,
-		videoHandler:            videoHandler,
-		lessonHandler:           lessonHandler,
-		commentHandler:          commentHandler,
-		userActivityHandler:     userActivityHandler,
-		userPurchaseHandler:     userPurchaseHandler,
-		userInformationsHandler: userInformationsHandler,
-		socialCommentHandler:    socialCommentHandler,
-		activitySummaryHandler:  activitySummaryHandler,
-		lessonsCompletedHandler: lessonsCompletedHandler,
-		studentReportHandler:    studentReportHandler,
-		rateLimitMiddleware:     rateLimitMiddleware,
-		authMiddleware:          authMiddleware,
-		authExternalMiddleware:  authExternalMiddleware,
+		Router:                    router,
+		videoHandler:              videoHandler,
+		lessonHandler:             lessonHandler,
+		commentHandler:            commentHandler,
+		userActivityHandler:       userActivityHandler,
+		userPurchaseHandler:       userPurchaseHandler,
+		userInformationsHandler:   userInformationsHandler,
+		socialCommentHandler:      socialCommentHandler,
+		activitySummaryHandler:    activitySummaryHandler,
+		lessonsCompletedHandler:   lessonsCompletedHandler,
+		studentReportHandler:      studentReportHandler,
+		rateLimitMiddleware:       rateLimitMiddleware,
+		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
+		rateLimitIPMiddleware:     rateLimitIPMiddleware,
+		authMiddleware:            authMiddleware,
+		authExternalMiddleware:    authExternalMiddleware,
 	}
 }
 
@@ -77,9 +83,11 @@ func (r *Router) SetupRoutes() {
 		router.Route("/comments", func(router chi.Router) {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Get("/", r.commentHandler.GetComments)
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Patch("/{commentID}", r.commentHandler.UpdateComment)
 		})
 
@@ -89,30 +97,38 @@ func (r *Router) SetupRoutes() {
 			).Get("/informations", r.userInformationsHandler.GetUserInformations)
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Get("/activities", r.userActivityHandler.GetUserActivities)
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Get("/activity/summary", r.activitySummaryHandler.GetActivitySummary)
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Get("/lessons/completed", r.lessonsCompletedHandler.GetLessonsCompleted)
+			router.With(
+				r.rateLimitTenantMiddleware.LimitByTenant)
 		})
 
 		router.Route("/users", func(router chi.Router) {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Get("/purchases", r.userPurchaseHandler.GetUserPurchases)
 		})
 
 		router.Route("/social", func(router chi.Router) {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Post("/", r.socialCommentHandler.CreateOrUpdatePost)
 		})
 
 		router.Route("/student", func(router chi.Router) {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Get("/report", r.studentReportHandler.GetStudentReport)
 		})
 

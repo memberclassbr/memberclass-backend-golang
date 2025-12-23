@@ -50,6 +50,8 @@ func main() {
 			student_report.NewStudentReportRepository,
 
 			rate_limiter.NewRateLimiterUpload,
+			rate_limiter.NewRateLimiterTenant,
+			rate_limiter.NewRateLimiterIP,
 			ilovepdf.NewIlovePdfService,
 			bunny.NewBunnyService,
 
@@ -70,6 +72,8 @@ func main() {
 			usecases.NewStudentReportUseCase,
 
 			middlewares.NewRateLimitMiddleware,
+			middlewares.NewRateLimitTenantMiddleware,
+			middlewares.NewRateLimitIPMiddleware,
 			middlewares.NewAuthMiddleware,
 			middlewares.NewAuthExternalMiddleware,
 
