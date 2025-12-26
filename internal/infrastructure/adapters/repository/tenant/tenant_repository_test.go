@@ -15,6 +15,10 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+func stringPtr(s string) *string {
+	return &s
+}
+
 func TestTenantRepository_FindByID(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -53,11 +57,11 @@ func TestTenantRepository_FindByID(t *testing.T) {
 			expectedTenant: &entities.Tenant{
 				ID: "tenant-123",
 				Name: "Test Tenant",
-				Description: "Description",
-				Plan: "Pro",
-				EmailContact: "contact@test.com",
-				BunnyLibraryApiKey: "bunny-api-key",
-				BunnyLibraryID: "bunny-library-id",
+				Description: stringPtr("Description"),
+				Plan: stringPtr("Pro"),
+				EmailContact: stringPtr("contact@test.com"),
+				BunnyLibraryApiKey: stringPtr("bunny-api-key"),
+				BunnyLibraryID: stringPtr("bunny-library-id"),
 			},
 		},
 		{
@@ -120,11 +124,21 @@ func TestTenantRepository_FindByID(t *testing.T) {
 				assert.NotNil(t, result)
 				assert.Equal(t, tt.expectedTenant.ID, result.ID)
 				assert.Equal(t, tt.expectedTenant.Name, result.Name)
-				assert.Equal(t, tt.expectedTenant.Description, result.Description)
-				assert.Equal(t, tt.expectedTenant.Plan, result.Plan)
-				assert.Equal(t, tt.expectedTenant.EmailContact, result.EmailContact)
-				assert.Equal(t, tt.expectedTenant.BunnyLibraryApiKey, result.BunnyLibraryApiKey)
-				assert.Equal(t, tt.expectedTenant.BunnyLibraryID, result.BunnyLibraryID)
+				if tt.expectedTenant.Description != nil {
+					assert.Equal(t, tt.expectedTenant.Description, result.Description)
+				}
+				if tt.expectedTenant.Plan != nil {
+					assert.Equal(t, tt.expectedTenant.Plan, result.Plan)
+				}
+				if tt.expectedTenant.EmailContact != nil {
+					assert.Equal(t, tt.expectedTenant.EmailContact, result.EmailContact)
+				}
+				if tt.expectedTenant.BunnyLibraryApiKey != nil {
+					assert.Equal(t, tt.expectedTenant.BunnyLibraryApiKey, result.BunnyLibraryApiKey)
+				}
+				if tt.expectedTenant.BunnyLibraryID != nil {
+					assert.Equal(t, tt.expectedTenant.BunnyLibraryID, result.BunnyLibraryID)
+				}
 			}
 			assert.NoError(t, sqlMock.ExpectationsWereMet())
 		})
@@ -152,8 +166,8 @@ func TestTenantRepository_FindBunnyInfoByID(t *testing.T) {
 			expectedError: nil,
 			expectedTenant: &entities.Tenant{
 				ID: "tenant-123",
-				BunnyLibraryApiKey: "bunny-api-key",
-				BunnyLibraryID: "bunny-library-id",
+				BunnyLibraryApiKey: stringPtr("bunny-api-key"),
+				BunnyLibraryID: stringPtr("bunny-library-id"),
 			},
 		},
 		{
@@ -207,8 +221,12 @@ func TestTenantRepository_FindBunnyInfoByID(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NotNil(t, result)
 				assert.Equal(t, tt.expectedTenant.ID, result.ID)
-				assert.Equal(t, tt.expectedTenant.BunnyLibraryApiKey, result.BunnyLibraryApiKey)
-				assert.Equal(t, tt.expectedTenant.BunnyLibraryID, result.BunnyLibraryID)
+				if tt.expectedTenant.BunnyLibraryApiKey != nil {
+					assert.Equal(t, tt.expectedTenant.BunnyLibraryApiKey, result.BunnyLibraryApiKey)
+				}
+				if tt.expectedTenant.BunnyLibraryID != nil {
+					assert.Equal(t, tt.expectedTenant.BunnyLibraryID, result.BunnyLibraryID)
+				}
 			}
 			assert.NoError(t, sqlMock.ExpectationsWereMet())
 		})

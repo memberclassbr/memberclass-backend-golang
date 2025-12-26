@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
@@ -16,5 +17,6 @@ type UserRepository interface {
 	FindUserInformations(ctx context.Context, tenantID string, email string, page, limit int) ([]response.UserInformation, int64, error)
 	IsUserOwner(ctx context.Context, userID, tenantID string) (bool, error)
 	GetUserDeliveryIDs(ctx context.Context, userID string) ([]string, error)
+	UpdateMagicToken(ctx context.Context, userID string, tokenHash string, validUntil time.Time) error
 }
 

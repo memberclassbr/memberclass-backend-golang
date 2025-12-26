@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -514,6 +515,83 @@ func TestUserRepository_BelongsToTenant_EdgeCases(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedBelongs, result)
+			assert.NoError(t, sqlMock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestUserRepository_UpdateMagicToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		userID      string
+		tokenHash   string
+		validUntil  time.Time
+		mockSetup   func(sqlmock.Sqlmock)
+		expectError bool
+		expectedErr error
+	}{
+		{
+			name:       "should update magic token successfully",
+			userID:     "user-123",
+			tokenHash:  "hashed-token",
+			validUntil: time.Now().Add(7 * 24 * time.Hour),
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectExec(`UPDATE "User"
+		SET "magicToken" = \$1, "magicTokenValidUntil" = \$2, "updatedAt" = NOW\(\)
+		WHERE id = \$3`).
+					WithArgs("hashed-token", sqlmock.AnyArg(), "user-123").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+			expectError: false,
+		},
+		{
+			name:       "should return error when update fails",
+			userID:     "user-123",
+			tokenHash:  "hashed-token",
+			validUntil: time.Now().Add(7 * 24 * time.Hour),
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectExec(`UPDATE "User"`).
+					WithArgs("hashed-token", sqlmock.AnyArg(), "user-123").
+					WillReturnError(errors.New("database error"))
+			},
+			expectError: true,
+			expectedErr: &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error updating magic token",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, sqlMock, err := sqlmock.New()
+			assert.NoError(t, err)
+			defer db.Close()
+
+			mockLogger := mocks.NewMockLogger(t)
+			if tt.expectError {
+				mockLogger.On("Error", mock.AnythingOfType("string")).Return()
+			}
+
+			repository := NewUserRepository(db, mockLogger)
+
+			tt.mockSetup(sqlMock)
+
+			err = repository.UpdateMagicToken(context.Background(), tt.userID, tt.tokenHash, tt.validUntil)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.expectedErr != nil {
+					var memberClassErr *memberclasserrors.MemberClassError
+					if errors.As(err, &memberClassErr) {
+						assert.Equal(t, tt.expectedErr.(*memberclasserrors.MemberClassError).Code, memberClassErr.Code)
+						assert.Equal(t, tt.expectedErr.(*memberclasserrors.MemberClassError).Message, memberClassErr.Message)
+					}
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
 			assert.NoError(t, sqlMock.ExpectationsWereMet())
 		})
 	}

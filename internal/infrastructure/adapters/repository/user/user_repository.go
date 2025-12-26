@@ -482,3 +482,22 @@ func (r *UserRepository) GetUserDeliveryIDs(ctx context.Context, userID string) 
 	return ids, nil
 }
 
+func (r *UserRepository) UpdateMagicToken(ctx context.Context, userID string, tokenHash string, validUntil time.Time) error {
+	query := `
+		UPDATE "User"
+		SET "magicToken" = $1, "magicTokenValidUntil" = $2, "updatedAt" = NOW()
+		WHERE id = $3
+	`
+
+	_, err := r.db.ExecContext(ctx, query, tokenHash, validUntil, userID)
+	if err != nil {
+		r.log.Error("Error updating magic token: " + err.Error())
+		return &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error updating magic token",
+		}
+	}
+
+	return nil
+}
+

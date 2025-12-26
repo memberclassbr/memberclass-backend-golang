@@ -791,3 +791,82 @@ func (l *LessonRepository) FindCompletedLessonsByEmail(ctx context.Context, user
 
 	return lessons, total, nil
 }
+
+func (l *LessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+	query := `
+		SELECT 
+			l.id,
+			l.name,
+			l.slug,
+			l."transcriptionCompleted",
+			l."updatedAt",
+			t.id as tenant_id,
+			t.name as tenant_name,
+			t."aiEnabled"
+		FROM "Lesson" l
+		JOIN "Module" m ON l."moduleId" = m.id
+		JOIN "Section" s ON m."sectionId" = s.id
+		JOIN "Course" c ON s."courseId" = c.id
+		JOIN "Vitrine" v ON c."vitrineId" = v.id
+		JOIN "Tenant" t ON v."tenantId" = t.id
+		WHERE l.id = $1
+	`
+
+	var lesson entities.Lesson
+	var tenant entities.Tenant
+	var transcriptionCompleted sql.NullBool
+	var lessonIDStr, lessonName, lessonSlug string
+
+	err := l.db.QueryRowContext(ctx, query, lessonID).Scan(
+		&lessonIDStr,
+		&lessonName,
+		&lessonSlug,
+		&transcriptionCompleted,
+		&lesson.UpdatedAt,
+		&tenant.ID,
+		&tenant.Name,
+		&tenant.AIEnabled,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, &memberclasserrors.MemberClassError{
+				Code:    404,
+				Message: "Aula não encontrada",
+			}
+		}
+		l.log.Error("Error finding lesson with tenant: " + err.Error())
+		return nil, nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error finding lesson with tenant",
+		}
+	}
+
+	lesson.ID = &lessonIDStr
+	lesson.Name = &lessonName
+	lesson.Slug = &lessonSlug
+	if transcriptionCompleted.Valid {
+		lesson.TranscriptionCompleted = transcriptionCompleted.Bool
+	}
+
+	return &lesson, &tenant, nil
+}
+
+func (l *LessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
+	query := `
+		UPDATE "Lesson"
+		SET "transcriptionCompleted" = $1, "updatedAt" = NOW()
+		WHERE id = $2
+	`
+
+	_, err := l.db.ExecContext(ctx, query, transcriptionCompleted, lessonID)
+	if err != nil {
+		l.log.Error("Error updating transcription status: " + err.Error())
+		return &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error updating transcription status",
+		}
+	}
+
+	return nil
+}
