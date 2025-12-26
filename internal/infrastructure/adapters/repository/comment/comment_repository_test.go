@@ -488,7 +488,7 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 		},
 	}
 
-		for _, tt := range tests {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, sqlMock, err := sqlmock.New()
 			assert.NoError(t, err)
@@ -512,7 +512,7 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 					assert.Equal(t, memberClassErr.Code, actualErr.Code)
 					assert.Equal(t, memberClassErr.Message, actualErr.Message)
 				} else {
-					assert.Equal(t, tt.expectedError.Error(), err.Error())
+				assert.Equal(t, tt.expectedError.Error(), err.Error())
 				}
 				assert.Nil(t, result)
 				assert.Equal(t, int64(0), total)
