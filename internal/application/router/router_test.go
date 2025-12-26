@@ -25,6 +25,9 @@ func createTestRouter(t *testing.T) *Router {
 	mockLessonsCompletedHandler := &httpHandlers.LessonsCompletedHandler{}
 	mockStudentReportHandler := &httpHandlers.StudentReportHandler{}
 	mockSwaggerHandler := httpHandlers.NewSwaggerHandler()
+	mockAuthHandler := &httpHandlers.AuthHandler{}
+	mockAILessonHandler := &httpHandlers.AILessonHandler{}
+	mockAITenantHandler := &httpHandlers.AITenantHandler{}
 	mockLogger := &mocks.MockLogger{}
 	mockRateLimiter := &mocks.MockRateLimiterUpload{}
 	mockRateLimiterTenant := &mocks.MockRateLimiterTenant{}
@@ -43,7 +46,7 @@ func createTestRouter(t *testing.T) *Router {
 	authMiddleware := middlewares.NewAuthMiddleware(mockLogger, mockSessionValidator)
 	authExternalMiddleware := middlewares.NewAuthExternalMiddleware(mockApiTokenUseCase)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockAILessonHandler, mockAITenantHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {

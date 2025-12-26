@@ -20,6 +20,9 @@ type Router struct {
 	lessonsCompletedHandler   *http.LessonsCompletedHandler
 	studentReportHandler      *http.StudentReportHandler
 	swaggerHandler            *http.SwaggerHandler
+	authHandler               *http.AuthHandler
+	aiLessonHandler           *http.AILessonHandler
+	aiTenantHandler           *http.AITenantHandler
 	rateLimitMiddleware       *middlewares.RateLimitMiddleware
 	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware
 	rateLimitIPMiddleware     *middlewares.RateLimitIPMiddleware
@@ -39,6 +42,9 @@ func NewRouter(
 	lessonsCompletedHandler *http.LessonsCompletedHandler,
 	studentReportHandler *http.StudentReportHandler,
 	swaggerHandler *http.SwaggerHandler,
+	authHandler *http.AuthHandler,
+	aiLessonHandler *http.AILessonHandler,
+	aiTenantHandler *http.AITenantHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
 	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware,
 	rateLimitIPMiddleware *middlewares.RateLimitIPMiddleware,
@@ -65,6 +71,9 @@ func NewRouter(
 		lessonsCompletedHandler:   lessonsCompletedHandler,
 		studentReportHandler:      studentReportHandler,
 		swaggerHandler:            swaggerHandler,
+		authHandler:               authHandler,
+		aiLessonHandler:           aiLessonHandler,
+		aiTenantHandler:           aiTenantHandler,
 		rateLimitMiddleware:       rateLimitMiddleware,
 		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
 		rateLimitIPMiddleware:     rateLimitIPMiddleware,
@@ -80,6 +89,20 @@ func (r *Router) SetupRoutes() {
 	})
 
 	r.Route("/api/v1", func(router chi.Router) {
+
+		router.Route("/auth", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Post("/", r.authHandler.GenerateMagicLink)
+		})
+
+		router.Route("/ai", func(router chi.Router) {
+			router.Route("/lessons", func(router chi.Router) {
+				router.Patch("/{lessonId}", r.aiLessonHandler.UpdateTranscriptionStatus)
+			})
+			router.Get("/tenants", r.aiTenantHandler.GetTenantsWithAIEnabled)
+		})
 
 		router.Route("/videos", func(router chi.Router) {
 			router.With(

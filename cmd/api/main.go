@@ -70,6 +70,9 @@ func main() {
 			usecases.NewActivitySummaryUseCase,
 			usecases.NewLessonsCompletedUseCase,
 			usecases.NewStudentReportUseCase,
+			usecases.NewAuthUseCase,
+			usecases.NewAILessonUseCase,
+			usecases.NewAITenantUseCase,
 
 			middlewares.NewRateLimitMiddleware,
 			middlewares.NewRateLimitTenantMiddleware,
@@ -88,6 +91,9 @@ func main() {
 			internalhttp.NewLessonsCompletedHandler,
 			internalhttp.NewStudentReportHandler,
 			internalhttp.NewSwaggerHandler,
+			internalhttp.NewAuthHandler,
+			internalhttp.NewAILessonHandler,
+			internalhttp.NewAITenantHandler,
 
 			router.NewRouter,
 		),
