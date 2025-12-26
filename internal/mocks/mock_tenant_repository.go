@@ -22,6 +22,64 @@ func (_m *MockTenantRepository) EXPECT() *MockTenantRepository_Expecter {
 	return &MockTenantRepository_Expecter{mock: &_m.Mock}
 }
 
+// FindAllWithAIEnabled provides a mock function with given fields: ctx
+func (_m *MockTenantRepository) FindAllWithAIEnabled(ctx context.Context) ([]*entities.Tenant, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindAllWithAIEnabled")
+	}
+
+	var r0 []*entities.Tenant
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) ([]*entities.Tenant, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) []*entities.Tenant); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*entities.Tenant)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockTenantRepository_FindAllWithAIEnabled_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindAllWithAIEnabled'
+type MockTenantRepository_FindAllWithAIEnabled_Call struct {
+	*mock.Call
+}
+
+// FindAllWithAIEnabled is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockTenantRepository_Expecter) FindAllWithAIEnabled(ctx interface{}) *MockTenantRepository_FindAllWithAIEnabled_Call {
+	return &MockTenantRepository_FindAllWithAIEnabled_Call{Call: _e.mock.On("FindAllWithAIEnabled", ctx)}
+}
+
+func (_c *MockTenantRepository_FindAllWithAIEnabled_Call) Run(run func(ctx context.Context)) *MockTenantRepository_FindAllWithAIEnabled_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockTenantRepository_FindAllWithAIEnabled_Call) Return(_a0 []*entities.Tenant, _a1 error) *MockTenantRepository_FindAllWithAIEnabled_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockTenantRepository_FindAllWithAIEnabled_Call) RunAndReturn(run func(context.Context) ([]*entities.Tenant, error)) *MockTenantRepository_FindAllWithAIEnabled_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // FindBunnyInfoByID provides a mock function with given fields: tenantID
 func (_m *MockTenantRepository) FindBunnyInfoByID(tenantID string) (*entities.Tenant, error) {
 	ret := _m.Called(tenantID)

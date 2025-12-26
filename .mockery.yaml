@@ -39,3 +39,6 @@ packages:
       StudentReportUseCase:
       RateLimiterTenant:
       RateLimiterIP:
+      AuthUseCase:
+      AILessonUseCase:
+      AITenantUseCase:

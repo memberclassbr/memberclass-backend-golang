@@ -24,9 +24,9 @@ func (_m *MockCommentUseCase) EXPECT() *MockCommentUseCase_Expecter {
 	return &MockCommentUseCase_Expecter{mock: &_m.Mock}
 }
 
-// GetComments provides a mock function with given fields: ctx, tenantID, pagination
-func (_m *MockCommentUseCase) GetComments(ctx context.Context, tenantID string, pagination *dto.PaginationRequest) (*dto.CommentsPaginationResponse, error) {
-	ret := _m.Called(ctx, tenantID, pagination)
+// GetComments provides a mock function with given fields: ctx, tenantID, req
+func (_m *MockCommentUseCase) GetComments(ctx context.Context, tenantID string, req *request.GetCommentsRequest) (*dto.CommentsPaginationResponse, error) {
+	ret := _m.Called(ctx, tenantID, req)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetComments")
@@ -34,19 +34,19 @@ func (_m *MockCommentUseCase) GetComments(ctx context.Context, tenantID string, 
 
 	var r0 *dto.CommentsPaginationResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *dto.PaginationRequest) (*dto.CommentsPaginationResponse, error)); ok {
-		return rf(ctx, tenantID, pagination)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *request.GetCommentsRequest) (*dto.CommentsPaginationResponse, error)); ok {
+		return rf(ctx, tenantID, req)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, *dto.PaginationRequest) *dto.CommentsPaginationResponse); ok {
-		r0 = rf(ctx, tenantID, pagination)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *request.GetCommentsRequest) *dto.CommentsPaginationResponse); ok {
+		r0 = rf(ctx, tenantID, req)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*dto.CommentsPaginationResponse)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, *dto.PaginationRequest) error); ok {
-		r1 = rf(ctx, tenantID, pagination)
+	if rf, ok := ret.Get(1).(func(context.Context, string, *request.GetCommentsRequest) error); ok {
+		r1 = rf(ctx, tenantID, req)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -62,14 +62,14 @@ type MockCommentUseCase_GetComments_Call struct {
 // GetComments is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - pagination *dto.PaginationRequest
-func (_e *MockCommentUseCase_Expecter) GetComments(ctx interface{}, tenantID interface{}, pagination interface{}) *MockCommentUseCase_GetComments_Call {
-	return &MockCommentUseCase_GetComments_Call{Call: _e.mock.On("GetComments", ctx, tenantID, pagination)}
+//   - req *request.GetCommentsRequest
+func (_e *MockCommentUseCase_Expecter) GetComments(ctx interface{}, tenantID interface{}, req interface{}) *MockCommentUseCase_GetComments_Call {
+	return &MockCommentUseCase_GetComments_Call{Call: _e.mock.On("GetComments", ctx, tenantID, req)}
 }
 
-func (_c *MockCommentUseCase_GetComments_Call) Run(run func(ctx context.Context, tenantID string, pagination *dto.PaginationRequest)) *MockCommentUseCase_GetComments_Call {
+func (_c *MockCommentUseCase_GetComments_Call) Run(run func(ctx context.Context, tenantID string, req *request.GetCommentsRequest)) *MockCommentUseCase_GetComments_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(*dto.PaginationRequest))
+		run(args[0].(context.Context), args[1].(string), args[2].(*request.GetCommentsRequest))
 	})
 	return _c
 }
@@ -79,7 +79,7 @@ func (_c *MockCommentUseCase_GetComments_Call) Return(_a0 *dto.CommentsPaginatio
 	return _c
 }
 
-func (_c *MockCommentUseCase_GetComments_Call) RunAndReturn(run func(context.Context, string, *dto.PaginationRequest) (*dto.CommentsPaginationResponse, error)) *MockCommentUseCase_GetComments_Call {
+func (_c *MockCommentUseCase_GetComments_Call) RunAndReturn(run func(context.Context, string, *request.GetCommentsRequest) (*dto.CommentsPaginationResponse, error)) *MockCommentUseCase_GetComments_Call {
 	_c.Call.Return(run)
 	return _c
 }

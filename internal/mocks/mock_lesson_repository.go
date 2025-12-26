@@ -404,6 +404,74 @@ func (_c *MockLessonRepository_GetByIDWithPDFAsset_Call) RunAndReturn(run func(c
 	return _c
 }
 
+// GetByIDWithTenant provides a mock function with given fields: ctx, lessonID
+func (_m *MockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+	ret := _m.Called(ctx, lessonID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByIDWithTenant")
+	}
+
+	var r0 *entities.Lesson
+	var r1 *entities.Tenant
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*entities.Lesson, *entities.Tenant, error)); ok {
+		return rf(ctx, lessonID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) *entities.Lesson); ok {
+		r0 = rf(ctx, lessonID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*entities.Lesson)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) *entities.Tenant); ok {
+		r1 = rf(ctx, lessonID)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*entities.Tenant)
+		}
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, string) error); ok {
+		r2 = rf(ctx, lessonID)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockLessonRepository_GetByIDWithTenant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByIDWithTenant'
+type MockLessonRepository_GetByIDWithTenant_Call struct {
+	*mock.Call
+}
+
+// GetByIDWithTenant is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lessonID string
+func (_e *MockLessonRepository_Expecter) GetByIDWithTenant(ctx interface{}, lessonID interface{}) *MockLessonRepository_GetByIDWithTenant_Call {
+	return &MockLessonRepository_GetByIDWithTenant_Call{Call: _e.mock.On("GetByIDWithTenant", ctx, lessonID)}
+}
+
+func (_c *MockLessonRepository_GetByIDWithTenant_Call) Run(run func(ctx context.Context, lessonID string)) *MockLessonRepository_GetByIDWithTenant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockLessonRepository_GetByIDWithTenant_Call) Return(_a0 *entities.Lesson, _a1 *entities.Tenant, _a2 error) *MockLessonRepository_GetByIDWithTenant_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockLessonRepository_GetByIDWithTenant_Call) RunAndReturn(run func(context.Context, string) (*entities.Lesson, *entities.Tenant, error)) *MockLessonRepository_GetByIDWithTenant_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetFailedPDFAssets provides a mock function with given fields: ctx
 func (_m *MockLessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*entities.LessonPDFAsset, error) {
 	ret := _m.Called(ctx)
@@ -839,6 +907,54 @@ func (_c *MockLessonRepository_UpdatePDFAssetStatus_Call) Return(_a0 error) *Moc
 }
 
 func (_c *MockLessonRepository_UpdatePDFAssetStatus_Call) RunAndReturn(run func(context.Context, string, string, *int, *string) error) *MockLessonRepository_UpdatePDFAssetStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateTranscriptionStatus provides a mock function with given fields: ctx, lessonID, transcriptionCompleted
+func (_m *MockLessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
+	ret := _m.Called(ctx, lessonID, transcriptionCompleted)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTranscriptionStatus")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) error); ok {
+		r0 = rf(ctx, lessonID, transcriptionCompleted)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockLessonRepository_UpdateTranscriptionStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTranscriptionStatus'
+type MockLessonRepository_UpdateTranscriptionStatus_Call struct {
+	*mock.Call
+}
+
+// UpdateTranscriptionStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lessonID string
+//   - transcriptionCompleted bool
+func (_e *MockLessonRepository_Expecter) UpdateTranscriptionStatus(ctx interface{}, lessonID interface{}, transcriptionCompleted interface{}) *MockLessonRepository_UpdateTranscriptionStatus_Call {
+	return &MockLessonRepository_UpdateTranscriptionStatus_Call{Call: _e.mock.On("UpdateTranscriptionStatus", ctx, lessonID, transcriptionCompleted)}
+}
+
+func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) Run(run func(ctx context.Context, lessonID string, transcriptionCompleted bool)) *MockLessonRepository_UpdateTranscriptionStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(bool))
+	})
+	return _c
+}
+
+func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) Return(_a0 error) *MockLessonRepository_UpdateTranscriptionStatus_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) RunAndReturn(run func(context.Context, string, bool) error) *MockLessonRepository_UpdateTranscriptionStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }
