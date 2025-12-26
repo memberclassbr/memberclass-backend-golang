@@ -87,6 +87,7 @@ func main() {
 			internalhttp.NewActivitySummaryHandler,
 			internalhttp.NewLessonsCompletedHandler,
 			internalhttp.NewStudentReportHandler,
+			internalhttp.NewSwaggerHandler,
 
 			router.NewRouter,
 		),

@@ -19,6 +19,7 @@ type Router struct {
 	activitySummaryHandler    *http.ActivitySummaryHandler
 	lessonsCompletedHandler   *http.LessonsCompletedHandler
 	studentReportHandler      *http.StudentReportHandler
+	swaggerHandler            *http.SwaggerHandler
 	rateLimitMiddleware       *middlewares.RateLimitMiddleware
 	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware
 	rateLimitIPMiddleware     *middlewares.RateLimitIPMiddleware
@@ -37,6 +38,7 @@ func NewRouter(
 	activitySummaryHandler *http.ActivitySummaryHandler,
 	lessonsCompletedHandler *http.LessonsCompletedHandler,
 	studentReportHandler *http.StudentReportHandler,
+	swaggerHandler *http.SwaggerHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
 	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware,
 	rateLimitIPMiddleware *middlewares.RateLimitIPMiddleware,
@@ -62,6 +64,7 @@ func NewRouter(
 		activitySummaryHandler:    activitySummaryHandler,
 		lessonsCompletedHandler:   lessonsCompletedHandler,
 		studentReportHandler:      studentReportHandler,
+		swaggerHandler:            swaggerHandler,
 		rateLimitMiddleware:       rateLimitMiddleware,
 		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
 		rateLimitIPMiddleware:     rateLimitIPMiddleware,
@@ -71,6 +74,11 @@ func NewRouter(
 }
 
 func (r *Router) SetupRoutes() {
+	r.Route("/docs", func(router chi.Router) {
+		router.Get("/", r.swaggerHandler.ServeSwaggerUI)
+		router.Get("/swagger.yaml", r.swaggerHandler.ServeSwaggerYAML)
+	})
+
 	r.Route("/api/v1", func(router chi.Router) {
 
 		router.Route("/videos", func(router chi.Router) {
