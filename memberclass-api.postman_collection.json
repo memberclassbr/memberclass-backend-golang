@@ -35,6 +35,11 @@
 			"key": "email",
 			"value": "user@example.com",
 			"type": "string"
+		},
+		{
+			"key": "internalAiApiKey",
+			"value": "your-internal-ai-api-key",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -2687,6 +2692,513 @@
 								}
 							],
 							"body": "{\n    \"ok\": false,\n    \"error\": \"startDate não pode ser maior que endDate\",\n    \"errorCode\": \"INVALID_DATE_RANGE\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"description": "Endpoints relacionados à autenticação e geração de links mágicos",
+			"item": [
+				{
+					"name": "Generate Magic Link",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{email}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth"
+							]
+						},
+						"description": "Gera um link de login mágico para um usuário do tenant. Cria um token mágico válido por 7 dias e retorna o link de login."
+					},
+					"response": [
+						{
+							"name": "Generate Magic Link - Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"user@example.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/auth",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "59"
+								}
+							],
+							"body": "{\n    \"ok\": true,\n    \"link\": \"https://subdomain.example.com/login?token=abc123&email=user@example.com&isReset=false\"\n}"
+						},
+						{
+							"name": "Generate Magic Link - User Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"nonexistent@example.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/auth",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Usuário não encontrado\",\n    \"errorCode\": \"USER_NOT_FOUND\"\n}"
+						},
+						{
+							"name": "Generate Magic Link - Rate Limit Exceeded",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"user@example.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/auth",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth"
+									]
+								}
+							},
+							"status": "Too Many Requests",
+							"code": 429,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "0"
+								},
+								{
+									"key": "Retry-After",
+									"value": "300"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Muitas requisições. Tente novamente em 5 minutos.\",\n    \"errorCode\": \"RATE_LIMIT_EXCEEDED\",\n    \"retryAfter\": 300\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "AI",
+			"description": "Endpoints relacionados à IA (transcrições e tenants)",
+			"item": [
+				{
+					"name": "Update Lesson Transcription Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "x-internal-api-key",
+								"value": "{{internalAiApiKey}}",
+								"type": "text",
+								"description": "API Key interna para IA"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"transcriptionCompleted\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/lessons/{{lessonId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ai",
+								"lessons",
+								"{{lessonId}}"
+							]
+						},
+						"description": "Atualiza o status de transcrição de uma aula específica. Verifica se o tenant tem IA habilitada antes de permitir a atualização."
+					},
+					"response": [
+						{
+							"name": "Update Transcription Status - Success",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"transcriptionCompleted\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons/lesson-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons",
+										"lesson-123"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "59"
+								}
+							],
+							"body": "{\n    \"lesson\": {\n        \"id\": \"lesson-123\",\n        \"name\": \"Aula de Introdução\",\n        \"slug\": \"aula-introducao\",\n        \"transcriptionCompleted\": true,\n        \"updatedAt\": \"2024-01-16T14:00:00.000Z\"\n    },\n    \"message\": \"Status de transcrição atualizado com sucesso\"\n}"
+						},
+						{
+							"name": "Update Transcription Status - AI Not Enabled",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"transcriptionCompleted\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons/lesson-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons",
+										"lesson-123"
+									]
+								}
+							},
+							"status": "Forbidden",
+							"code": 403,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"IA não está habilitada para este tenant\",\n    \"errorCode\": \"AI_NOT_ENABLED\"\n}"
+						},
+						{
+							"name": "Update Transcription Status - Lesson Not Found",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"transcriptionCompleted\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons/nonexistent-lesson",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons",
+										"nonexistent-lesson"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Aula não encontrada\",\n    \"errorCode\": \"LESSON_NOT_FOUND\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Tenants with AI Enabled",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-internal-api-key",
+								"value": "{{internalAiApiKey}}",
+								"type": "text",
+								"description": "API Key interna para IA"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/tenants",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ai",
+								"tenants"
+							]
+						},
+						"description": "Lista todos os tenants que têm IA habilitada, retornando informações sobre suas configurações de biblioteca Bunny."
+					},
+					"response": [
+						{
+							"name": "Get Tenants with AI - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "59"
+								}
+							],
+							"body": "{\n    \"tenants\": [\n        {\n            \"id\": \"tenant-1\",\n            \"name\": \"Tenant 1\",\n            \"aiEnabled\": true,\n            \"bunnyLibraryId\": \"library-123\",\n            \"bunnyLibraryApiKey\": \"api-key-123\"\n        },\n        {\n            \"id\": \"tenant-2\",\n            \"name\": \"Tenant 2\",\n            \"aiEnabled\": true,\n            \"bunnyLibraryId\": null,\n            \"bunnyLibraryApiKey\": null\n        }\n    ],\n    \"total\": 2\n}"
+						},
+						{
+							"name": "Get Tenants with AI - Unauthorized",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
 						}
 					]
 				}
