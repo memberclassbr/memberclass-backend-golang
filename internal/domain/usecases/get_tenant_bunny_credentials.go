@@ -32,8 +32,12 @@ func (t *TenantGetTenantBunnyCredentialsUseCase) Execute(tenantID string) (*dto.
 	var tenantBunnyCredentials dto.TenantBunnyCredentials
 
 	tenantBunnyCredentials.TenantID = tenant.ID
-	tenantBunnyCredentials.BunnyLibraryID = tenant.BunnyLibraryID
-	tenantBunnyCredentials.BunnyLibraryApiKey = tenant.BunnyLibraryApiKey
+	if tenant.BunnyLibraryID != nil {
+		tenantBunnyCredentials.BunnyLibraryID = *tenant.BunnyLibraryID
+	}
+	if tenant.BunnyLibraryApiKey != nil {
+		tenantBunnyCredentials.BunnyLibraryApiKey = *tenant.BunnyLibraryApiKey
+	}
 
 	return &tenantBunnyCredentials, nil
 }

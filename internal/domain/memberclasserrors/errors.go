@@ -36,4 +36,7 @@ var (
 	ErrLessonNotFound   = errors.New("lesson not found")
 	ErrPDFAssetNotFound = errors.New("PDF asset not found")
 	ErrPDFPageNotFound  = errors.New("PDF page not found")
+
+	//Errors Comment
+	ErrCommentNotFound = errors.New("comment not found")
 )

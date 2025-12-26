@@ -74,6 +74,18 @@ func (u *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
 	return result > 0, nil
 }
 
+func (u *RedisCache) TTL(ctx context.Context, key string) (time.Duration, error) {
+	ttl, err := u.client.TTL(ctx, key).Result()
+	if err != nil {
+		u.log.Error("Error getting TTL for key " + key + ": " + err.Error())
+		return 0, err
+	}
+	if ttl < 0 {
+		return 0, nil
+	}
+	return ttl, nil
+}
+
 func (u *RedisCache) Close() error {
 	if u.client != nil {
 		u.log.Info("Closing Redis connection...")

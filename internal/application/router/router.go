@@ -9,17 +9,47 @@ import (
 
 type Router struct {
 	chi.Router
-	videoHandler        *http.VideoHandler
-	lessonHandler       *http.LessonHandler
-	rateLimitMiddleware *middlewares.RateLimitMiddleware
-	authMiddleware      *middlewares.AuthMiddleware
+	videoHandler              *http.VideoHandler
+	lessonHandler             *http.LessonHandler
+	commentHandler            *http.CommentHandler
+	userActivityHandler       *http.UserActivityHandler
+	userPurchaseHandler       *http.UserPurchaseHandler
+	userInformationsHandler   *http.UserInformationsHandler
+	socialCommentHandler      *http.SocialCommentHandler
+	activitySummaryHandler    *http.ActivitySummaryHandler
+	lessonsCompletedHandler   *http.LessonsCompletedHandler
+	studentReportHandler      *http.StudentReportHandler
+	swaggerHandler            *http.SwaggerHandler
+	authHandler               *http.AuthHandler
+	aiLessonHandler           *http.AILessonHandler
+	aiTenantHandler           *http.AITenantHandler
+	rateLimitMiddleware       *middlewares.RateLimitMiddleware
+	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware
+	rateLimitIPMiddleware     *middlewares.RateLimitIPMiddleware
+	authMiddleware            *middlewares.AuthMiddleware
+	authExternalMiddleware    *middlewares.AuthExternalMiddleware
 }
 
 func NewRouter(
 	videoHandler *http.VideoHandler,
 	lessonHandler *http.LessonHandler,
+	commentHandler *http.CommentHandler,
+	userActivityHandler *http.UserActivityHandler,
+	userPurchaseHandler *http.UserPurchaseHandler,
+	userInformationsHandler *http.UserInformationsHandler,
+	socialCommentHandler *http.SocialCommentHandler,
+	activitySummaryHandler *http.ActivitySummaryHandler,
+	lessonsCompletedHandler *http.LessonsCompletedHandler,
+	studentReportHandler *http.StudentReportHandler,
+	swaggerHandler *http.SwaggerHandler,
+	authHandler *http.AuthHandler,
+	aiLessonHandler *http.AILessonHandler,
+	aiTenantHandler *http.AITenantHandler,
 	rateLimitMiddleware *middlewares.RateLimitMiddleware,
+	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware,
+	rateLimitIPMiddleware *middlewares.RateLimitIPMiddleware,
 	authMiddleware *middlewares.AuthMiddleware,
+	authExternalMiddleware *middlewares.AuthExternalMiddleware,
 ) *Router {
 	router := chi.NewRouter()
 
@@ -29,22 +59,108 @@ func NewRouter(
 	router.Use(middleware.RealIP)
 
 	return &Router{
-		Router:              router,
-		videoHandler:        videoHandler,
-		lessonHandler:       lessonHandler,
-		rateLimitMiddleware: rateLimitMiddleware,
-		authMiddleware:      authMiddleware,
+		Router:                    router,
+		videoHandler:              videoHandler,
+		lessonHandler:             lessonHandler,
+		commentHandler:            commentHandler,
+		userActivityHandler:       userActivityHandler,
+		userPurchaseHandler:       userPurchaseHandler,
+		userInformationsHandler:   userInformationsHandler,
+		socialCommentHandler:      socialCommentHandler,
+		activitySummaryHandler:    activitySummaryHandler,
+		lessonsCompletedHandler:   lessonsCompletedHandler,
+		studentReportHandler:      studentReportHandler,
+		swaggerHandler:            swaggerHandler,
+		authHandler:               authHandler,
+		aiLessonHandler:           aiLessonHandler,
+		aiTenantHandler:           aiTenantHandler,
+		rateLimitMiddleware:       rateLimitMiddleware,
+		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
+		rateLimitIPMiddleware:     rateLimitIPMiddleware,
+		authMiddleware:            authMiddleware,
+		authExternalMiddleware:    authExternalMiddleware,
 	}
 }
 
 func (r *Router) SetupRoutes() {
+	r.Route("/docs", func(router chi.Router) {
+		router.Get("/", r.swaggerHandler.ServeSwaggerUI)
+		router.Get("/swagger.yaml", r.swaggerHandler.ServeSwaggerYAML)
+	})
+
 	r.Route("/api/v1", func(router chi.Router) {
+
+		router.Route("/auth", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Post("/", r.authHandler.GenerateMagicLink)
+		})
+
+		router.Route("/ai", func(router chi.Router) {
+			router.Route("/lessons", func(router chi.Router) {
+				router.Patch("/{lessonId}", r.aiLessonHandler.UpdateTranscriptionStatus)
+			})
+			router.Get("/tenants", r.aiTenantHandler.GetTenantsWithAIEnabled)
+		})
 
 		router.Route("/videos", func(router chi.Router) {
 			router.With(
 				r.rateLimitMiddleware.CheckUploadLimit,
 				r.rateLimitMiddleware.IncrementAfterUpload,
 			).Post("/upload", r.videoHandler.UploadVideo)
+		})
+
+		router.Route("/comments", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/", r.commentHandler.GetComments)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Patch("/{commentID}", r.commentHandler.UpdateComment)
+		})
+
+		router.Route("/user", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+			).Get("/informations", r.userInformationsHandler.GetUserInformations)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/activities", r.userActivityHandler.GetUserActivities)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/activity/summary", r.activitySummaryHandler.GetActivitySummary)
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/lessons/completed", r.lessonsCompletedHandler.GetLessonsCompleted)
+			router.With(
+				r.rateLimitTenantMiddleware.LimitByTenant)
+		})
+
+		router.Route("/users", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/purchases", r.userPurchaseHandler.GetUserPurchases)
+		})
+
+		router.Route("/social", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Post("/", r.socialCommentHandler.CreateOrUpdatePost)
+		})
+
+		router.Route("/student", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/report", r.studentReportHandler.GetStudentReport)
 		})
 
 	})
@@ -58,5 +174,6 @@ func (r *Router) SetupRoutes() {
 				router.Get("/pdf-pages", r.lessonHandler.GetLessonsPage)
 			})
 		})
+
 	})
 }

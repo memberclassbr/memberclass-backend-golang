@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "memberclass-backend-golang",
 		"name": "MemberClass Backend API",
-		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF",
+		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários\n- Compras e reembolsos dos usuários",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -19,6 +19,26 @@
 		{
 			"key": "lessonId",
 			"value": "your-lesson-id",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "your-api-key",
+			"type": "string"
+		},
+		{
+			"key": "commentId",
+			"value": "your-comment-id",
+			"type": "string"
+		},
+		{
+			"key": "email",
+			"value": "user@example.com",
+			"type": "string"
+		},
+		{
+			"key": "internalAiApiKey",
+			"value": "your-internal-ai-api-key",
 			"type": "string"
 		}
 	],
@@ -733,6 +753,2452 @@
 								}
 							],
 							"body": "{\n    \"lessonId\": \"lesson-789\",\n    \"status\": \"processing\",\n    \"totalPages\": 10,\n    \"pages\": [\n        {\n            \"pageNumber\": 1,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-789/page-1.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        },\n        {\n            \"pageNumber\": 2,\n            \"imageUrl\": \"https://cdn.example.com/lessons/lesson-789/page-2.jpg\",\n            \"width\": 1920,\n            \"height\": 1080\n        }\n    ]\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Comments",
+			"description": "Endpoints relacionados ao gerenciamento de comentários",
+			"item": [
+				{
+					"name": "Get Comments",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/comments?page=1&limit=10&email=user@example.com&status=approved&courseId=course-123&answered=true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"comments"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1, mínimo: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, mínimo: 1, máximo: 100)"
+								},
+								{
+									"key": "email",
+									"value": "user@example.com",
+									"description": "Filtra por email do usuário (busca parcial, case insensitive)",
+									"disabled": true
+								},
+								{
+									"key": "status",
+									"value": "approved",
+									"description": "Filtra por status: pendent, approved ou rejected",
+									"disabled": true
+								},
+								{
+									"key": "courseId",
+									"value": "course-123",
+									"description": "Filtra por ID do curso",
+									"disabled": true
+								},
+								{
+									"key": "answered",
+									"value": "true",
+									"description": "Filtra por comentários respondidos: true ou false",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Lista todos os comentários do tenant autenticado com paginação e filtros opcionais.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Query Parameters:**\n- `page` (opcional): Número da página (padrão: 1, mínimo: 1)\n- `limit` (opcional): Itens por página (padrão: 10, mínimo: 1, máximo: 100)\n- `email` (opcional): Filtra por email do usuário (busca parcial, case insensitive)\n- `status` (opcional): Filtra por status do comentário (`pendent`, `approved`, `rejected`)\n- `courseId` (opcional): Filtra por ID do curso\n- `answered` (opcional): Filtra por comentários respondidos (`true` ou `false`)\n\n**Ordenação:** Os comentários são sempre ordenados por `createdAt` em ordem decrescente."
+					},
+					"response": [
+						{
+							"name": "Get Comments - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments?page=1&pageSize=10&sortBy=updatedAt&sortDir=desc",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "pageSize",
+											"value": "10"
+										},
+										{
+											"key": "sortBy",
+											"value": "updatedAt"
+										},
+										{
+											"key": "sortDir",
+											"value": "desc"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"comments\": [\n        {\n            \"id\": \"comment-123\",\n            \"createdAt\": \"2024-01-15T10:30:00Z\",\n            \"updatedAt\": \"2024-01-15T11:00:00Z\",\n            \"question\": \"Qual é a diferença entre X e Y?\",\n            \"answer\": \"A diferença principal é...\",\n            \"published\": true,\n            \"lessonName\": \"Introdução ao Golang\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"João Silva\",\n            \"userEmail\": \"joao@example.com\"\n        },\n        {\n            \"id\": \"comment-456\",\n            \"createdAt\": \"2024-01-14T15:20:00Z\",\n            \"updatedAt\": \"2024-01-14T15:20:00Z\",\n            \"question\": \"Como funciona o defer?\",\n            \"answer\": null,\n            \"published\": null,\n            \"lessonName\": \"Conceitos Avançados\",\n            \"courseName\": \"Curso de Go\",\n            \"username\": \"Maria Santos\",\n            \"userEmail\": \"maria@example.com\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 25,\n        \"totalPages\": 3,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Comments - Sem API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Comments - API Key Inválida",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "invalid-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Update Comment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"answer\": \"Esta é a resposta para o comentário do usuário.\",\n    \"published\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/comments/{{commentId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"comments",
+								"{{commentId}}"
+							]
+						},
+						"description": "Atualiza a resposta de um comentário específico.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Campos:**\n- `answer` (obrigatório): Texto da resposta ao comentário\n- `published` (opcional): Se o comentário deve ser publicado (padrão: false)"
+					},
+					"response": [
+						{
+							"name": "Update Comment - Sucesso",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"answer\": \"Esta é a resposta para o comentário do usuário.\",\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/comment-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"comment-123"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"id\": \"comment-123\",\n    \"question\": \"Qual é a diferença entre X e Y?\",\n    \"answer\": \"Esta é a resposta para o comentário do usuário.\",\n    \"published\": true,\n    \"updatedAt\": \"2024-01-15T10:30:00Z\",\n    \"lessonName\": \"Introdução ao Golang\",\n    \"courseName\": \"Curso de Go\",\n    \"username\": \"João Silva\",\n    \"userEmail\": \"joao@example.com\"\n}"
+						},
+						{
+							"name": "Update Comment - Sem API Key",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"answer\": \"Resposta\",\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/comment-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"comment-123"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Update Comment - Comentário não encontrado",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"answer\": \"Resposta\",\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/invalid-comment-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"invalid-comment-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Not Found\",\n    \"message\": \"Comment not found\"\n}"
+						},
+						{
+							"name": "Update Comment - Answer obrigatório",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"published\": true\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/comments/comment-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"comments",
+										"comment-123"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Bad Request\",\n    \"message\": \"campo 'answer' é obrigatório e deve ser uma string\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User Activities",
+			"description": "Endpoints relacionados às atividades de acesso dos usuários",
+			"item": [
+				{
+					"name": "Get User Activities",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/user/activities?email={{email}}&page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"activities"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "{{email}}",
+									"description": "Email do usuário (obrigatório)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, máximo: 100)"
+								}
+							]
+						},
+						"description": "Lista as atividades de acesso de um usuário com paginação.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Cache:** Este endpoint utiliza cache Redis com TTL de 5 minutos.\n\n**Query Parameters:**\n- `email` (obrigatório): Email do usuário\n- `page` (opcional): Número da página (padrão: 1)\n- `limit` (opcional): Itens por página (padrão: 10, máximo: 100)"
+					},
+					"response": [
+						{
+							"name": "Get Activities - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"access\": [\n        {\n            \"data\": \"2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'\"\n        },\n        {\n            \"data\": \"2024-01-14T15:20:00Z - Acessou o curso 'Curso de Go'\"\n        },\n        {\n            \"data\": \"2024-01-13T09:10:00Z - Completou a lição 'Variáveis e Tipos'\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 25,\n        \"totalPages\": 3,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Activities - Sem API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities?email=user@example.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Activities - Email obrigatório",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Bad Request\",\n    \"message\": \"email parameter is required\"\n}"
+						},
+						{
+							"name": "Get Activities - Página vazia",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activities?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activities"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"access\": [],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 0,\n        \"totalPages\": 0,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User Purchases",
+			"description": "Endpoints relacionados às compras e reembolsos dos usuários",
+			"item": [
+				{
+					"name": "Get User Purchases",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/purchases?email={{email}}&page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"users",
+								"purchases"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "{{email}}",
+									"description": "Email do usuário (obrigatório)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, máximo: 100)"
+								},
+								{
+									"key": "type",
+									"value": "",
+									"description": "Tipo de transação: 'purchase' ou 'refund' (opcional)"
+								}
+							]
+						},
+						"description": "Lista as compras e reembolsos de um usuário com paginação.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos).\n\n**Query Parameters:**\n- `email` (obrigatório): Email do usuário\n- `page` (opcional): Número da página (padrão: 1)\n- `limit` (opcional): Itens por página (padrão: 10, máximo: 100)\n- `type` (opcional): Filtrar por tipo: 'purchase' ou 'refund'"
+					},
+					"response": [
+						{
+							"name": "Get Purchases - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"purchases\": [\n        {\n            \"id\": \"purchase-123\",\n            \"amount\": 99.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-15T10:30:00Z\"\n        },\n        {\n            \"id\": \"purchase-456\",\n            \"amount\": 149.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-14T15:20:00Z\"\n        },\n        {\n            \"id\": \"refund-789\",\n            \"amount\": 99.90,\n            \"status\": \"completed\",\n            \"type\": \"refund\",\n            \"createdAt\": \"2024-01-13T09:10:00Z\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 15,\n        \"totalPages\": 2,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Purchases - Filtrado por tipo",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com&page=1&limit=10&type=purchase",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "type",
+											"value": "purchase"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"purchases\": [\n        {\n            \"id\": \"purchase-123\",\n            \"amount\": 99.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-15T10:30:00Z\"\n        },\n        {\n            \"id\": \"purchase-456\",\n            \"amount\": 149.90,\n            \"status\": \"completed\",\n            \"type\": \"purchase\",\n            \"createdAt\": \"2024-01-14T15:20:00Z\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 12,\n        \"totalPages\": 2,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Purchases - Sem API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Purchases - Email obrigatório",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"email é obrigatório\",\n    \"errorCode\": \"MISSING_EMAIL\"\n}"
+						},
+						{
+							"name": "Get Purchases - Usuário não encontrado",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=invalid@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "invalid@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Usuário não encontrado ou não pertence ao tenant autenticado\",\n    \"errorCode\": \"USER_NOT_FOUND\"\n}"
+						},
+						{
+							"name": "Get Purchases - Lista vazia",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/users/purchases?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"users",
+										"purchases"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"email\": \"user@example.com\",\n    \"purchases\": [],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 0,\n        \"totalPages\": 0,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User Informations",
+			"description": "Endpoints relacionados às informações do usuário",
+			"item": [
+				{
+					"name": "Get User Informations",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/user/informations?email={{email}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"informations"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "{{email}}",
+									"description": "Email do usuário (obrigatório)"
+								}
+							]
+						},
+						"description": "Retorna as informações de um usuário específico.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos)."
+					},
+					"response": [
+						{
+							"name": "Get Informations - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/informations?email=user@example.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"informations"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"id\": \"user-123\",\n    \"username\": \"joaosilva\",\n    \"email\": \"user@example.com\",\n    \"emailVerified\": \"2024-01-15T10:30:00Z\",\n    \"image\": \"https://example.com/avatar.jpg\",\n    \"phone\": \"+5511999999999\",\n    \"referrals\": 5,\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"updatedAt\": \"2024-01-15T10:30:00Z\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Social",
+			"description": "Endpoints para criar e atualizar posts na comunidade (social)",
+			"item": [
+				{
+					"name": "Create Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório, hash SHA256)"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"user-123\",\n    \"topicId\": \"topic-456\",\n    \"title\": \"Meu primeiro post\",\n    \"content\": \"Este é o conteúdo do meu post\",\n    \"image\": \"https://example.com/image.jpg\",\n    \"videoEmbed\": \"https://youtube.com/watch?v=123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/social",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"social"
+							]
+						},
+						"description": "Cria um novo post em um tópico ou atualiza um post existente.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Campos obrigatórios:**\n- `userId`: ID do usuário que está criando/atualizando o post\n- `title`: Título do post\n- `content`: Conteúdo do post\n\n**Para criar post:**\n- `topicId`: ID do tópico (obrigatório)\n\n**Para atualizar post:**\n- `postId`: ID do post a ser atualizado (obrigatório)\n\n**Campos opcionais:**\n- `image`: URL da imagem do post\n- `videoEmbed`: URL do vídeo embed\n\n**Validações de Permissão:**\n- Se `topic.onlyAdmin = true`, apenas owners podem postar\n- Se o tópico tem deliveries vinculadas, usuário deve ter pelo menos uma delivery em comum\n- Owners podem postar em qualquer tópico\n- Para atualizar: apenas owner ou dono do post"
+					},
+					"response": [
+						{
+							"name": "Create Post - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"user-123\",\n    \"topicId\": \"topic-456\",\n    \"title\": \"Meu primeiro post\",\n    \"content\": \"Este é o conteúdo do meu post\",\n    \"image\": \"https://example.com/image.jpg\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/social",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"social"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": true,\n    \"id\": \"post-123\"\n}"
+						},
+						{
+							"name": "Update Post - Sucesso",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"user-123\",\n    \"postId\": \"post-789\",\n    \"title\": \"Título atualizado\",\n    \"content\": \"Conteúdo atualizado\",\n    \"image\": \"https://example.com/new-image.jpg\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/social",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"social"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": true,\n    \"id\": \"post-789\"\n}"
+						},
+						{
+							"name": "Erro - userId não informado",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"topicId\": \"topic-456\",\n    \"title\": \"Meu post\",\n    \"content\": \"Conteúdo\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/social",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"social"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"userId é obrigatório\",\n    \"errorCode\": \"MISSING_USER\"\n}"
+						},
+						{
+							"name": "Erro - Usuário não pertence ao tenant",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"user-other-tenant\",\n    \"topicId\": \"topic-456\",\n    \"title\": \"Meu post\",\n    \"content\": \"Conteúdo\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/social",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"social"
+									]
+								}
+							},
+							"status": "Forbidden",
+							"code": 403,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Usuário não pertence ao tenant\",\n    \"errorCode\": \"PERMISSION_DENIED\"\n}"
+						},
+						{
+							"name": "Erro - Sem acesso ao tópico",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"user-123\",\n    \"topicId\": \"topic-admin-only\",\n    \"title\": \"Meu post\",\n    \"content\": \"Conteúdo\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/social",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"social"
+									]
+								}
+							},
+							"status": "Forbidden",
+							"code": 403,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Você não tem acesso para publicar neste tópico\",\n    \"errorCode\": \"NO_ACCESS_TO_TOPIC\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Activity Summary",
+			"description": "Endpoints relacionados ao resumo de atividades dos usuários",
+			"item": [
+				{
+					"name": "Get Activity Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório, hash SHA256)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/user/activity/summary?page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"activity",
+								"summary"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Página (padrão: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (1-100, padrão: 10)"
+								},
+								{
+									"key": "startDate",
+									"value": "2024-01-01T00:00:00Z",
+									"description": "Data início (ISO 8601, opcional)"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-01-31T23:59:59Z",
+									"description": "Data fim (ISO 8601, opcional)"
+								},
+								{
+									"key": "noAccess",
+									"value": "false",
+									"description": "Se true, retorna usuários SEM atividade (opcional)"
+								}
+							]
+						},
+						"description": "Retorna um resumo de atividade dos usuários de um tenant, mostrando o email e o último acesso de cada usuário.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Parâmetros:**\n- `page`: Página (padrão: 1)\n- `limit`: Itens por página (1-100, padrão: 10)\n- `startDate`: Data início (ISO 8601, opcional)\n- `endDate`: Data fim (ISO 8601, opcional)\n- `noAccess`: Se `true`, retorna usuários SEM atividade no período\n\n**Regras de Data:**\n- Se não informar datas → últimos 31 dias\n- Se apenas `startDate` → busca do início ao fim daquele dia\n- Se `endDate` sem `startDate` → erro\n- Se `startDate > endDate` → erro\n- Período máximo: 31 dias"
+					},
+					"response": [
+						{
+							"name": "Get Summary - Sucesso (com atividade)",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activity/summary?page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activity",
+										"summary"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"users\": [\n        {\n            \"email\": \"usuario@email.com\",\n            \"ultimoAcesso\": \"2025-12-10T14:30:00.000Z\"\n        },\n        {\n            \"email\": \"outro@email.com\",\n            \"ultimoAcesso\": null\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 150,\n        \"totalPages\": 15,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Summary - Sucesso (sem atividade - noAccess=true)",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activity/summary?page=1&limit=10&noAccess=true",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activity",
+										"summary"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "noAccess",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"users\": [\n        {\n            \"email\": \"inativo@email.com\",\n            \"ultimoAcesso\": null\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 5,\n        \"totalPages\": 1,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Erro - Paginação inválida",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activity/summary?page=0&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activity",
+										"summary"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"page deve ser >= 1\",\n    \"errorCode\": \"INVALID_PAGINATION\"\n}"
+						},
+						{
+							"name": "Erro - Formato de data inválido",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activity/summary?startDate=invalid-date",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activity",
+										"summary"
+									],
+									"query": [
+										{
+											"key": "startDate",
+											"value": "invalid-date"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"formato de data inválido para startDate\",\n    \"errorCode\": \"INVALID_DATE_FORMAT\"\n}"
+						},
+						{
+							"name": "Erro - Período inválido (> 31 dias)",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/activity/summary?startDate=2024-01-01T00:00:00Z&endDate=2024-02-15T23:59:59Z",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"activity",
+										"summary"
+									],
+									"query": [
+										{
+											"key": "startDate",
+											"value": "2024-01-01T00:00:00Z"
+										},
+										{
+											"key": "endDate",
+											"value": "2024-02-15T23:59:59Z"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"período máximo de 31 dias\",\n    \"errorCode\": \"INVALID_DATE_RANGE\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Lessons Completed",
+			"description": "Endpoints relacionados às aulas completadas",
+			"item": [
+				{
+					"name": "Get Lessons Completed",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "API Key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/user/lessons/completed?email={{email}}&page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"lessons",
+								"completed"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "{{email}}",
+									"description": "Email do usuário (obrigatório)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, máximo: 100)"
+								},
+								{
+									"key": "startDate",
+									"value": "2024-01-01T00:00:00Z",
+									"description": "Data início (ISO 8601, opcional)"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-01-31T23:59:59Z",
+									"description": "Data fim (ISO 8601, opcional)"
+								},
+								{
+									"key": "courseId",
+									"value": "",
+									"description": "Filtrar por curso específico (opcional)"
+								}
+							]
+						},
+						"description": "Retorna as aulas concluídas por um usuário específico, com informações do curso e data de conclusão.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Regras de Data:**\n- Se `startDate` e `endDate` não informados → últimos 31 dias\n- Se apenas `startDate` → busca do início ao fim daquele dia\n- Se `endDate` sem `startDate` → erro\n- Se `startDate > endDate` → erro\n- Período máximo: **31 dias**\n\n**Cache:** Esta rota **NÃO usa cache** no Redis (dados em tempo real por usuário)."
+					},
+					"response": [
+						{
+							"name": "Get Lessons Completed - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/user/lessons/completed?email=user@example.com&page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"user",
+										"lessons",
+										"completed"
+									],
+									"query": [
+										{
+											"key": "email",
+											"value": "user@example.com"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": true,\n    \"data\": {\n        \"completedLessons\": [\n            {\n                \"courseName\": \"Curso de JavaScript\",\n                \"lessonName\": \"Introdução ao JS\",\n                \"completedAt\": \"2025-12-10T14:30:00.000Z\"\n            },\n            {\n                \"courseName\": \"Curso de JavaScript\",\n                \"lessonName\": \"Variáveis e Tipos\",\n                \"completedAt\": \"2025-12-09T10:15:00.000Z\"\n            }\n        ],\n        \"pagination\": {\n            \"page\": 1,\n            \"limit\": 10,\n            \"totalCount\": 25,\n            \"totalPages\": 3,\n            \"hasNextPage\": true,\n            \"hasPrevPage\": false\n        }\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Student Report",
+			"description": "Endpoints relacionados ao relatório de alunos do tenant",
+			"item": [
+				{
+					"name": "Get Student Report",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"description": "API key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"student",
+								"report"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Número da página (padrão: 1, mínimo: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Itens por página (padrão: 10, mínimo: 1, máximo: 100)"
+								},
+								{
+									"key": "startDate",
+									"value": "2024-01-01T00:00:00Z",
+									"description": "Data inicial para filtrar por data de cadastro (ISO 8601, opcional)"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-12-31T23:59:59Z",
+									"description": "Data final para filtrar por data de cadastro (ISO 8601, opcional)"
+								}
+							]
+						},
+						"description": "Retorna um relatório detalhado dos alunos de um tenant, incluindo informações de cadastro, entregas vinculadas, acessos e aulas assistidas.\n\n**Autenticação:** Requer header `mc-api-key` com a API key do tenant.\n\n**Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos). A chave de cache é gerada usando MD5 hash dos parâmetros.\n\n**Filtros de Data:**\n- `startDate` e `endDate` são opcionais\n- Se ambos forem fornecidos, `startDate` não pode ser maior que `endDate`\n- O filtro é aplicado no campo `assignedAt` (data de cadastro) de UsersOnTenants\n\n**Formato de Data:** ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+					},
+					"response": [
+						{
+							"name": "Get Student Report - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"alunos\": [\n        {\n            \"aluno_id_member_class\": \"user-123\",\n            \"email\": \"aluno@example.com\",\n            \"cpf\": \"12345678900\",\n            \"data_cadastro\": \"2024-01-15T10:30:00.000Z\",\n            \"entregas_vinculadas\": [\n                \"Entrega 1\",\n                \"Entrega 2\"\n            ],\n            \"ultimo_acesso\": \"2024-01-20T15:45:00.000Z\",\n            \"quantidade_aulas_assistidas\": 2,\n            \"aulas_assistidas\": [\n                {\n                    \"aula_id\": \"lesson-123\",\n                    \"titulo\": \"Aula 1 - Introdução\",\n                    \"data_assistida\": \"2024-01-18T14:00:00.000Z\"\n                },\n                {\n                    \"aula_id\": \"lesson-456\",\n                    \"titulo\": \"Aula 2 - Conceitos Básicos\",\n                    \"data_assistida\": \"2024-01-19T10:00:00.000Z\"\n                }\n            ]\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 150,\n        \"totalPages\": 15,\n        \"hasNextPage\": true,\n        \"hasPrevPage\": false\n    }\n}"
+						},
+						{
+							"name": "Get Student Report - Sem autenticação",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"API key invalid\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						},
+						{
+							"name": "Get Student Report - Paginação inválida",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=0&limit=200",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "200"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100\",\n    \"errorCode\": \"INVALID_PAGINATION\"\n}"
+						},
+						{
+							"name": "Get Student Report - Formato de data inválido",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10&startDate=2024-01-01",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "startDate",
+											"value": "2024-01-01"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Formato de data inválido para startDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)\",\n    \"errorCode\": \"INVALID_DATE_FORMAT\"\n}"
+						},
+						{
+							"name": "Get Student Report - Período inválido",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10&startDate=2024-12-31T23:59:59Z&endDate=2024-01-01T00:00:00Z",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"student",
+										"report"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "startDate",
+											"value": "2024-12-31T23:59:59Z"
+										},
+										{
+											"key": "endDate",
+											"value": "2024-01-01T00:00:00Z"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"startDate não pode ser maior que endDate\",\n    \"errorCode\": \"INVALID_DATE_RANGE\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"description": "Endpoints relacionados à autenticação e geração de links mágicos",
+			"item": [
+				{
+					"name": "Generate Magic Link",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{email}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth"
+							]
+						},
+						"description": "Gera um link de login mágico para um usuário do tenant. Cria um token mágico válido por 7 dias e retorna o link de login."
+					},
+					"response": [
+						{
+							"name": "Generate Magic Link - Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"user@example.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/auth",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "59"
+								}
+							],
+							"body": "{\n    \"ok\": true,\n    \"link\": \"https://subdomain.example.com/login?token=abc123&email=user@example.com&isReset=false\"\n}"
+						},
+						{
+							"name": "Generate Magic Link - User Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"nonexistent@example.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/auth",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Usuário não encontrado\",\n    \"errorCode\": \"USER_NOT_FOUND\"\n}"
+						},
+						{
+							"name": "Generate Magic Link - Rate Limit Exceeded",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"user@example.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/auth",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"auth"
+									]
+								}
+							},
+							"status": "Too Many Requests",
+							"code": 429,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "0"
+								},
+								{
+									"key": "Retry-After",
+									"value": "300"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Muitas requisições. Tente novamente em 5 minutos.\",\n    \"errorCode\": \"RATE_LIMIT_EXCEEDED\",\n    \"retryAfter\": 300\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "AI",
+			"description": "Endpoints relacionados à IA (transcrições e tenants)",
+			"item": [
+				{
+					"name": "Update Lesson Transcription Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "x-internal-api-key",
+								"value": "{{internalAiApiKey}}",
+								"type": "text",
+								"description": "API Key interna para IA"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"transcriptionCompleted\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/lessons/{{lessonId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ai",
+								"lessons",
+								"{{lessonId}}"
+							]
+						},
+						"description": "Atualiza o status de transcrição de uma aula específica. Verifica se o tenant tem IA habilitada antes de permitir a atualização."
+					},
+					"response": [
+						{
+							"name": "Update Transcription Status - Success",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"transcriptionCompleted\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons/lesson-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons",
+										"lesson-123"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "59"
+								}
+							],
+							"body": "{\n    \"lesson\": {\n        \"id\": \"lesson-123\",\n        \"name\": \"Aula de Introdução\",\n        \"slug\": \"aula-introducao\",\n        \"transcriptionCompleted\": true,\n        \"updatedAt\": \"2024-01-16T14:00:00.000Z\"\n    },\n    \"message\": \"Status de transcrição atualizado com sucesso\"\n}"
+						},
+						{
+							"name": "Update Transcription Status - AI Not Enabled",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"transcriptionCompleted\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons/lesson-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons",
+										"lesson-123"
+									]
+								}
+							},
+							"status": "Forbidden",
+							"code": 403,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"IA não está habilitada para este tenant\",\n    \"errorCode\": \"AI_NOT_ENABLED\"\n}"
+						},
+						{
+							"name": "Update Transcription Status - Lesson Not Found",
+							"originalRequest": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"transcriptionCompleted\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons/nonexistent-lesson",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons",
+										"nonexistent-lesson"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Aula não encontrada\",\n    \"errorCode\": \"LESSON_NOT_FOUND\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Tenants with AI Enabled",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-internal-api-key",
+								"value": "{{internalAiApiKey}}",
+								"type": "text",
+								"description": "API Key interna para IA"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/tenants",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ai",
+								"tenants"
+							]
+						},
+						"description": "Lista todos os tenants que têm IA habilitada, retornando informações sobre suas configurações de biblioteca Bunny."
+					},
+					"response": [
+						{
+							"name": "Get Tenants with AI - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "59"
+								}
+							],
+							"body": "{\n    \"tenants\": [\n        {\n            \"id\": \"tenant-1\",\n            \"name\": \"Tenant 1\",\n            \"aiEnabled\": true,\n            \"bunnyLibraryId\": \"library-123\",\n            \"bunnyLibraryApiKey\": \"api-key-123\"\n        },\n        {\n            \"id\": \"tenant-2\",\n            \"name\": \"Tenant 2\",\n            \"aiEnabled\": true,\n            \"bunnyLibraryId\": null,\n            \"bunnyLibraryApiKey\": null\n        }\n    ],\n    \"total\": 2\n}"
+						},
+						{
+							"name": "Get Tenants with AI - Unauthorized",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
 						}
 					]
 				}

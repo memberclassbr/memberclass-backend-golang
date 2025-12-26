@@ -336,6 +336,63 @@ func (_c *MockCache_Set_Call) RunAndReturn(run func(context.Context, string, str
 	return _c
 }
 
+// TTL provides a mock function with given fields: ctx, key
+func (_m *MockCache) TTL(ctx context.Context, key string) (time.Duration, error) {
+	ret := _m.Called(ctx, key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for TTL")
+	}
+
+	var r0 time.Duration
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (time.Duration, error)); ok {
+		return rf(ctx, key)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) time.Duration); ok {
+		r0 = rf(ctx, key)
+	} else {
+		r0 = ret.Get(0).(time.Duration)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockCache_TTL_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TTL'
+type MockCache_TTL_Call struct {
+	*mock.Call
+}
+
+// TTL is a helper method to define mock.On call
+//   - ctx context.Context
+//   - key string
+func (_e *MockCache_Expecter) TTL(ctx interface{}, key interface{}) *MockCache_TTL_Call {
+	return &MockCache_TTL_Call{Call: _e.mock.On("TTL", ctx, key)}
+}
+
+func (_c *MockCache_TTL_Call) Run(run func(ctx context.Context, key string)) *MockCache_TTL_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockCache_TTL_Call) Return(_a0 time.Duration, _a1 error) *MockCache_TTL_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockCache_TTL_Call) RunAndReturn(run func(context.Context, string) (time.Duration, error)) *MockCache_TTL_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockCache creates a new instance of MockCache. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockCache(t interface {

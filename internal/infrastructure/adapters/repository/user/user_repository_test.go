@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -40,7 +41,6 @@ func TestUserRepository_FindByID(t *testing.T) {
 			name:   "should return user when found",
 			userID: "user-123",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
-				name := "Test User"
 				username := "testuser"
 				phone := "123456789"
 				image := "https://example.com/image.jpg"
@@ -48,13 +48,13 @@ func TestUserRepository_FindByID(t *testing.T) {
 				emailVerified := time.Now()
 
 				rows := sqlmock.NewRows([]string{
-					"id", "name", "username", "phone", "email", "emailVerified",
+					"id", "username", "phone", "email", "emailVerified",
 					"image", "createdAt", "updatedAt", "referrals",
 				}).AddRow(
-					"user-123", name, username, phone, "test@example.com", emailVerified,
+					"user-123", username, phone, "test@example.com", emailVerified,
 					image, time.Now(), time.Now(), referrals,
 				)
-				sqlMock.ExpectQuery(`SELECT id, name, username, phone, email, "emailVerified", image, 
+				sqlMock.ExpectQuery(`SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = \$1`).
 					WithArgs("user-123").WillReturnRows(rows)
@@ -69,7 +69,7 @@ func TestUserRepository_FindByID(t *testing.T) {
 			name:   "should return ErrUserNotFound when user does not exist",
 			userID: "non-existent",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
-				sqlMock.ExpectQuery(`SELECT id, name, username, phone, email, "emailVerified", image, 
+				sqlMock.ExpectQuery(`SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = \$1`).
 					WithArgs("non-existent").WillReturnError(sql.ErrNoRows)
@@ -82,7 +82,7 @@ func TestUserRepository_FindByID(t *testing.T) {
 			name:   "should return MemberClassError when database error occurs",
 			userID: "user-123",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
-				sqlMock.ExpectQuery(`SELECT id, name, username, phone, email, "emailVerified", image, 
+				sqlMock.ExpectQuery(`SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = \$1`).
 					WithArgs("user-123").WillReturnError(errors.New("database connection error"))
@@ -303,13 +303,13 @@ func TestUserRepository_FindByID_WithNullableFields(t *testing.T) {
 			userID: "user-123",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{
-					"id", "name", "username", "phone", "email", "emailVerified",
+					"id", "username", "phone", "email", "emailVerified",
 					"image", "createdAt", "updatedAt", "referrals",
 				}).AddRow(
-					"user-123", nil, nil, nil, "test@example.com", nil,
+					"user-123", nil, nil, "test@example.com", nil,
 					nil, time.Now(), time.Now(), nil,
 				)
-				sqlMock.ExpectQuery(`SELECT id, name, username, phone, email, "emailVerified", image, 
+				sqlMock.ExpectQuery(`SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = \$1`).
 					WithArgs("user-123").WillReturnRows(rows)
@@ -320,13 +320,13 @@ func TestUserRepository_FindByID_WithNullableFields(t *testing.T) {
 			userID: "user-456",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{
-					"id", "name", "username", "phone", "email", "emailVerified",
+					"id", "username", "phone", "email", "emailVerified",
 					"image", "createdAt", "updatedAt", "referrals",
 				}).AddRow(
-					"user-456", nil, nil, nil, "another@example.com", nil,
+					"user-456", nil, nil, "another@example.com", nil,
 					nil, time.Now(), time.Now(), nil,
 				)
-				sqlMock.ExpectQuery(`SELECT id, name, username, phone, email, "emailVerified", image, 
+				sqlMock.ExpectQuery(`SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = \$1`).
 					WithArgs("user-456").WillReturnRows(rows)
@@ -363,7 +363,6 @@ func TestUserRepository_FindByID_WithAllFields(t *testing.T) {
 		mockLogger := mocks.NewMockLogger(t)
 		repository := NewUserRepository(db, mockLogger)
 
-		name := "John Doe"
 		username := "johndoe"
 		phone := "+1234567890"
 		image := "https://example.com/avatar.jpg"
@@ -373,13 +372,13 @@ func TestUserRepository_FindByID_WithAllFields(t *testing.T) {
 		updatedAt := time.Now()
 
 		rows := sqlmock.NewRows([]string{
-			"id", "name", "username", "phone", "email", "emailVerified",
+			"id", "username", "phone", "email", "emailVerified",
 			"image", "createdAt", "updatedAt", "referrals",
 		}).AddRow(
-			"user-full", name, username, phone, "john@example.com", emailVerified,
+			"user-full", username, phone, "john@example.com", emailVerified,
 			image, createdAt, updatedAt, referrals,
 		)
-		sqlMock.ExpectQuery(`SELECT id, name, username, phone, email, "emailVerified", image, 
+		sqlMock.ExpectQuery(`SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = \$1`).
 			WithArgs("user-full").WillReturnRows(rows)
@@ -390,8 +389,6 @@ func TestUserRepository_FindByID_WithAllFields(t *testing.T) {
 		assert.NotNil(t, result)
 		assert.Equal(t, "user-full", result.ID)
 		assert.Equal(t, "john@example.com", result.Email)
-		assert.NotNil(t, result.Name)
-		assert.Equal(t, name, *result.Name)
 		assert.NotNil(t, result.Username)
 		assert.Equal(t, username, *result.Username)
 		assert.NotNil(t, result.Phone)
@@ -518,6 +515,83 @@ func TestUserRepository_BelongsToTenant_EdgeCases(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedBelongs, result)
+			assert.NoError(t, sqlMock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestUserRepository_UpdateMagicToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		userID      string
+		tokenHash   string
+		validUntil  time.Time
+		mockSetup   func(sqlmock.Sqlmock)
+		expectError bool
+		expectedErr error
+	}{
+		{
+			name:       "should update magic token successfully",
+			userID:     "user-123",
+			tokenHash:  "hashed-token",
+			validUntil: time.Now().Add(7 * 24 * time.Hour),
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectExec(`UPDATE "User"
+		SET "magicToken" = \$1, "magicTokenValidUntil" = \$2, "updatedAt" = NOW\(\)
+		WHERE id = \$3`).
+					WithArgs("hashed-token", sqlmock.AnyArg(), "user-123").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+			expectError: false,
+		},
+		{
+			name:       "should return error when update fails",
+			userID:     "user-123",
+			tokenHash:  "hashed-token",
+			validUntil: time.Now().Add(7 * 24 * time.Hour),
+			mockSetup: func(sqlMock sqlmock.Sqlmock) {
+				sqlMock.ExpectExec(`UPDATE "User"`).
+					WithArgs("hashed-token", sqlmock.AnyArg(), "user-123").
+					WillReturnError(errors.New("database error"))
+			},
+			expectError: true,
+			expectedErr: &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error updating magic token",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, sqlMock, err := sqlmock.New()
+			assert.NoError(t, err)
+			defer db.Close()
+
+			mockLogger := mocks.NewMockLogger(t)
+			if tt.expectError {
+				mockLogger.On("Error", mock.AnythingOfType("string")).Return()
+			}
+
+			repository := NewUserRepository(db, mockLogger)
+
+			tt.mockSetup(sqlMock)
+
+			err = repository.UpdateMagicToken(context.Background(), tt.userID, tt.tokenHash, tt.validUntil)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.expectedErr != nil {
+					var memberClassErr *memberclasserrors.MemberClassError
+					if errors.As(err, &memberClassErr) {
+						assert.Equal(t, tt.expectedErr.(*memberclasserrors.MemberClassError).Code, memberClassErr.Code)
+						assert.Equal(t, tt.expectedErr.(*memberclasserrors.MemberClassError).Message, memberClassErr.Message)
+					}
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
 			assert.NoError(t, sqlMock.ExpectationsWereMet())
 		})
 	}

@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -657,6 +659,212 @@ func (l *LessonRepository) DeletePDFPagesByAssetID(ctx context.Context, assetID 
 		return &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error deleting PDF pages by asset ID",
+		}
+	}
+
+	return nil
+}
+
+// FindCompletedLessonsByEmail - Find completed lessons by user ID
+func (l *LessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error) {
+	offset := (page - 1) * limit
+
+	query := `
+		WITH completed_reads AS (
+			SELECT r."createdAt", r."lessonId"
+			FROM "Read" r
+			WHERE r."userId" = $1
+			  AND r.read = true
+			  AND r."lessonId" IS NOT NULL
+			  AND r."createdAt" >= $2
+			  AND r."createdAt" <= $3
+		),
+		lessons_in_tenant AS (
+			SELECT DISTINCT
+				l.id as lesson_id,
+				l.name as lesson_name,
+				c.id as course_id,
+				c.name as course_name
+			FROM "Lesson" l
+			JOIN "Module" m ON m.id = l."moduleId"
+			JOIN "Section" s ON s.id = m."sectionId"
+			JOIN "Course" c ON c.id = s."courseId"
+			JOIN "CourseOnDelivery" cod ON cod."courseId" = c.id
+			JOIN "Delivery" d ON d.id = cod."deliveryId"
+			WHERE l.id IN (SELECT "lessonId" FROM completed_reads)
+			  AND d."tenantId" = $4
+	`
+
+	args := []interface{}{userID, startDate, endDate, tenantID}
+	argIndex := 5
+
+	if courseID != "" {
+		query += ` AND c.id = $` + strconv.Itoa(argIndex)
+		args = append(args, courseID)
+		argIndex++
+	}
+
+	query += `
+		)
+		SELECT 
+			cr."createdAt" as completed_at,
+			lit.lesson_name,
+			lit.course_name
+		FROM completed_reads cr
+		JOIN lessons_in_tenant lit ON lit.lesson_id = cr."lessonId"
+		ORDER BY cr."createdAt" DESC
+		LIMIT $` + strconv.Itoa(argIndex) + ` OFFSET $` + strconv.Itoa(argIndex+1)
+
+	args = append(args, limit, offset)
+
+	rows, err := l.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		l.log.Error("Error finding completed lessons: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error finding completed lessons",
+		}
+	}
+	defer rows.Close()
+
+	lessons := make([]response.CompletedLesson, 0)
+	for rows.Next() {
+		var lesson response.CompletedLesson
+		var completedAt time.Time
+
+		if err := rows.Scan(&completedAt, &lesson.LessonName, &lesson.CourseName); err != nil {
+			l.log.Error("Error scanning completed lesson: " + err.Error())
+			return nil, 0, &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error scanning completed lesson",
+			}
+		}
+
+		lesson.CompletedAt = completedAt.Format("2006-01-02T15:04:05.000Z")
+		lessons = append(lessons, lesson)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.log.Error("Error iterating completed lessons: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error iterating completed lessons",
+		}
+	}
+
+	// Count total
+	countQuery := `
+		SELECT COUNT(DISTINCT r."lessonId")
+		FROM "Read" r
+		JOIN "Lesson" l ON l.id = r."lessonId"
+		JOIN "Module" m ON m.id = l."moduleId"
+		JOIN "Section" s ON s.id = m."sectionId"
+		JOIN "Course" c ON c.id = s."courseId"
+		JOIN "CourseOnDelivery" cod ON cod."courseId" = c.id
+		JOIN "Delivery" d ON d.id = cod."deliveryId"
+		WHERE r."userId" = $1
+		  AND r.read = true
+		  AND r."lessonId" IS NOT NULL
+		  AND r."createdAt" >= $2
+		  AND r."createdAt" <= $3
+		  AND d."tenantId" = $4
+	`
+
+	countArgs := []interface{}{userID, startDate, endDate, tenantID}
+	if courseID != "" {
+		countQuery += ` AND c.id = $5`
+		countArgs = append(countArgs, courseID)
+	}
+
+	var total int64
+	err = l.db.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return lessons, 0, nil
+		}
+		l.log.Error("Error counting completed lessons: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error counting completed lessons",
+		}
+	}
+
+	return lessons, total, nil
+}
+
+func (l *LessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+	query := `
+		SELECT 
+			l.id,
+			l.name,
+			l.slug,
+			l."transcriptionCompleted",
+			l."updatedAt",
+			t.id as tenant_id,
+			t.name as tenant_name,
+			t."aiEnabled"
+		FROM "Lesson" l
+		JOIN "Module" m ON l."moduleId" = m.id
+		JOIN "Section" s ON m."sectionId" = s.id
+		JOIN "Course" c ON s."courseId" = c.id
+		JOIN "Vitrine" v ON c."vitrineId" = v.id
+		JOIN "Tenant" t ON v."tenantId" = t.id
+		WHERE l.id = $1
+	`
+
+	var lesson entities.Lesson
+	var tenant entities.Tenant
+	var transcriptionCompleted sql.NullBool
+	var lessonIDStr, lessonName, lessonSlug string
+
+	err := l.db.QueryRowContext(ctx, query, lessonID).Scan(
+		&lessonIDStr,
+		&lessonName,
+		&lessonSlug,
+		&transcriptionCompleted,
+		&lesson.UpdatedAt,
+		&tenant.ID,
+		&tenant.Name,
+		&tenant.AIEnabled,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, &memberclasserrors.MemberClassError{
+				Code:    404,
+				Message: "Aula não encontrada",
+			}
+		}
+		l.log.Error("Error finding lesson with tenant: " + err.Error())
+		return nil, nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error finding lesson with tenant",
+		}
+	}
+
+	lesson.ID = &lessonIDStr
+	lesson.Name = &lessonName
+	lesson.Slug = &lessonSlug
+	if transcriptionCompleted.Valid {
+		lesson.TranscriptionCompleted = transcriptionCompleted.Bool
+	}
+
+	return &lesson, &tenant, nil
+}
+
+func (l *LessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
+	query := `
+		UPDATE "Lesson"
+		SET "transcriptionCompleted" = $1, "updatedAt" = NOW()
+		WHERE id = $2
+	`
+
+	_, err := l.db.ExecContext(ctx, query, transcriptionCompleted, lessonID)
+	if err != nil {
+		l.log.Error("Error updating transcription status: " + err.Error())
+		return &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error updating transcription status",
 		}
 	}
 

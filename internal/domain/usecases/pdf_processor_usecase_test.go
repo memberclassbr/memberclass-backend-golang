@@ -4,8 +4,10 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +20,16 @@ type mockLessonRepository struct {
 	createPageCalls   int
 	updateStatusCalls int
 	mu                sync.RWMutex
+}
+
+func (m *mockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *mockLessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func newMockLessonRepository() *mockLessonRepository {
@@ -182,6 +194,10 @@ func (m *mockLessonRepository) DeletePDFPagesByAssetID(ctx context.Context, asse
 	defer m.mu.Unlock()
 	delete(m.pdfPages, assetID)
 	return nil
+}
+
+func (m *mockLessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error) {
+	return []response.CompletedLesson{}, int64(0), nil
 }
 
 type mockPdfService struct {
@@ -1367,6 +1383,16 @@ func TestSaveSinglePage_RepositoryError(t *testing.T) {
 
 type mockLessonRepositoryWithError struct{}
 
+func (m *mockLessonRepositoryWithError) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *mockLessonRepositoryWithError) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *mockLessonRepositoryWithError) GetByID(ctx context.Context, id string) (*entities.Lesson, error) {
 	return nil, assert.AnError
 }
@@ -1425,4 +1451,8 @@ func (m *mockLessonRepositoryWithError) DeletePDFPage(ctx context.Context, pageI
 
 func (m *mockLessonRepositoryWithError) DeletePDFPagesByAssetID(ctx context.Context, assetID string) error {
 	return assert.AnError
+}
+
+func (m *mockLessonRepositoryWithError) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error) {
+	return nil, int64(0), assert.AnError
 }

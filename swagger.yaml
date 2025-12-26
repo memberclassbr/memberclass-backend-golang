@@ -1,386 +1,137 @@
 openapi: 3.0.3
 info:
-  title: MemberClass Backend API
+  title: MemberClass API
   description: |
-    API do backend MemberClass em Golang.
-    
-    Funcionalidades:
-    - Upload de vídeos para Bunny CDN
-    - Processamento de PDFs de aulas
-    - Gerenciamento de páginas de PDF
+    API para gerenciamento de usuários, comentários, atividades do sistema MemberClass
   version: 1.0.0
   contact:
     name: MemberClass Team
 
 servers:
-  - url: http://localhost:8080
-    description: Servidor local de desenvolvimento
-  - url: https://api.memberclass.com
+  - url: https://api.memberclass.com.br/
     description: Servidor de produção
 
 tags:
-  - name: Videos
-    description: Endpoints para upload e gerenciamento de vídeos
-  - name: Lessons
-    description: Endpoints para processamento de PDFs e gerenciamento de aulas
+  - name: Comments
+    description: Endpoints para gerenciamento de comentários e dúvidas
+  - name: Users
+    description: |
+      Endpoints relacionados a usuários:
+      - Informações de usuários
+      - Atividades de acesso
+      - Resumo de atividades
+      - Aulas completadas
+      - Compras e reembolsos
+  - name: Social
+    description: Endpoints para criar e atualizar posts na comunidade (social)
+  - name: Students
+    description: Endpoints para relatórios de alunos do tenant
 
 paths:
-  /api/v1/videos/upload:
-    post:
-      tags:
-        - Videos
-      summary: Upload de vídeo
-      description: |
-        Faz upload de um vídeo para o Bunny CDN.
-        
-        **Rate Limit:** Este endpoint possui controle de rate limit por tenant.
-      operationId: uploadVideo
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - file
-                - tenantId
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: Arquivo de vídeo a ser enviado
-                tenantId:
-                  type: string
-                  description: ID do tenant (obrigatório)
-                  example: "tenant-123"
-                title:
-                  type: string
-                  description: Título do vídeo (opcional - usa nome do arquivo se não informado)
-                  example: "Aula 01 - Introdução"
-      responses:
-        '200':
-          description: Upload realizado com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UploadVideoResponse'
-              example:
-                ok: true
-                mediaUrl: "https://vz-abc123.b-cdn.net/video-guid/playlist.m3u8"
-                guid: "video-guid-123"
-                title: "Aula 01 - Introdução"
-        '400':
-          description: Requisição inválida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                fileRequired:
-                  summary: Arquivo não enviado
-                  value:
-                    error: "Bad Request"
-                    message: "File is required"
-                tenantRequired:
-                  summary: Tenant ID não informado
-                  value:
-                    error: "Bad Request"
-                    message: "tenantId is required"
-        '404':
-          description: Tenant não encontrado
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: "Not Found"
-                message: "Tenant not found"
-        '429':
-          description: Rate limit excedido
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: "Too Many Requests"
-                message: "Rate limit exceeded"
-        '500':
-          description: Erro interno do servidor
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: "Internal Server Error"
-                message: "Upload failed"
-
-  /api/lessons/pdf-process:
-    post:
-      tags:
-        - Lessons
-      summary: Processar PDF de aula
-      description: |
-        Processa o PDF de uma aula específica, convertendo em imagens.
-        
-        **Actions disponíveis:**
-        - `lesson`: Processa o PDF de uma aula específica (requer lessonId)
-        - `retry`: Reprocessa assets que falharam anteriormente
-        - `cleanup`: Limpa páginas órfãs
-      operationId: processLessonPdf
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProcessLessonRequest'
-            examples:
-              processLesson:
-                summary: Processar uma aula específica
-                value:
-                  action: "lesson"
-                  lessonId: "lesson-123"
-              retryFailed:
-                summary: Reprocessar assets com falha
-                value:
-                  action: "retry"
-              cleanup:
-                summary: Limpar páginas órfãs
-                value:
-                  action: "cleanup"
-      responses:
-        '200':
-          description: Processamento realizado com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProcessLessonResponse'
-              examples:
-                lessonProcessed:
-                  summary: Aula processada
-                  value:
-                    message: "Lesson processing completed"
-                    action: "lesson"
-                    result:
-                      success: true
-                      totalPages: 15
-                      processedPages: 15
-                retryCompleted:
-                  summary: Retry completado
-                  value:
-                    message: "Failed assets retry completed"
-                    action: "retry"
-                cleanupCompleted:
-                  summary: Cleanup completado
-                  value:
-                    message: "Cleanup completed"
-                    action: "cleanup"
-        '400':
-          description: Requisição inválida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                invalidAction:
-                  summary: Action inválida
-                  value:
-                    error: "Bad Request"
-                    message: "Invalid action. Use: retry, cleanup, or lesson"
-                lessonIdRequired:
-                  summary: Lesson ID obrigatório
-                  value:
-                    error: "Bad Request"
-                    message: "Lesson ID is required for lesson action"
-        '500':
-          description: Erro interno do servidor
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/lessons/process-all-pdfs:
-    post:
-      tags:
-        - Lessons
-      summary: Processar todos os PDFs pendentes
-      description: |
-        Processa todos os PDFs de aulas que estão pendentes.
-        
-        Pode-se limitar o número de aulas a serem processadas através do parâmetro `limit`.
-      operationId: processAllPendingPdfs
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProcessAllRequest'
-            examples:
-              withLimit:
-                summary: Com limite de processamento
-                value:
-                  limit: 10
-              noLimit:
-                summary: Sem limite (processa todos)
-                value: {}
-      responses:
-        '200':
-          description: Processamento realizado com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProcessAllResponse'
-              example:
-                message: "PDF processing completed"
-                processed: 5
-                total: 10
-                limit: 10
-                success: true
-                results:
-                  - success: true
-                    totalPages: 12
-                    processedPages: 12
-                  - success: true
-                    totalPages: 8
-                    processedPages: 8
-                  - success: false
-                    totalPages: 0
-                    processedPages: 0
-                    error: "PDF file not found"
-        '500':
-          description: Erro interno do servidor
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/lessons/{lessonId}/pdf-regenerate:
-    post:
-      tags:
-        - Lessons
-      summary: Regenerar PDF de uma aula
-      description: |
-        Coloca na fila a regeneração do PDF de uma aula específica.
-        
-        Isso irá reprocessar o PDF da aula, gerando novas imagens das páginas.
-      operationId: regenerateLessonPdf
-      parameters:
-        - name: lessonId
-          in: path
-          required: true
-          description: ID da aula
-          schema:
-            type: string
-          example: "lesson-123"
-      responses:
-        '200':
-          description: Regeneração enfileirada com sucesso
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RegeneratePDFResponse'
-              example:
-                message: "PDF regeneration queued successfully"
-                lessonId: "lesson-123"
-                status: "pending"
-        '400':
-          description: Requisição inválida
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: "Bad Request"
-                message: "Lesson ID is required"
-        '404':
-          description: Aula não encontrada
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: "Not Found"
-                message: "Lesson not found"
-        '500':
-          description: Erro interno do servidor
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/lessons/{lessonId}/pdf-pages:
+  /api/v1/comments:
     get:
       tags:
-        - Lessons
-      summary: Obter páginas do PDF de uma aula
+        - Comments
+      summary: Listar comentários
       description: |
-        Retorna as páginas do PDF de uma aula específica.
+        Retorna uma lista paginada de comentários do tenant com filtros opcionais.
         
-        Retorna informações sobre cada página, incluindo URL da imagem, dimensões e número da página.
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
         
-        **Status possíveis:**
-        - `completed`: PDF processado com sucesso
-        - `processing`: PDF ainda em processamento
-        - `pending`: PDF aguardando processamento
-        - `failed`: Falha no processamento
-        - `absent`: Aula não possui PDF
-      operationId: getLessonPdfPages
+        **Filtros disponíveis:**
+        - `email`: Filtra por email do usuário (busca parcial, case insensitive)
+        - `status`: Filtra por status do comentário (`pendent`, `approved`, `rejected`)
+        - `courseId`: Filtra por ID do curso
+        - `answered`: Filtra por comentários respondidos (`true` ou `false`)
+        
+        **Paginação:** Suporta parâmetros `page` e `limit` via query string.
+      operationId: getComments
       parameters:
-        - name: lessonId
-          in: path
+        - name: mc-api-key
+          in: header
           required: true
-          description: ID da aula
+          description: Token de API para autenticação
           schema:
             type: string
-          example: "lesson-123"
+          example: "your-api-token"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1, mínimo: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Tamanho da página (padrão: 10, mínimo: 1, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: email
+          in: query
+          required: false
+          description: "Filtra por email do usuário (busca parcial, case insensitive)"
+          schema:
+            type: string
+          example: "user@example.com"
+        - name: status
+          in: query
+          required: false
+          description: "Filtra por status do comentário"
+          schema:
+            type: string
+            enum:
+              - pendent
+              - approved
+              - rejected
+          example: "approved"
+        - name: courseId
+          in: query
+          required: false
+          description: "Filtra por ID do curso"
+          schema:
+            type: string
+          example: "course-123"
+        - name: answered
+          in: query
+          required: false
+          description: "Filtra por comentários respondidos"
+          schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
+          example: "true"
       responses:
         '200':
-          description: Páginas retornadas com sucesso
+          description: Lista de comentários retornada com sucesso
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LessonPDFPagesResponse'
-              examples:
-                completed:
-                  summary: PDF completamente processado
-                  value:
-                    lessonId: "lesson-123"
-                    status: "completed"
-                    totalPages: 3
-                    pages:
-                      - pageNumber: 1
-                        imageUrl: "https://cdn.example.com/lessons/lesson-123/page-1.jpg"
-                        width: 1920
-                        height: 1080
-                      - pageNumber: 2
-                        imageUrl: "https://cdn.example.com/lessons/lesson-123/page-2.jpg"
-                        width: 1920
-                        height: 1080
-                      - pageNumber: 3
-                        imageUrl: "https://cdn.example.com/lessons/lesson-123/page-3.jpg"
-                        width: 1920
-                        height: 1080
-                processing:
-                  summary: PDF em processamento
-                  value:
-                    lessonId: "lesson-789"
-                    status: "processing"
-                    totalPages: 10
-                    pages:
-                      - pageNumber: 1
-                        imageUrl: "https://cdn.example.com/lessons/lesson-789/page-1.jpg"
-                        width: 1920
-                        height: 1080
-                      - pageNumber: 2
-                        imageUrl: "https://cdn.example.com/lessons/lesson-789/page-2.jpg"
-                        width: 1920
-                        height: 1080
-                absent:
-                  summary: Aula sem PDF
-                  value:
-                    lessonId: "lesson-456"
-                    status: "absent"
-                    totalPages: 0
-                    pages: []
+                $ref: '#/components/schemas/CommentsPaginationResponse'
+              example:
+                comments:
+                  - id: "comment-123"
+                    createdAt: "2024-01-15T10:30:00Z"
+                    updatedAt: "2024-01-15T11:00:00Z"
+                    question: "Qual é a dúvida?"
+                    answer: "Esta é a resposta"
+                    published: true
+                    lessonName: "Aula 01"
+                    courseName: "Curso de Go"
+                    username: "João Silva"
+                    userEmail: "joao@example.com"
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 25
+                  totalPages: 3
+                  hasNextPage: true
+                  hasPrevPage: false
         '400':
           description: Requisição inválida
           content:
@@ -388,8 +139,273 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
-                error: "Bad Request"
-                message: "lessonId is required"
+                ok: false
+                error: "Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100"
+                errorCode: "INVALID_PAGINATION"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key inválida"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado ou não associado ao tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado"
+                errorCode: "USER_NOT_FOUND"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                error: "Erro interno do servidor"
+                errorCode: "INTERNAL_ERROR"
+
+  /api/v1/user/informations:
+    get:
+      tags:
+        - Users
+      summary: Listar informações dos usuários
+      description: |
+        Retorna uma lista paginada de informações dos usuários do tenant, incluindo
+        entregas (deliveries) associadas e último acesso.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Filtros disponíveis:**
+        - `email`: Filtra por email do usuário (busca parcial)
+        
+        **Paginação:**
+        - `page`: Número da página (padrão: 1)
+        - `limit`: Itens por página (padrão: 10, máximo: 100)
+      operationId: getUserInformations
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Token de autenticação da API
+          example: "mc_live_abc123..."
+        - name: email
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtra por email do usuário (busca parcial)
+          example: "usuario@exemplo.com"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Número da página
+          example: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Quantidade de itens por página
+          example: 10
+      responses:
+        '200':
+          description: Lista de usuários retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInformationsResponse'
+              example:
+                users:
+                  - userId: "user-123"
+                    email: "usuario@exemplo.com"
+                    isPaid: true
+                    deliveries:
+                      - id: "delivery-1"
+                        name: "Curso de Programação"
+                        accessDate: "2024-01-15T10:30:00Z"
+                      - id: "delivery-2"
+                        name: "Curso de Design"
+                        accessDate: "2024-02-20T14:00:00Z"
+                    lastAccess: "2024-03-10T09:15:00Z"
+                  - userId: "user-456"
+                    email: "outro@exemplo.com"
+                    isPaid: false
+                    deliveries: []
+                    lastAccess: null
+                pagination:
+                  page: 1
+                  totalPages: 5
+                  totalItems: 50
+                  itemsPerPage: 10
+                  hasNextPage: true
+                  hasPreviousPage: false
+        '400':
+          description: Parâmetros inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidPage:
+                  summary: Página inválida
+                  value:
+                    error: "Bad Request"
+                    message: "page must be a positive integer"
+                invalidLimit:
+                  summary: Limite inválido
+                  value:
+                    error: "Bad Request"
+                    message: "limit must be between 1 and 100"
+        '401':
+          description: Não autorizado - API key inválida ou ausente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                error: "API key inválida"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado ou não pertence ao tenant autenticado"
+                errorCode: "USER_NOT_FOUND"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                ok: false
+                error: "Internal server error"
+                errorCode: "INTERNAL_ERROR"
+
+  /api/v1/user/activities:
+    get:
+      tags:
+        - Users
+      summary: Listar atividades de acesso do usuário
+      description: |
+        Retorna uma lista paginada de atividades de acesso de um usuário específico.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Cache:** Este endpoint utiliza cache Redis com TTL de 5 minutos para melhorar a performance.
+        
+        **Paginação:** Suporta parâmetros de paginação via query string.
+      operationId: getUserActivities
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: email
+          in: query
+          required: true
+          description: Email do usuário
+          schema:
+            type: string
+            format: email
+          example: "user@example.com"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Lista de atividades retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResponse'
+              example:
+                email: "user@example.com"
+                access:
+                  - data: "2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'"
+                  - data: "2024-01-14T15:20:00Z - Acessou o curso 'Curso de Go'"
+                  - data: "2024-01-13T09:10:00Z - Completou a lição 'Variáveis e Tipos'"
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 25
+                  totalPages: 3
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emailRequired:
+                  summary: Email não informado
+                  value:
+                    error: "Bad Request"
+                    message: "email parameter is required"
+                invalidPage:
+                  summary: Página inválida
+                  value:
+                    error: "Bad Request"
+                    message: "page must be a positive integer"
+                invalidLimit:
+                  summary: Limite inválido
+                  value:
+                    error: "Bad Request"
+                    message: "limit must be between 1 and 100"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
         '500':
           description: Erro interno do servidor
           content:
@@ -398,164 +414,832 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: "Internal Server Error"
-                message: "Error fetching lesson"
+                message: "Internal server error"
+
+  /api/v1/user/activity/summary:
+    get:
+      tags:
+        - Users
+      summary: Resumo de atividade dos usuários
+      description: |
+        Retorna um resumo de atividade dos usuários de um tenant, mostrando o email e o último acesso de cada usuário.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Regras de Data:**
+        - Se `startDate` e `endDate` não informados → últimos 31 dias
+        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `endDate` sem `startDate` → erro
+        - Se `startDate > endDate` → erro
+        - Período máximo: **31 dias**
+        
+        **noAccess:** Se `true`, retorna usuários SEM atividade no período. Se `false` (padrão), retorna usuários COM atividade.
+      operationId: getActivitySummary
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: startDate
+          in: query
+          required: false
+          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-01T00:00:00Z"
+        - name: endDate
+          in: query
+          required: false
+          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-31T23:59:59Z"
+        - name: noAccess
+          in: query
+          required: false
+          description: "Se `true`, retorna usuários SEM atividade no período"
+          schema:
+            type: boolean
+          example: false
+      responses:
+        '200':
+          description: Resumo de atividades retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivitySummaryResponse'
+              example:
+                users:
+                  - email: "usuario@email.com"
+                    ultimoAcesso: "2025-12-10T14:30:00.000Z"
+                  - email: "outro@email.com"
+                    ultimoAcesso: null
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 150
+                  totalPages: 15
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                invalidPagination:
+                  summary: Paginação inválida
+                  value:
+                    ok: false
+                    error: "page deve ser >= 1"
+                    errorCode: "INVALID_PAGINATION"
+                invalidDateFormat:
+                  summary: Formato de data inválido
+                  value:
+                    ok: false
+                    error: "formato de data inválido para startDate"
+                    errorCode: "INVALID_DATE_FORMAT"
+                invalidDateRange:
+                  summary: Período inválido
+                  value:
+                    ok: false
+                    error: "período máximo de 31 dias"
+                    errorCode: "INVALID_DATE_RANGE"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
+  /api/v1/user/lessons/completed:
+    get:
+      tags:
+        - Users
+      summary: Listar aulas completadas por usuário
+      description: |
+        Retorna as aulas concluídas por um usuário específico, com informações do curso e data de conclusão.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Regras de Data:**
+        - Se `startDate` e `endDate` não informados → últimos 31 dias
+        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `endDate` sem `startDate` → erro
+        - Se `startDate > endDate` → erro
+        - Período máximo: **31 dias**
+        
+        **Cache:** Esta rota **NÃO usa cache** no Redis (dados em tempo real por usuário).
+      operationId: getLessonsCompleted
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: email
+          in: query
+          required: true
+          description: Email do usuário
+          schema:
+            type: string
+            format: email
+          example: "user@example.com"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: startDate
+          in: query
+          required: false
+          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-01T00:00:00Z"
+        - name: endDate
+          in: query
+          required: false
+          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-31T23:59:59Z"
+        - name: courseId
+          in: query
+          required: false
+          description: "Filtrar por curso específico"
+          schema:
+            type: string
+          example: "course-123"
+      responses:
+        '200':
+          description: Lista de aulas completadas retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonsCompletedResponse'
+              example:
+                ok: true
+                data:
+                  completedLessons:
+                    - courseName: "Curso de JavaScript"
+                      lessonName: "Introdução ao JS"
+                      completedAt: "2025-12-10T14:30:00.000Z"
+                    - courseName: "Curso de JavaScript"
+                      lessonName: "Variáveis e Tipos"
+                      completedAt: "2025-12-09T10:15:00.000Z"
+                  pagination:
+                    page: 1
+                    limit: 10
+                    totalCount: 25
+                    totalPages: 3
+                    hasNextPage: true
+                    hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingEmail:
+                  summary: Email não informado
+                  value:
+                    ok: false
+                    error: "Parâmetro email é obrigatório"
+                    errorCode: "MISSING_EMAIL"
+                invalidPagination:
+                  summary: Paginação inválida
+                  value:
+                    ok: false
+                    error: "page deve ser >= 1"
+                    errorCode: "INVALID_PAGINATION"
+                invalidDateFormat:
+                  summary: Formato de data inválido
+                  value:
+                    ok: false
+                    error: "formato de data inválido para startDate"
+                    errorCode: "INVALID_DATE_FORMAT"
+                invalidDateRange:
+                  summary: Período inválido
+                  value:
+                    ok: false
+                    error: "período máximo de 31 dias"
+                    errorCode: "INVALID_DATE_RANGE"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado ou não pertence a este tenant"
+                errorCode: "USER_NOT_IN_TENANT"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
+  /api/v1/users/purchases:
+    get:
+      tags:
+        - Users
+      summary: Listar compras e reembolsos do usuário
+      description: |
+        Retorna uma lista paginada de compras e reembolsos de um usuário específico.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos) para melhorar a performance.
+        
+        **Paginação:** Suporta parâmetros de paginação via query string.
+        
+        **Filtro por tipo:** É possível filtrar as transações por tipo (purchase ou refund) usando o parâmetro `type`.
+      operationId: getUserPurchases
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: email
+          in: query
+          required: true
+          description: Email do usuário
+          schema:
+            type: string
+            format: email
+          example: "user@example.com"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: type
+          in: query
+          required: false
+          description: "Filtrar por tipo de transação: 'purchase' ou 'refund'"
+          schema:
+            type: string
+            enum:
+              - purchase
+              - refund
+          example: "purchase"
+      responses:
+        '200':
+          description: Lista de compras e reembolsos retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPurchasesResponse'
+              example:
+                purchases:
+                  - id: "event-123"
+                    type: "purchase"
+                    createdAt: "2024-01-15T10:30:00.000Z"
+                    updatedAt: "2024-01-15T10:30:00.000Z"
+                  - id: "event-456"
+                    type: "purchase"
+                    createdAt: "2024-01-14T15:20:00.000Z"
+                    updatedAt: "2024-01-14T15:20:00.000Z"
+                  - id: "event-789"
+                    type: "refund"
+                    createdAt: "2024-01-13T09:10:00.000Z"
+                    updatedAt: "2024-01-13T09:10:00.000Z"
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 15
+                  totalPages: 2
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                emailRequired:
+                  summary: Email não informado
+                  value:
+                    ok: false
+                    error: "email é obrigatório"
+                    errorCode: "MISSING_EMAIL"
+                invalidPage:
+                  summary: Página inválida
+                  value:
+                    error: "Bad Request"
+                    message: "page must be a positive integer"
+                invalidLimit:
+                  summary: Limite inválido
+                  value:
+                    error: "Bad Request"
+                    message: "limit must be between 1 and 100"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado ou não pertence ao tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado ou não pertence ao tenant autenticado"
+                errorCode: "USER_NOT_FOUND"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
+  /api/v1/social:
+    post:
+      tags:
+        - Social
+      summary: Criar ou atualizar post
+      description: |
+        Cria um novo post em um tópico ou atualiza um post existente, com validação de tenant, usuário e permissões.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Fluxo:**
+        1. Se `postId` for fornecido, atualiza o post existente (apenas owner ou dono do post)
+        2. Se `postId` não for fornecido, cria um novo post no tópico especificado
+        
+        **Validações de Permissão:**
+        - Se `topic.onlyAdmin = true`, apenas owners podem postar
+        - Se o tópico tem deliveries vinculadas, usuário deve ter pelo menos uma delivery em comum
+        - Owners podem postar em qualquer tópico
+      operationId: createOrUpdatePost
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSocialCommentRequest'
+            examples:
+              createPost:
+                summary: Criar novo post
+                value:
+                  userId: "user-123"
+                  topicId: "topic-456"
+                  title: "Meu primeiro post"
+                  content: "Este é o conteúdo do meu post"
+                  image: "https://example.com/image.jpg"
+                  videoEmbed: "https://youtube.com/watch?v=123"
+              updatePost:
+                summary: Atualizar post existente
+                value:
+                  userId: "user-123"
+                  postId: "post-789"
+                  title: "Título atualizado"
+                  content: "Conteúdo atualizado"
+                  image: "https://example.com/new-image.jpg"
+      responses:
+        '200':
+          description: Post criado ou atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialCommentResponse'
+              examples:
+                createSuccess:
+                  summary: Post criado
+                  value:
+                    ok: true
+                    id: "post-123"
+                updateSuccess:
+                  summary: Post atualizado
+                  value:
+                    ok: true
+                    id: "post-789"
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingUser:
+                  summary: userId não informado
+                  value:
+                    ok: false
+                    error: "userId é obrigatório"
+                    errorCode: "MISSING_USER"
+                missingTopic:
+                  summary: topicId não informado para criar
+                  value:
+                    ok: false
+                    error: "topicId é obrigatório para criar post"
+                    errorCode: "MISSING_TOPIC"
+                missingTitle:
+                  summary: title não informado
+                  value:
+                    ok: false
+                    error: "title é obrigatório"
+                    errorCode: "MISSING_TITLE"
+                missingContent:
+                  summary: content não informado
+                  value:
+                    ok: false
+                    error: "content é obrigatório"
+                    errorCode: "MISSING_CONTENT"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingApiKey:
+                  summary: API key não informada
+                  value:
+                    ok: false
+                    error: "Header mc-api-key é obrigatório"
+                    errorCode: "MISSING_API_KEY"
+                invalidApiKey:
+                  summary: API key inválida
+                  value:
+                    ok: false
+                    error: "API key invalid"
+                    errorCode: "INVALID_API_KEY"
+        '403':
+          description: Permissão negada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                permissionDenied:
+                  summary: Usuário não pertence ao tenant
+                  value:
+                    ok: false
+                    error: "Usuário não pertence ao tenant"
+                    errorCode: "PERMISSION_DENIED"
+                noAccessToTopic:
+                  summary: Sem acesso ao tópico
+                  value:
+                    ok: false
+                    error: "Você não tem acesso para publicar neste tópico"
+                    errorCode: "NO_ACCESS_TO_TOPIC"
+                cannotEditPost:
+                  summary: Sem permissão para editar
+                  value:
+                    ok: false
+                    error: "Você não tem autorização para fazer esta ação"
+                    errorCode: "PERMISSION_DENIED"
+        '404':
+          description: Recurso não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                postNotFound:
+                  summary: Post não encontrado
+                  value:
+                    ok: false
+                    error: "Post não encontrado"
+                    errorCode: "POST_NOT_FOUND"
+                topicNotFound:
+                  summary: Tópico não existe
+                  value:
+                    ok: false
+                    error: "Tópico não existe"
+                    errorCode: "TOPIC_NOT_FOUND"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal Server Error"
+                message: "Internal server error"
+
+  /api/v1/comments/{commentID}:
+    patch:
+      tags:
+        - Comments
+      summary: Atualizar comentário (parcial)
+      description: |
+        Atualiza parcialmente a resposta e o status de publicação de um comentário específico.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      operationId: updateCommentPartial
+      parameters:
+        - name: commentID
+          in: path
+          required: true
+          description: ID do comentário
+          schema:
+            type: string
+          example: "comment-123"
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCommentRequest'
+            example:
+              answer: "Esta é a resposta para o comentário"
+              published: true
+      responses:
+        '200':
+          description: Comentário atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentResponse'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedResponse'
+              example:
+                ok: false
+                error: "API key invalid"
+                errorCode: "INVALID_API_KEY"
+        '404':
+          description: Comentário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/student/report:
+    get:
+      tags:
+        - Students
+      summary: Relatório de alunos do tenant
+      description: |
+        Retorna um relatório detalhado dos alunos de um tenant, incluindo informações de cadastro, entregas vinculadas, acessos e aulas assistidas.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos). A chave de cache é gerada usando MD5 hash dos parâmetros.
+        
+        **Filtros de Data:**
+        - `startDate` e `endDate` são opcionais
+        - Se ambos forem fornecidos, `startDate` não pode ser maior que `endDate`
+        - O filtro é aplicado no campo `assignedAt` (data de cadastro) de UsersOnTenants
+        
+        **Formato de Data:** ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)
+      operationId: getStudentReport
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação (hash SHA256)
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: page
+          in: query
+          required: false
+          description: "Número da página (padrão: 1, mínimo: 1)"
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          description: "Itens por página (padrão: 10, mínimo: 1, máximo: 100)"
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: startDate
+          in: query
+          required: false
+          description: "Data inicial para filtrar por data de cadastro (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-15T00:00:00Z"
+        - name: endDate
+          in: query
+          required: false
+          description: "Data final para filtrar por data de cadastro (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-12-31T23:59:59Z"
+      responses:
+        '200':
+          description: Relatório retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentReportResponse'
+              example:
+                alunos:
+                  - aluno_id_member_class: "user-123"
+                    email: "aluno@example.com"
+                    cpf: "12345678900"
+                    data_cadastro: "2024-01-15T10:30:00.000Z"
+                    entregas_vinculadas:
+                      - "Entrega 1"
+                      - "Entrega 2"
+                    ultimo_acesso: "2024-01-20T15:45:00.000Z"
+                    quantidade_aulas_assistidas: 2
+                    aulas_assistidas:
+                      - aula_id: "lesson-123"
+                        titulo: "Aula 1 - Introdução"
+                        data_assistida: "2024-01-18T14:00:00.000Z"
+                      - aula_id: "lesson-456"
+                        titulo: "Aula 2 - Conceitos Básicos"
+                        data_assistida: "2024-01-19T10:00:00.000Z"
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 150
+                  totalPages: 15
+                  hasNextPage: true
+                  hasPrevPage: false
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                invalidPagination:
+                  summary: Paginação inválida
+                  value:
+                    ok: false
+                    error: "Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100"
+                    errorCode: "INVALID_PAGINATION"
+                invalidDateFormat:
+                  summary: Formato de data inválido
+                  value:
+                    ok: false
+                    error: "Formato de data inválido para startDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+                    errorCode: "INVALID_DATE_FORMAT"
+                invalidDateRange:
+                  summary: Período inválido
+                  value:
+                    ok: false
+                    error: "startDate não pode ser maior que endDate"
+                    errorCode: "INVALID_DATE_RANGE"
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              examples:
+                missingApiKey:
+                  summary: API key não informada
+                  value:
+                    ok: false
+                    error: "Header mc-api-key é obrigatório"
+                    errorCode: "MISSING_API_KEY"
+                invalidApiKey:
+                  summary: API key inválida
+                  value:
+                    ok: false
+                    error: "API key inválida"
+                    errorCode: "INVALID_API_KEY"
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "Erro interno do servidor"
+                errorCode: "INTERNAL_ERROR"
 
 components:
   schemas:
-    UploadVideoResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-          description: Indica se o upload foi bem-sucedido
-        mediaUrl:
-          type: string
-          description: URL do vídeo no CDN
-        guid:
-          type: string
-          description: Identificador único do vídeo no Bunny
-        title:
-          type: string
-          description: Título do vídeo
-
-    ProcessLessonRequest:
-      type: object
-      required:
-        - action
-      properties:
-        action:
-          type: string
-          enum:
-            - lesson
-            - retry
-            - cleanup
-          description: |
-            Ação a ser executada:
-            - `lesson`: Processa uma aula específica
-            - `retry`: Reprocessa assets com falha
-            - `cleanup`: Limpa páginas órfãs
-        lessonId:
-          type: string
-          description: ID da aula (obrigatório quando action = "lesson")
-
-    ProcessLessonResponse:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Mensagem de resultado
-        action:
-          type: string
-          description: Ação executada
-        result:
-          $ref: '#/components/schemas/ProcessLessonResult'
-
-    ProcessLessonResult:
-      type: object
-      properties:
-        success:
-          type: boolean
-          description: Indica se o processamento foi bem-sucedido
-        totalPages:
-          type: integer
-          description: Total de páginas no PDF
-        processedPages:
-          type: integer
-          description: Número de páginas processadas
-        error:
-          type: string
-          description: Mensagem de erro (quando houver falha)
-
-    ProcessAllRequest:
-      type: object
-      properties:
-        limit:
-          type: integer
-          description: Número máximo de aulas a processar (opcional)
-          minimum: 1
-
-    ProcessAllResponse:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Mensagem de resultado
-        processed:
-          type: integer
-          description: Número de aulas processadas
-        total:
-          type: integer
-          description: Total de aulas encontradas
-        limit:
-          type: integer
-          nullable: true
-          description: Limite aplicado (null se não especificado)
-        success:
-          type: boolean
-          description: Indica se houve processamento
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProcessLessonResult'
-          description: Resultados individuais de cada aula processada
-
-    RegeneratePDFResponse:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Mensagem de resultado
-        lessonId:
-          type: string
-          description: ID da aula
-        status:
-          type: string
-          description: Status da regeneração
-          enum:
-            - pending
-
-    LessonPDFPagesResponse:
-      type: object
-      properties:
-        lessonId:
-          type: string
-          description: ID da aula
-        status:
-          type: string
-          description: Status do processamento do PDF
-          enum:
-            - completed
-            - processing
-            - pending
-            - failed
-            - absent
-        totalPages:
-          type: integer
-          description: Total de páginas no PDF
-        pages:
-          type: array
-          items:
-            $ref: '#/components/schemas/LessonPDFPageInfo'
-          description: Lista de páginas do PDF
-
-    LessonPDFPageInfo:
-      type: object
-      properties:
-        pageNumber:
-          type: integer
-          description: Número da página
-        imageUrl:
-          type: string
-          description: URL da imagem da página
-        width:
-          type: integer
-          nullable: true
-          description: Largura da imagem em pixels
-        height:
-          type: integer
-          nullable: true
-          description: Altura da imagem em pixels
-
     ErrorResponse:
       type: object
       properties:
@@ -565,5 +1249,618 @@ components:
         message:
           type: string
           description: Mensagem descritiva do erro
+
+    UnauthorizedResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: false
+        error:
+          type: string
+          description: Mensagem de erro
+          example: "API key invalid"
+        errorCode:
+          type: string
+          description: Código do erro
+          example: "INVALID_API_KEY"
+
+    UpdateCommentRequest:
+      type: object
+      required:
+        - answer
+      properties:
+        answer:
+          type: string
+          description: Resposta para o comentário
+          example: "Esta é a resposta para o comentário"
+        published:
+          type: boolean
+          description: Indica se o comentário deve ser publicado
+          example: true
+
+    CommentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID do comentário
+          example: "comment-123"
+        createdAt:
+          type: string
+          format: date-time
+          description: Data e hora de criação (ISO 8601)
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data e hora da última atualização (ISO 8601)
+          example: "2024-01-15T11:00:00Z"
+        question:
+          type: string
+          description: Pergunta do comentário
+          example: "Qual é a dúvida?"
+        answer:
+          type: string
+          nullable: true
+          description: Resposta do comentário (null se não respondido)
+          example: "Esta é a resposta para o comentário"
+        published:
+          type: boolean
+          nullable: true
+          description: Indica se o comentário está publicado (null = pendente, true = aprovado, false = rejeitado)
+          example: true
+        lessonName:
+          type: string
+          description: Nome da aula
+          example: "Aula 01"
+        courseName:
+          type: string
+          description: Nome do curso
+          example: "Curso de Go"
+        username:
+          type: string
+          description: Nome do usuário
+          example: "João Silva"
+        userEmail:
+          type: string
+          description: Email do usuário
+          example: "joao@example.com"
+
+    CommentsPaginationResponse:
+      type: object
+      properties:
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+          description: Lista de comentários
+        pagination:
+          $ref: '#/components/schemas/CommentsPaginationMeta'
+
+    CommentsPaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Página atual
+          example: 1
+        limit:
+          type: integer
+          description: Limite de itens por página
+          example: 10
+        totalCount:
+          type: integer
+          format: int64
+          description: Total de comentários
+          example: 25
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 3
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Número da página atual
+          example: 1
+        pageSize:
+          type: integer
+          description: Tamanho da página
+          example: 10
+        total:
+          type: integer
+          description: Total de registros
+          example: 25
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 3
+        hasNext:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrev:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
+    AccessData:
+      type: object
+      properties:
+        data:
+          type: string
+          description: Dados da atividade de acesso
+          example: "2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'"
+
+    ActivityPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Número da página atual
+          example: 1
+        limit:
+          type: integer
+          description: Limite de itens por página
+          example: 10
+        totalCount:
+          type: integer
+          description: Total de registros
+          example: 25
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 3
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
+    ActivityResponse:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+          example: "user@example.com"
+        access:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessData'
+          description: Lista de atividades de acesso
+        pagination:
+          $ref: '#/components/schemas/ActivityPagination'
+
+    UserPurchaseData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID do evento de compra/reembolso
+          example: "event-123"
+        type:
+          type: string
+          description: Tipo da transação (purchase ou refund)
+          enum:
+            - purchase
+            - refund
+          example: "purchase"
+        createdAt:
+          type: string
+          format: date-time
+          description: Data e hora da criação da transação
+          example: "2024-01-15T10:30:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Data e hora da última atualização da transação
+          example: "2024-01-15T10:30:00.000Z"
+
+    UserPurchasesResponse:
+      type: object
+      properties:
+        purchases:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserPurchaseData'
+          description: Lista de compras e reembolsos
+        pagination:
+          $ref: '#/components/schemas/ActivityPagination'
+
+    CustomErrorResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: false
+        error:
+          type: string
+          description: Mensagem de erro
+          example: "email é obrigatório"
+        errorCode:
+          type: string
+          description: Código do erro
+          example: "MISSING_EMAIL"
+
+    UserInformationsResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserInformation'
+          description: Lista de usuários
+        pagination:
+          $ref: '#/components/schemas/UserInformationsPagination'
+
+    UserInformation:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: ID do usuário
+          example: "user-123"
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+          example: "usuario@exemplo.com"
+        isPaid:
+          type: boolean
+          description: Indica se o usuário é pagante
+          example: true
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryInfo'
+          description: Lista de entregas (cursos) do usuário
+        lastAccess:
+          type: string
+          format: date-time
+          nullable: true
+          description: Data do último acesso
+          example: "2024-03-10T09:15:00Z"
+
+    DeliveryInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID da entrega
+          example: "delivery-123"
+        name:
+          type: string
+          description: Nome do curso/entrega
+          example: "Curso de Programação"
+        accessDate:
+          type: string
+          format: date-time
+          description: Data de acesso à entrega
+          example: "2024-01-15T10:30:00Z"
+
+    UserInformationsPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Página atual
+          example: 1
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 5
+        totalItems:
+          type: integer
+          description: Total de itens
+          example: 50
+        itemsPerPage:
+          type: integer
+          description: Itens por página
+          example: 10
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPreviousPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
+    CreateSocialCommentRequest:
+      type: object
+      required:
+        - userId
+        - title
+        - content
+      properties:
+        userId:
+          type: string
+          description: ID do usuário que está criando/atualizando o post
+          example: "user-123"
+        topicId:
+          type: string
+          description: ID do tópico (obrigatório para criar post)
+          example: "topic-456"
+        postId:
+          type: string
+          description: ID do post (obrigatório para atualizar post)
+          example: "post-789"
+        tenantId:
+          type: string
+          description: ID do tenant (opcional, obtido do contexto)
+          example: "tenant-123"
+        title:
+          type: string
+          description: Título do post
+          example: "Meu primeiro post"
+        content:
+          type: string
+          description: Conteúdo do post
+          example: "Este é o conteúdo do meu post"
+        image:
+          type: string
+          nullable: true
+          description: URL da imagem do post (opcional)
+          example: "https://example.com/image.jpg"
+        videoEmbed:
+          type: string
+          nullable: true
+          description: URL do vídeo embed (opcional)
+          example: "https://youtube.com/watch?v=123"
+
+    SocialCommentResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: true
+        id:
+          type: string
+          description: ID do post criado ou atualizado
+          example: "post-123"
+
+    UserActivitySummary:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email do usuário
+          example: "usuario@email.com"
+        ultimoAcesso:
+          type: string
+          format: date-time
+          nullable: true
+          description: Data do último acesso no período
+          example: "2025-12-10T14:30:00.000Z"
+
+    ActivitySummaryPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Página atual
+          example: 1
+        limit:
+          type: integer
+          description: Itens por página
+          example: 10
+        totalCount:
+          type: integer
+          description: Total de itens
+          example: 150
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 15
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
+
+    ActivitySummaryResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserActivitySummary'
+          description: Lista de usuários com suas atividades
+        pagination:
+          $ref: '#/components/schemas/ActivitySummaryPagination'
+
+    CompletedLesson:
+      type: object
+      properties:
+        courseName:
+          type: string
+          description: Nome do curso
+          example: "Curso de JavaScript"
+        lessonName:
+          type: string
+          description: Nome da aula
+          example: "Introdução ao JS"
+        completedAt:
+          type: string
+          format: date-time
+          description: Data de conclusão
+          example: "2025-12-10T14:30:00.000Z"
+
+    LessonsCompletedData:
+      type: object
+      properties:
+        completedLessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompletedLesson'
+          description: Lista de aulas completadas
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              description: Página atual
+              example: 1
+            limit:
+              type: integer
+              description: Itens por página
+              example: 10
+            totalCount:
+              type: integer
+              description: Total de itens
+              example: 25
+            totalPages:
+              type: integer
+              description: Total de páginas
+              example: 3
+            hasNextPage:
+              type: boolean
+              description: Indica se há próxima página
+              example: true
+            hasPrevPage:
+              type: boolean
+              description: Indica se há página anterior
+              example: false
+
+    LessonsCompletedResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          description: Indica se a operação foi bem-sucedida
+          example: true
+        data:
+          $ref: '#/components/schemas/LessonsCompletedData'
+        lessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonCompletedData'
+          description: Lista de aulas completadas
+        pagination:
+          $ref: '#/components/schemas/ActivityPagination'
+
+    StudentReportResponse:
+      type: object
+      properties:
+        alunos:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentReport'
+          description: Lista de alunos do tenant
+        pagination:
+          $ref: '#/components/schemas/StudentReportPagination'
+
+    StudentReport:
+      type: object
+      properties:
+        aluno_id_member_class:
+          type: string
+          description: ID do aluno no MemberClass
+          example: "user-123"
+        email:
+          type: string
+          format: email
+          description: Email do aluno
+          example: "aluno@example.com"
+        cpf:
+          type: string
+          description: CPF do aluno (pode ser vazio)
+          example: "12345678900"
+        data_cadastro:
+          type: string
+          format: date-time
+          description: Data de cadastro do aluno
+          example: "2024-01-15T10:30:00.000Z"
+        entregas_vinculadas:
+          type: array
+          items:
+            type: string
+          description: Lista de nomes das entregas vinculadas ao aluno
+          example:
+            - "Entrega 1"
+            - "Entrega 2"
+        ultimo_acesso:
+          type: string
+          format: date-time
+          nullable: true
+          description: Data e hora do último acesso (null se nunca acessou)
+          example: "2024-01-20T15:45:00.000Z"
+        quantidade_aulas_assistidas:
+          type: integer
+          description: Quantidade total de aulas assistidas
+          example: 10
+        aulas_assistidas:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonWatched'
+          description: Lista de aulas assistidas pelo aluno
+
+    LessonWatched:
+      type: object
+      properties:
+        aula_id:
+          type: string
+          description: ID da aula
+          example: "lesson-123"
+        titulo:
+          type: string
+          description: Título da aula
+          example: "Aula 1 - Introdução"
+        data_assistida:
+          type: string
+          format: date-time
+          description: Data e hora em que a aula foi assistida
+          example: "2024-01-18T14:00:00.000Z"
+
+    StudentReportPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: Número da página atual
+          example: 1
+        limit:
+          type: integer
+          description: Itens por página
+          example: 10
+        totalCount:
+          type: integer
+          description: Total de registros
+          example: 150
+        totalPages:
+          type: integer
+          description: Total de páginas
+          example: 15
+        hasNextPage:
+          type: boolean
+          description: Indica se há próxima página
+          example: true
+        hasPrevPage:
+          type: boolean
+          description: Indica se há página anterior
+          example: false
 
 

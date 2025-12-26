@@ -20,9 +20,13 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
+		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
+		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
+		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
+		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
+		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
+		user_activity "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user_activity"
+		student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
 	"go.uber.org/fx"
 )
@@ -39,8 +43,15 @@ func main() {
 			tenant.NewTenantRepository,
 			user.NewUserRepository,
 			lesson.NewLessonRepository,
+			comment.NewCommentRepository,
+			comment.NewSocialCommentRepository,
+			topic.NewTopicRepository,
+			user_activity.NewUserActivityRepository,
+			student_report.NewStudentReportRepository,
 
 			rate_limiter.NewRateLimiterUpload,
+			rate_limiter.NewRateLimiterTenant,
+			rate_limiter.NewRateLimiterIP,
 			ilovepdf.NewIlovePdfService,
 			bunny.NewBunnyService,
 
@@ -48,12 +59,41 @@ func main() {
 			usecases.NewPdfProcessorUseCase,
 			usecases.NewTenantGetTenantBunnyCredentialsUseCase,
 			usecases.NewUploadVideoBunnyCdnUseCase,
+			func(logger ports.Logger, commentRepo ports.CommentRepository, userRepo ports.UserRepository) ports.CommentUseCase {
+				return usecases.NewCommentUseCase(logger, commentRepo, userRepo)
+			},
+			usecases.NewApiTokenTenantUseCase,
+			usecases.NewUserActivityUseCase,
+			usecases.NewUserPurchaseUseCase,
+			usecases.NewUserInformationsUseCase,
+			usecases.NewSocialCommentUseCase,
+			usecases.NewActivitySummaryUseCase,
+			usecases.NewLessonsCompletedUseCase,
+			usecases.NewStudentReportUseCase,
+			usecases.NewAuthUseCase,
+			usecases.NewAILessonUseCase,
+			usecases.NewAITenantUseCase,
 
 			middlewares.NewRateLimitMiddleware,
+			middlewares.NewRateLimitTenantMiddleware,
+			middlewares.NewRateLimitIPMiddleware,
 			middlewares.NewAuthMiddleware,
+			middlewares.NewAuthExternalMiddleware,
 
 			internalhttp.NewLessonHandler,
 			internalhttp.NewVideoHandler,
+			internalhttp.NewCommentHandler,
+			internalhttp.NewUserActivityHandler,
+			internalhttp.NewUserPurchaseHandler,
+			internalhttp.NewUserInformationsHandler,
+			internalhttp.NewSocialCommentHandler,
+			internalhttp.NewActivitySummaryHandler,
+			internalhttp.NewLessonsCompletedHandler,
+			internalhttp.NewStudentReportHandler,
+			internalhttp.NewSwaggerHandler,
+			internalhttp.NewAuthHandler,
+			internalhttp.NewAILessonHandler,
+			internalhttp.NewAITenantHandler,
 
 			router.NewRouter,
 		),

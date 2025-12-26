@@ -16,9 +16,24 @@ import (
 func createTestRouter(t *testing.T) *Router {
 	mockVideoHandler := &httpHandlers.VideoHandler{}
 	mockLessonHandler := &httpHandlers.LessonHandler{}
+	mockCommentHandler := &httpHandlers.CommentHandler{}
+	mockUserActivityHandler := &httpHandlers.UserActivityHandler{}
+	mockUserPurchaseHandler := &httpHandlers.UserPurchaseHandler{}
+	mockUserInformationsHandler := &httpHandlers.UserInformationsHandler{}
+	mockSocialCommentHandler := &httpHandlers.SocialCommentHandler{}
+	mockActivitySummaryHandler := &httpHandlers.ActivitySummaryHandler{}
+	mockLessonsCompletedHandler := &httpHandlers.LessonsCompletedHandler{}
+	mockStudentReportHandler := &httpHandlers.StudentReportHandler{}
+	mockSwaggerHandler := httpHandlers.NewSwaggerHandler()
+	mockAuthHandler := &httpHandlers.AuthHandler{}
+	mockAILessonHandler := &httpHandlers.AILessonHandler{}
+	mockAITenantHandler := &httpHandlers.AITenantHandler{}
 	mockLogger := &mocks.MockLogger{}
 	mockRateLimiter := &mocks.MockRateLimiterUpload{}
+	mockRateLimiterTenant := &mocks.MockRateLimiterTenant{}
+	mockRateLimiterIP := &mocks.MockRateLimiterIP{}
 	mockSessionValidator := &mocks.MockSessionValidatorUseCase{}
+	mockApiTokenUseCase := &mocks.MockApiTokenUseCase{}
 
 	mockLogger.On("Error", mock.Anything).Return().Maybe()
 	mockLogger.On("Warn", mock.Anything).Return().Maybe()
@@ -26,9 +41,12 @@ func createTestRouter(t *testing.T) *Router {
 	mockLogger.On("Debug", mock.Anything).Return().Maybe()
 
 	rateLimitMiddleware := middlewares.NewRateLimitMiddleware(mockRateLimiter, mockLogger)
+	rateLimitTenantMiddleware := middlewares.NewRateLimitTenantMiddleware(mockRateLimiterTenant, mockLogger)
+	rateLimitIPMiddleware := middlewares.NewRateLimitIPMiddleware(mockRateLimiterIP, mockLogger)
 	authMiddleware := middlewares.NewAuthMiddleware(mockLogger, mockSessionValidator)
+	authExternalMiddleware := middlewares.NewAuthExternalMiddleware(mockApiTokenUseCase)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, rateLimitMiddleware, authMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockAILessonHandler, mockAITenantHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {

@@ -20,3 +20,25 @@ packages:
       LessonRepository:
       PdfProcessService:
       Storage:
+      CommentRepository:
+      CommentUseCase:
+      ApiTokenUseCase:
+      UserActivityRepository:
+      UserActivityUseCase:
+      UserPurchaseUseCase:
+      UserInformationsUseCase:
+      SocialCommentUseCase:
+      PostSocialUseCase:
+      ActivitySummaryUseCase:
+      LessonsCompletedUseCase:
+      UserRepository:
+      SocialCommentRepository:
+      PostSocialRepository:
+      TopicRepository:
+      StudentReportRepository:
+      StudentReportUseCase:
+      RateLimiterTenant:
+      RateLimiterIP:
+      AuthUseCase:
+      AILessonUseCase:
+      AITenantUseCase:
