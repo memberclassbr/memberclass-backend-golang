@@ -12,41 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type MockTenantRepository struct {
-	mock.Mock
-}
-
-func (m *MockTenantRepository) FindByID(tenantID string) (*entities.Tenant, error) {
-	args := m.Called(tenantID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entities.Tenant), args.Error(1)
-}
-
-func (m *MockTenantRepository) FindBunnyInfoByID(tenantID string) (*entities.Tenant, error) {
-	args := m.Called(tenantID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entities.Tenant), args.Error(1)
-}
-
-func (m *MockTenantRepository) FindTenantByToken(ctx context.Context, token string) (*entities.Tenant, error) {
-	args := m.Called(ctx, token)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*entities.Tenant), args.Error(1)
-}
-
-func (m *MockTenantRepository) UpdateTokenApiAuth(ctx context.Context, tenantID, token string) error {
-	args := m.Called(ctx, tenantID, token)
-	return args.Error(0)
-}
-
 func TestNewApiTokenTenantUseCase(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -55,7 +22,7 @@ func TestNewApiTokenTenantUseCase(t *testing.T) {
 }
 
 func TestApiTokenTenantUseCase_GenerateToken_Success(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -79,7 +46,7 @@ func TestApiTokenTenantUseCase_GenerateToken_Success(t *testing.T) {
 }
 
 func TestApiTokenTenantUseCase_GenerateToken_EmptyTenantID(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -92,7 +59,7 @@ func TestApiTokenTenantUseCase_GenerateToken_EmptyTenantID(t *testing.T) {
 }
 
 func TestApiTokenTenantUseCase_GenerateToken_TenantNotFound(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -112,7 +79,7 @@ func TestApiTokenTenantUseCase_GenerateToken_TenantNotFound(t *testing.T) {
 }
 
 func TestApiTokenTenantUseCase_GenerateToken_RepositoryErrorOnFind(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -132,7 +99,7 @@ func TestApiTokenTenantUseCase_GenerateToken_RepositoryErrorOnFind(t *testing.T)
 }
 
 func TestApiTokenTenantUseCase_GenerateToken_RepositoryErrorOnUpdate(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -158,7 +125,7 @@ func TestApiTokenTenantUseCase_GenerateToken_RepositoryErrorOnUpdate(t *testing.
 }
 
 func TestApiTokenTenantUseCase_ValidateToken_Success(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -183,7 +150,7 @@ func TestApiTokenTenantUseCase_ValidateToken_Success(t *testing.T) {
 }
 
 func TestApiTokenTenantUseCase_ValidateToken_EmptyToken(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -196,7 +163,7 @@ func TestApiTokenTenantUseCase_ValidateToken_EmptyToken(t *testing.T) {
 }
 
 func TestApiTokenTenantUseCase_ValidateToken_TenantNotFound(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -216,7 +183,7 @@ func TestApiTokenTenantUseCase_ValidateToken_TenantNotFound(t *testing.T) {
 }
 
 func TestApiTokenTenantUseCase_ValidateToken_RepositoryError(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)
@@ -235,9 +202,8 @@ func TestApiTokenTenantUseCase_ValidateToken_RepositoryError(t *testing.T) {
 	mockRepo.AssertExpectations(t)
 }
 
-
 func TestApiTokenTenantUseCase_GenerateToken_UniqueTokens(t *testing.T) {
-	mockRepo := new(MockTenantRepository)
+	mockRepo := new(mocks.MockTenantRepository)
 	mockLogger := mocks.NewMockLogger(t)
 
 	useCase := NewApiTokenTenantUseCase(mockRepo, mockLogger)

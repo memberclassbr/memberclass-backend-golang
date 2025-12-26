@@ -22,6 +22,16 @@ type mockLessonRepository struct {
 	mu                sync.RWMutex
 }
 
+func (m *mockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *mockLessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func newMockLessonRepository() *mockLessonRepository {
 	return &mockLessonRepository{
 		lessons:   make(map[string]*entities.Lesson),
@@ -1372,6 +1382,16 @@ func TestSaveSinglePage_RepositoryError(t *testing.T) {
 }
 
 type mockLessonRepositoryWithError struct{}
+
+func (m *mockLessonRepositoryWithError) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *mockLessonRepositoryWithError) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
+	//TODO implement me
+	panic("implement me")
+}
 
 func (m *mockLessonRepositoryWithError) GetByID(ctx context.Context, id string) (*entities.Lesson, error) {
 	return nil, assert.AnError

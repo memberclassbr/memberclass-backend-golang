@@ -18,10 +18,12 @@ func TestGetTenantBunnyCredentialsUseCase_Execute_Success(t *testing.T) {
 	useCase := NewTenantGetTenantBunnyCredentialsUseCase(mockRepo, mockLogger)
 
 	tenantID := "test-tenant"
+	bunnyLibraryID := "test-library"
+	bunnyLibraryApiKey := "test-key"
 	expectedTenant := &entities.Tenant{
 		ID:                tenantID,
-		BunnyLibraryID:    "test-library",
-		BunnyLibraryApiKey: "test-key",
+		BunnyLibraryID:    &bunnyLibraryID,
+		BunnyLibraryApiKey: &bunnyLibraryApiKey,
 	}
 	expectedCredentials := &dto.TenantBunnyCredentials{
 		TenantID:          tenantID,
