@@ -1,0 +1,68 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify code compiles
+        run: go build -v ./...
+
+      - name: Install mockery
+        run: go install github.com/vektra/mockery/v2@latest
+
+      - name: Generate mocks
+        run: ~/go/bin/mockery
+
+      - name: Run tests with coverage
+        run: |
+          go test -v -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out -o coverage.txt
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+          COVERAGE_NUM=$(echo "$COVERAGE" | sed 's/%//')
+          THRESHOLD=80
+          echo "Total coverage: ${COVERAGE}"
+          if awk "BEGIN {exit !($COVERAGE_NUM >= $THRESHOLD)}"; then
+            echo "✅ Coverage ${COVERAGE} meets the required ${THRESHOLD}% threshold"
+          else
+            echo "❌ Coverage ${COVERAGE} is below the required ${THRESHOLD}% threshold"
+            exit 1
+          fi
+
+      - name: Upload coverage to artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.txt
+
