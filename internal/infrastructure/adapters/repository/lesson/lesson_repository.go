@@ -898,6 +898,7 @@ func (l *LessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, 
 		WHERE v."tenantId" = $1
 			AND l.published = true
 			AND ($2 = false OR l."transcriptionCompleted" = false)
+			AND l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
 		ORDER BY 
 			COALESCE(v."order", 0) ASC,
 			COALESCE(c."order", 0) ASC,
