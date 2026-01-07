@@ -8,6 +8,7 @@ import (
 	entities "github.com/memberclass-backend-golang/internal/domain/entities"
 	mock "github.com/stretchr/testify/mock"
 
+	ports "github.com/memberclass-backend-golang/internal/domain/ports"
 	response "github.com/memberclass-backend-golang/internal/domain/dto/response"
 
 	time "time"
@@ -955,6 +956,66 @@ func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) Return(_a0 error)
 }
 
 func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) RunAndReturn(run func(context.Context, string, bool) error) *MockLessonRepository_UpdateTranscriptionStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetLessonsWithHierarchyByTenant provides a mock function with given fields: ctx, tenantID, onlyUnprocessed
+func (_m *MockLessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]ports.AILessonWithHierarchy, error) {
+	ret := _m.Called(ctx, tenantID, onlyUnprocessed)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLessonsWithHierarchyByTenant")
+	}
+
+	var r0 []ports.AILessonWithHierarchy
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) ([]ports.AILessonWithHierarchy, error)); ok {
+		return rf(ctx, tenantID, onlyUnprocessed)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) []ports.AILessonWithHierarchy); ok {
+		r0 = rf(ctx, tenantID, onlyUnprocessed)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]ports.AILessonWithHierarchy)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, bool) error); ok {
+		r1 = rf(ctx, tenantID, onlyUnprocessed)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockLessonRepository_GetLessonsWithHierarchyByTenant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLessonsWithHierarchyByTenant'
+type MockLessonRepository_GetLessonsWithHierarchyByTenant_Call struct {
+	*mock.Call
+}
+
+// GetLessonsWithHierarchyByTenant is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - onlyUnprocessed bool
+func (_e *MockLessonRepository_Expecter) GetLessonsWithHierarchyByTenant(ctx interface{}, tenantID interface{}, onlyUnprocessed interface{}) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
+	return &MockLessonRepository_GetLessonsWithHierarchyByTenant_Call{Call: _e.mock.On("GetLessonsWithHierarchyByTenant", ctx, tenantID, onlyUnprocessed)}
+}
+
+func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) Run(run func(ctx context.Context, tenantID string, onlyUnprocessed bool)) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(bool))
+	})
+	return _c
+}
+
+func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) Return(_a0 []ports.AILessonWithHierarchy, _a1 error) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) RunAndReturn(run func(context.Context, string, bool) ([]ports.AILessonWithHierarchy, error)) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -25,14 +25,22 @@ func (m *RateLimitTenantMiddleware) LimitByTenant(next http.Handler) http.Handle
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		tenant := constants.GetTenantFromContext(ctx)
-		if tenant == nil {
-			next.ServeHTTP(w, r)
-			return
+		var tenantID string
+
+		tenantIDFromQuery := r.URL.Query().Get("tenantId")
+		if tenantIDFromQuery != "" {
+			tenantID = tenantIDFromQuery
+		} else {
+			tenant := constants.GetTenantFromContext(ctx)
+			if tenant == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			tenantID = tenant.ID
 		}
 
 		endpoint := r.URL.Path
-		allowed, info, err := m.rateLimiter.CheckLimit(ctx, tenant.ID, endpoint)
+		allowed, info, err := m.rateLimiter.CheckLimit(ctx, tenantID, endpoint)
 		if err != nil {
 			m.logger.Error("Error checking rate limit: " + err.Error())
 			next.ServeHTTP(w, r)
@@ -46,7 +54,7 @@ func (m *RateLimitTenantMiddleware) LimitByTenant(next http.Handler) http.Handle
 			return
 		}
 
-		if err := m.rateLimiter.Increment(ctx, tenant.ID, endpoint); err != nil {
+		if err := m.rateLimiter.Increment(ctx, tenantID, endpoint); err != nil {
 			m.logger.Error("Error incrementing rate limit: " + err.Error())
 		}
 

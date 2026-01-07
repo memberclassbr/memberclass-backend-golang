@@ -28,4 +28,24 @@ type LessonRepository interface {
 	FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error)
 	GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error)
 	UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error
+	GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]AILessonWithHierarchy, error)
+}
+
+type AILessonWithHierarchy struct {
+	ID                     string
+	Name                   string
+	Slug                   string
+	Type                   *string
+	MediaURL               *string
+	Thumbnail              *string
+	Content                *string
+	TranscriptionCompleted bool
+	ModuleID               string
+	ModuleName             string
+	SectionID              string
+	SectionName            string
+	CourseID               string
+	CourseName             string
+	VitrineID              string
+	VitrineName            string
 }

@@ -58,6 +58,33 @@ func (h *AILessonHandler) UpdateTranscriptionStatus(w http.ResponseWriter, r *ht
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
+func (h *AILessonHandler) GetLessons(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	apiKey := r.Header.Get("x-internal-api-key")
+	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
+	if apiKey == "" || apiKey != expectedKey {
+		h.sendCustomErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório", "UNAUTHORIZED")
+		return
+	}
+
+	tenantID := r.URL.Query().Get("tenantId")
+	onlyUnprocessed := r.URL.Query().Get("onlyUnprocessed")
+
+	req := request.ParseGetAILessonsRequest(tenantID, onlyUnprocessed)
+
+	response, err := h.useCase.GetLessons(r.Context(), *req)
+	if err != nil {
+		h.handleUseCaseError(w, err)
+		return
+	}
+
+	h.sendJSONResponse(w, http.StatusOK, response)
+}
+
 func (h *AILessonHandler) handleUseCaseError(w http.ResponseWriter, err error) {
 	memberClassErr, ok := err.(*memberclasserrors.MemberClassError)
 	if !ok {

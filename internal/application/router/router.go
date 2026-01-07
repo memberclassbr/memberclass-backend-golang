@@ -100,6 +100,9 @@ func (r *Router) SetupRoutes() {
 		router.Route("/ai", func(router chi.Router) {
 			router.Route("/lessons", func(router chi.Router) {
 				router.Patch("/{lessonId}", r.aiLessonHandler.UpdateTranscriptionStatus)
+				router.With(
+					r.rateLimitTenantMiddleware.LimitByTenant,
+				).Get("/", r.aiLessonHandler.GetLessons)
 			})
 			router.Get("/tenants", r.aiTenantHandler.GetTenantsWithAIEnabled)
 		})

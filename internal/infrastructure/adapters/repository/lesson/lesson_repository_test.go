@@ -10,6 +10,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -1525,6 +1526,170 @@ func TestLessonRepository_DeletePDFPagesByAssetID_DatabaseError(t *testing.T) {
 	err := repo.DeletePDFPagesByAssetID(context.Background(), "asset-123")
 
 	assert.Error(t, err)
+	assert.IsType(t, &memberclasserrors.MemberClassError{}, err)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestLessonRepository_GetLessonsWithHierarchyByTenant_Success(t *testing.T) {
+	db, mockDB, _ := sqlmock.New()
+	mockLogger := &mocks.MockLogger{}
+
+	repo := &LessonRepository{db: db, log: mockLogger}
+
+	tenantID := "tenant-123"
+	onlyUnprocessed := false
+
+	rows := sqlmock.NewRows([]string{
+		"id", "name", "slug", "type", "mediaUrl", "thumbnail", "content",
+		"transcriptionCompleted", "module_id", "module_name", "section_id",
+		"section_name", "course_id", "course_name", "vitrine_id", "vitrine_name",
+	}).AddRow(
+		"lesson-1", "Lesson 1", "lesson-1", "video", "https://example.com/video.mp4",
+		"https://example.com/thumb.jpg", "Content", true,
+		"module-1", "Module 1", "section-1", "Section 1",
+		"course-1", "Course 1", "vitrine-1", "Vitrine 1",
+	).AddRow(
+		"lesson-2", "Lesson 2", "lesson-2", nil, nil, nil, nil,
+		false,
+		"module-2", "Module 2", "section-2", "Section 2",
+		"course-2", "Course 2", "vitrine-2", "Vitrine 2",
+	)
+
+	mockDB.ExpectQuery(`SELECT`).
+		WithArgs(tenantID, onlyUnprocessed).
+		WillReturnRows(rows)
+
+	result, err := repo.GetLessonsWithHierarchyByTenant(context.Background(), tenantID, onlyUnprocessed)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result, 2)
+	assert.Equal(t, "lesson-1", result[0].ID)
+	assert.Equal(t, "Lesson 1", result[0].Name)
+	assert.True(t, result[0].TranscriptionCompleted)
+	assert.NotNil(t, result[0].Type)
+	assert.Equal(t, "lesson-2", result[1].ID)
+	assert.False(t, result[1].TranscriptionCompleted)
+	assert.Nil(t, result[1].Type)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestLessonRepository_GetLessonsWithHierarchyByTenant_OnlyUnprocessed(t *testing.T) {
+	db, mockDB, _ := sqlmock.New()
+	mockLogger := &mocks.MockLogger{}
+
+	repo := &LessonRepository{db: db, log: mockLogger}
+
+	tenantID := "tenant-123"
+	onlyUnprocessed := true
+
+	rows := sqlmock.NewRows([]string{
+		"id", "name", "slug", "type", "mediaUrl", "thumbnail", "content",
+		"transcriptionCompleted", "module_id", "module_name", "section_id",
+		"section_name", "course_id", "course_name", "vitrine_id", "vitrine_name",
+	}).AddRow(
+		"lesson-1", "Lesson 1", "lesson-1", nil, nil, nil, nil,
+		false,
+		"module-1", "Module 1", "section-1", "Section 1",
+		"course-1", "Course 1", "vitrine-1", "Vitrine 1",
+	)
+
+	mockDB.ExpectQuery(`SELECT`).
+		WithArgs(tenantID, onlyUnprocessed).
+		WillReturnRows(rows)
+
+	result, err := repo.GetLessonsWithHierarchyByTenant(context.Background(), tenantID, onlyUnprocessed)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "lesson-1", result[0].ID)
+	assert.False(t, result[0].TranscriptionCompleted)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestLessonRepository_GetLessonsWithHierarchyByTenant_EmptyResult(t *testing.T) {
+	db, mockDB, _ := sqlmock.New()
+	mockLogger := &mocks.MockLogger{}
+
+	repo := &LessonRepository{db: db, log: mockLogger}
+
+	tenantID := "tenant-123"
+	onlyUnprocessed := false
+
+	rows := sqlmock.NewRows([]string{
+		"id", "name", "slug", "type", "mediaUrl", "thumbnail", "content",
+		"transcriptionCompleted", "module_id", "module_name", "section_id",
+		"section_name", "course_id", "course_name", "vitrine_id", "vitrine_name",
+	})
+
+	mockDB.ExpectQuery(`SELECT`).
+		WithArgs(tenantID, onlyUnprocessed).
+		WillReturnRows(rows)
+
+	result, err := repo.GetLessonsWithHierarchyByTenant(context.Background(), tenantID, onlyUnprocessed)
+
+	assert.NoError(t, err)
+	if result == nil {
+		result = []ports.AILessonWithHierarchy{}
+	}
+	assert.Len(t, result, 0)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestLessonRepository_GetLessonsWithHierarchyByTenant_DatabaseError(t *testing.T) {
+	db, mockDB, _ := sqlmock.New()
+	mockLogger := &mocks.MockLogger{}
+
+	mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
+
+	repo := &LessonRepository{db: db, log: mockLogger}
+
+	tenantID := "tenant-123"
+	onlyUnprocessed := false
+
+	mockDB.ExpectQuery(`SELECT`).
+		WithArgs(tenantID, onlyUnprocessed).
+		WillReturnError(errors.New("database error"))
+
+	result, err := repo.GetLessonsWithHierarchyByTenant(context.Background(), tenantID, onlyUnprocessed)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.IsType(t, &memberclasserrors.MemberClassError{}, err)
+	assert.NoError(t, mockDB.ExpectationsWereMet())
+}
+
+func TestLessonRepository_GetLessonsWithHierarchyByTenant_ScanError(t *testing.T) {
+	db, mockDB, _ := sqlmock.New()
+	mockLogger := &mocks.MockLogger{}
+
+	mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
+
+	repo := &LessonRepository{db: db, log: mockLogger}
+
+	tenantID := "tenant-123"
+	onlyUnprocessed := false
+
+	rows := sqlmock.NewRows([]string{
+		"id", "name", "slug", "type", "mediaUrl", "thumbnail", "content",
+		"transcriptionCompleted", "module_id", "module_name", "section_id",
+		"section_name", "course_id", "course_name", "vitrine_id", "vitrine_name",
+	}).AddRow(
+		"lesson-1", "Lesson 1", "lesson-1", "video", "https://example.com/video.mp4",
+		"https://example.com/thumb.jpg", "Content", true,
+		"module-1", "Module 1", "section-1", "Section 1",
+		"course-1", "Course 1", "vitrine-1", "Vitrine 1",
+	).RowError(0, errors.New("scan error"))
+
+	mockDB.ExpectQuery(`SELECT`).
+		WithArgs(tenantID, onlyUnprocessed).
+		WillReturnRows(rows)
+
+	result, err := repo.GetLessonsWithHierarchyByTenant(context.Background(), tenantID, onlyUnprocessed)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
 	assert.IsType(t, &memberclasserrors.MemberClassError{}, err)
 	assert.NoError(t, mockDB.ExpectationsWereMet())
 }

@@ -870,3 +870,112 @@ func (l *LessonRepository) UpdateTranscriptionStatus(ctx context.Context, lesson
 
 	return nil
 }
+
+func (l *LessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]ports.AILessonWithHierarchy, error) {
+	query := `
+		SELECT 
+			l.id,
+			l.name,
+			l.slug,
+			l.type,
+			l."mediaUrl",
+			l.thumbnail,
+			l.content,
+			l."transcriptionCompleted",
+			m.id as module_id,
+			m.name as module_name,
+			s.id as section_id,
+			s.name as section_name,
+			c.id as course_id,
+			c.name as course_name,
+			v.id as vitrine_id,
+			v.name as vitrine_name
+		FROM "Lesson" l
+		JOIN "Module" m ON l."moduleId" = m.id
+		JOIN "Section" s ON m."sectionId" = s.id
+		JOIN "Course" c ON s."courseId" = c.id
+		JOIN "Vitrine" v ON c."vitrineId" = v.id
+		WHERE v."tenantId" = $1
+			AND l.published = true
+			AND ($2 = false OR l."transcriptionCompleted" = false)
+		ORDER BY 
+			COALESCE(v."order", 0) ASC,
+			COALESCE(c."order", 0) ASC,
+			COALESCE(s."order", 0) ASC,
+			COALESCE(m."order", 0) ASC,
+			COALESCE(l."order", 0) ASC
+	`
+
+	rows, err := l.db.QueryContext(ctx, query, tenantID, onlyUnprocessed)
+	if err != nil {
+		l.log.Error("Error querying lessons with hierarchy: " + err.Error())
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error querying lessons with hierarchy",
+		}
+	}
+	defer rows.Close()
+
+	var lessons []ports.AILessonWithHierarchy
+	for rows.Next() {
+		var lesson ports.AILessonWithHierarchy
+		var typeVal, mediaURLVal, thumbnailVal, contentVal sql.NullString
+		var transcriptionCompleted sql.NullBool
+
+		err := rows.Scan(
+			&lesson.ID,
+			&lesson.Name,
+			&lesson.Slug,
+			&typeVal,
+			&mediaURLVal,
+			&thumbnailVal,
+			&contentVal,
+			&transcriptionCompleted,
+			&lesson.ModuleID,
+			&lesson.ModuleName,
+			&lesson.SectionID,
+			&lesson.SectionName,
+			&lesson.CourseID,
+			&lesson.CourseName,
+			&lesson.VitrineID,
+			&lesson.VitrineName,
+		)
+		if err != nil {
+			l.log.Error("Error scanning lesson with hierarchy: " + err.Error())
+			return nil, &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error scanning lesson with hierarchy",
+			}
+		}
+
+		if typeVal.Valid {
+			lesson.Type = &typeVal.String
+		}
+		if mediaURLVal.Valid {
+			lesson.MediaURL = &mediaURLVal.String
+		}
+		if thumbnailVal.Valid {
+			lesson.Thumbnail = &thumbnailVal.String
+		}
+		if contentVal.Valid {
+			lesson.Content = &contentVal.String
+		}
+		if transcriptionCompleted.Valid {
+			lesson.TranscriptionCompleted = transcriptionCompleted.Bool
+		} else {
+			lesson.TranscriptionCompleted = false
+		}
+
+		lessons = append(lessons, lesson)
+	}
+
+	if err = rows.Err(); err != nil {
+		l.log.Error("Error iterating lessons with hierarchy: " + err.Error())
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error iterating lessons with hierarchy",
+		}
+	}
+
+	return lessons, nil
+}

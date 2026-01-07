@@ -3103,6 +3103,322 @@
 					]
 				},
 				{
+					"name": "Get Lessons",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "x-internal-api-key",
+								"value": "{{internalAiApiKey}}",
+								"type": "text",
+								"description": "API Key interna para IA"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/lessons?tenantId={{tenantId}}&onlyUnprocessed=false",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ai",
+								"lessons"
+							],
+							"query": [
+								{
+									"key": "tenantId",
+									"value": "{{tenantId}}",
+									"description": "ID do tenant (obrigatório)"
+								},
+								{
+									"key": "onlyUnprocessed",
+									"value": "false",
+									"description": "Filtrar apenas não processadas: 'true' ou 'false' (padrão: false)"
+								}
+							]
+						},
+						"description": "Lista aulas de um tenant com suporte a filtro de transcrição não processada. Retorna informações completas das aulas incluindo hierarquia (módulo, seção, curso, vitrine).\n\n**Autenticação:** Requer header `x-internal-api-key` com a API key interna para IA.\n\n**Rate Limit:** 60 requisições por 60 segundos por tenant.\n\n**Query Parameters:**\n- `tenantId` (obrigatório): ID do tenant\n- `onlyUnprocessed` (opcional): Filtrar apenas não processadas: `\"true\"` ou `\"false\"` (padrão: `false`)\n\n**Validações:**\n- Tenant deve existir\n- IA deve estar habilitada para o tenant (`aiEnabled = true`)\n\n**Filtros aplicados:**\n- Sempre filtra apenas aulas com `published = true`\n- Se `onlyUnprocessed = true`, filtra apenas `transcriptionCompleted = false`\n\n**Ordenação:**\nOrdenação em 5 níveis (todos ASC):\n1. Vitrine.order\n2. Course.order\n3. Section.order\n4. Module.order\n5. Lesson.order"
+					},
+					"response": [
+						{
+							"name": "Get Lessons - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons?tenantId=tenant-123&onlyUnprocessed=false",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons"
+									],
+									"query": [
+										{
+											"key": "tenantId",
+											"value": "tenant-123"
+										},
+										{
+											"key": "onlyUnprocessed",
+											"value": "false"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "59"
+								},
+								{
+									"key": "X-RateLimit-Reset",
+									"value": "1705320000"
+								}
+							],
+							"body": "{\n    \"lessons\": [\n        {\n            \"id\": \"lesson-1\",\n            \"name\": \"Aula de Introdução\",\n            \"slug\": \"aula-introducao\",\n            \"type\": \"video\",\n            \"mediaUrl\": \"https://example.com/video.mp4\",\n            \"thumbnail\": \"https://example.com/thumb.jpg\",\n            \"content\": \"Conteúdo da aula\",\n            \"transcriptionCompleted\": true,\n            \"moduleId\": \"module-1\",\n            \"moduleName\": \"Módulo 1\",\n            \"sectionId\": \"section-1\",\n            \"sectionName\": \"Seção 1\",\n            \"courseId\": \"course-1\",\n            \"courseName\": \"Curso 1\",\n            \"vitrineId\": \"vitrine-1\",\n            \"vitrineName\": \"Vitrine 1\"\n        },\n        {\n            \"id\": \"lesson-2\",\n            \"name\": \"Aula Avançada\",\n            \"slug\": \"aula-avancada\",\n            \"type\": null,\n            \"mediaUrl\": null,\n            \"thumbnail\": null,\n            \"content\": null,\n            \"transcriptionCompleted\": false,\n            \"moduleId\": \"module-2\",\n            \"moduleName\": \"Módulo 2\",\n            \"sectionId\": \"section-2\",\n            \"sectionName\": \"Seção 2\",\n            \"courseId\": \"course-2\",\n            \"courseName\": \"Curso 2\",\n            \"vitrineId\": \"vitrine-2\",\n            \"vitrineName\": \"Vitrine 2\"\n        }\n    ],\n    \"total\": 2,\n    \"tenantId\": \"tenant-123\",\n    \"onlyUnprocessed\": false\n}"
+						},
+						{
+							"name": "Get Lessons - Only Unprocessed",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons?tenantId=tenant-123&onlyUnprocessed=true",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons"
+									],
+									"query": [
+										{
+											"key": "tenantId",
+											"value": "tenant-123"
+										},
+										{
+											"key": "onlyUnprocessed",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "58"
+								}
+							],
+							"body": "{\n    \"lessons\": [\n        {\n            \"id\": \"lesson-2\",\n            \"name\": \"Aula Avançada\",\n            \"slug\": \"aula-avancada\",\n            \"type\": null,\n            \"mediaUrl\": null,\n            \"thumbnail\": null,\n            \"content\": null,\n            \"transcriptionCompleted\": false,\n            \"moduleId\": \"module-2\",\n            \"moduleName\": \"Módulo 2\",\n            \"sectionId\": \"section-2\",\n            \"sectionName\": \"Seção 2\",\n            \"courseId\": \"course-2\",\n            \"courseName\": \"Curso 2\",\n            \"vitrineId\": \"vitrine-2\",\n            \"vitrineName\": \"Vitrine 2\"\n        }\n    ],\n    \"total\": 1,\n    \"tenantId\": \"tenant-123\",\n    \"onlyUnprocessed\": true\n}"
+						},
+						{
+							"name": "Get Lessons - Unauthorized",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons?tenantId=tenant-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons"
+									],
+									"query": [
+										{
+											"key": "tenantId",
+											"value": "tenant-123"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
+						},
+						{
+							"name": "Get Lessons - Tenant Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons?tenantId=nonexistent-tenant",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons"
+									],
+									"query": [
+										{
+											"key": "tenantId",
+											"value": "nonexistent-tenant"
+										}
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Tenant não encontrado\",\n    \"errorCode\": \"INVALID_REQUEST\"\n}"
+						},
+						{
+							"name": "Get Lessons - AI Not Enabled",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons?tenantId=tenant-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons"
+									],
+									"query": [
+										{
+											"key": "tenantId",
+											"value": "tenant-123"
+										}
+									]
+								}
+							},
+							"status": "Forbidden",
+							"code": 403,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"IA não está habilitada para este tenant\",\n    \"errorCode\": \"AI_NOT_ENABLED\"\n}"
+						},
+						{
+							"name": "Get Lessons - Rate Limit Exceeded",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/lessons?tenantId=tenant-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"lessons"
+									],
+									"query": [
+										{
+											"key": "tenantId",
+											"value": "tenant-123"
+										}
+									]
+								}
+							},
+							"status": "Too Many Requests",
+							"code": 429,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "X-RateLimit-Limit",
+									"value": "60"
+								},
+								{
+									"key": "X-RateLimit-Remaining",
+									"value": "0"
+								},
+								{
+									"key": "Retry-After",
+									"value": "300"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Muitas requisições. Tente novamente em 5 minutos.\",\n    \"errorCode\": \"RATE_LIMIT_EXCEEDED\",\n    \"retryAfter\": 300\n}"
+						}
+					]
+				},
+				{
 					"name": "Get Tenants with AI Enabled",
 					"request": {
 						"method": "GET",

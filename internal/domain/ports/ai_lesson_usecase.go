@@ -9,5 +9,6 @@ import (
 
 type AILessonUseCase interface {
 	UpdateTranscriptionStatus(ctx context.Context, lessonID string, req request.UpdateLessonTranscriptionRequest) (*response.LessonTranscriptionResponse, error)
+	GetLessons(ctx context.Context, req request.GetAILessonsRequest) (*response.AILessonsResponse, error)
 }
 

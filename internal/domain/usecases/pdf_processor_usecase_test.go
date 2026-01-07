@@ -10,6 +10,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	"github.com/memberclass-backend-golang/internal/domain/entities"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,6 +21,11 @@ type mockLessonRepository struct {
 	createPageCalls   int
 	updateStatusCalls int
 	mu                sync.RWMutex
+}
+
+func (m *mockLessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]ports.AILessonWithHierarchy, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m *mockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
@@ -1382,6 +1388,11 @@ func TestSaveSinglePage_RepositoryError(t *testing.T) {
 }
 
 type mockLessonRepositoryWithError struct{}
+
+func (m *mockLessonRepositoryWithError) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]ports.AILessonWithHierarchy, error) {
+	//TODO implement me
+	panic("implement me")
+}
 
 func (m *mockLessonRepositoryWithError) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
 	//TODO implement me
