@@ -58,7 +58,7 @@ memberclass-backend-golang/
 │   │   │   └── http/           # HTTP Handlers (Controllers)
 │   │   ├── middlewares/        # HTTP Middlewares
 │   │   └── router/             # Route configuration
-│   │
+│   │   
 │   ├── domain/                 # Domain Layer (Core Business)
 │   │   ├── constants/          # Domain constants
 │   │   ├── dto/                 # Data Transfer Objects
@@ -198,6 +198,11 @@ ILOVEPDF_API_KEYS=
 # Auth Configuration
 INTERNAL_AI_API_KEY=
 PUBLIC_ROOT_DOMAIN=localhost:8181
+
+#Memberclass Transcription
+
+TRANSCRIPTION_API_URL=
+
 ```
 
 ### 3. Install dependencies
