@@ -251,6 +251,9 @@ The application uses the following environment variables:
 - `INTERNAL_AI_API_KEY` - Internal API key for AI endpoints validation
 - `PUBLIC_ROOT_DOMAIN` - Public root domain for magic links generation (default: localhost:8181)
 
+**Memberclass Transcription**
+-`TRANSCRIPTION_API_URL`- Url to app memberclass transcription
+
 ## 🏃‍♂️ Running the Application
 
 ### Local Development
