@@ -58,7 +58,7 @@ memberclass-backend-golang/
 │   │   │   └── http/           # HTTP Handlers (Controllers)
 │   │   ├── middlewares/        # HTTP Middlewares
 │   │   └── router/             # Route configuration
-│   │
+│   │   
 │   ├── domain/                 # Domain Layer (Core Business)
 │   │   ├── constants/          # Domain constants
 │   │   ├── dto/                 # Data Transfer Objects
@@ -198,6 +198,11 @@ ILOVEPDF_API_KEYS=
 # Auth Configuration
 INTERNAL_AI_API_KEY=
 PUBLIC_ROOT_DOMAIN=localhost:8181
+
+#Memberclass Transcription
+
+TRANSCRIPTION_API_URL=
+
 ```
 
 ### 3. Install dependencies
@@ -250,6 +255,9 @@ The application uses the following environment variables:
 **Authentication:**
 - `INTERNAL_AI_API_KEY` - Internal API key for AI endpoints validation
 - `PUBLIC_ROOT_DOMAIN` - Public root domain for magic links generation (default: localhost:8181)
+
+**Memberclass Transcription**
+-`TRANSCRIPTION_API_URL`- Url to app memberclass transcription
 
 ## 🏃‍♂️ Running the Application
 

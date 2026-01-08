@@ -10,6 +10,8 @@ import (
 	"time"
 
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	"github.com/memberclass-backend-golang/internal/application/jobs"
+	"github.com/memberclass-backend-golang/internal/application/jobs/transcription"
 	"github.com/memberclass-backend-golang/internal/application/middlewares"
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -96,14 +98,31 @@ func main() {
 			internalhttp.NewAITenantHandler,
 
 			router.NewRouter,
+			jobs.NewScheduler,
+			transcription.NewTranscriptionJob,
+			transcription.NewTranscriptionStatusCheckerJob,
 		),
 		fx.Invoke(startApplication),
 	)
 
 }
 
-func startApplication(log ports.Logger, db *sql.DB, cache ports.Cache, router *router.Router) {
+func startApplication(
+	log ports.Logger,
+	db *sql.DB,
+	cache ports.Cache,
+	router *router.Router,
+	scheduler *jobs.Scheduler,
+	transcriptionJob *transcription.TranscriptionJob,
+	statusCheckerJob *transcription.TranscriptionStatusCheckerJob,
+) {
 	router.SetupRoutes()
+
+	if err := jobs.InitJobs(scheduler, transcriptionJob, statusCheckerJob); err != nil {
+		log.Error("Error initializing jobs: " + err.Error())
+	}
+
+	scheduler.Start()
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -132,6 +151,8 @@ func startApplication(log ports.Logger, db *sql.DB, cache ports.Cache, router *r
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	scheduler.Stop()
 
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown: " + err.Error())
