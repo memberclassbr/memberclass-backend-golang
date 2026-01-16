@@ -3517,6 +3517,385 @@
 							"body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
 						}
 					]
+				},
+				{
+					"name": "Process Lessons Tenant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-internal-api-key",
+								"value": "{{internalAiApiKey}}",
+								"type": "text",
+								"description": "API Key interna para IA"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"tenantId\": \"tenant-id-here\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"ai",
+								"tenants",
+								"process-lessons"
+							]
+						},
+						"description": "Processa as lessons não processadas de um tenant específico, enviando-as para a API de transcrição. Valida se o tenant existe, se tem IA habilitada e se não há job em andamento."
+					},
+					"response": [
+						{
+							"name": "Process Lessons - Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"tenant-123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "Accepted",
+							"code": 202,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": true,\n    \"message\": \"Job de transcrição criado com sucesso\",\n    \"jobId\": \"job-abc123def456\",\n    \"lessonsCount\": 15,\n    \"tenantId\": \"tenant-123\"\n}"
+						},
+						{
+							"name": "Process Lessons - Already Processing",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"tenant-123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": false,\n    \"message\": \"Tenant já possui um job de transcrição em andamento\",\n    \"lessonsCount\": 0,\n    \"tenantId\": \"tenant-123\"\n}"
+						},
+						{
+							"name": "Process Lessons - No Lessons to Process",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"tenant-123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"success\": false,\n    \"message\": \"Nenhuma lesson não processada encontrada para este tenant\",\n    \"lessonsCount\": 0,\n    \"tenantId\": \"tenant-123\"\n}"
+						},
+						{
+							"name": "Process Lessons - Unauthorized",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"tenant-123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
+						},
+						{
+							"name": "Process Lessons - Bad Request",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Bad Request\",\n    \"message\": \"tenantId é obrigatório\"\n}"
+						},
+						{
+							"name": "Process Lessons - Tenant Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"non-existent-tenant\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Not Found\",\n    \"message\": \"Tenant não encontrado\"\n}"
+						},
+						{
+							"name": "Process Lessons - AI Not Enabled",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"tenant-without-ai\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "Forbidden",
+							"code": 403,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Forbidden\",\n    \"message\": \"IA não está habilitada para este tenant\"\n}"
+						},
+						{
+							"name": "Process Lessons - Internal Server Error",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tenantId\": \"tenant-123\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/ai/tenants/process-lessons",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"ai",
+										"tenants",
+										"process-lessons"
+									]
+								}
+							},
+							"status": "Internal Server Error",
+							"code": 500,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"error\": \"Internal Server Error\",\n    \"message\": \"TRANSCRIPTION_API_URL não está configurada\"\n}"
+						}
+					]
 				}
 			]
 		}

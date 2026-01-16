@@ -15,9 +15,12 @@ import (
 
 func TestNewAITenantUseCase(t *testing.T) {
 	mockTenantRepo := mocks.NewMockTenantRepository(t)
+	mockAILessonUseCase := mocks.NewMockAILessonUseCase(t)
 	mockLogger := mocks.NewMockLogger(t)
 
-	useCase := NewAITenantUseCase(mockTenantRepo, mockLogger)
+	mockLogger.EXPECT().Warn("TRANSCRIPTION_API_URL not configured").Maybe()
+
+	useCase := NewAITenantUseCase(mockTenantRepo, mockAILessonUseCase, mockLogger)
 
 	assert.NotNil(t, useCase)
 }
@@ -29,10 +32,10 @@ func TestAITenantUseCase_GetTenantsWithAIEnabled(t *testing.T) {
 	bunnyLibraryApiKey2 := "api-key-456"
 
 	tests := []struct {
-		name          string
-		mockSetup     func(*mocks.MockTenantRepository, *mocks.MockLogger)
-		expectError   bool
-		expectedError *memberclasserrors.MemberClassError
+		name           string
+		mockSetup      func(*mocks.MockTenantRepository, *mocks.MockLogger)
+		expectError    bool
+		expectedError  *memberclasserrors.MemberClassError
 		validateResult func(*testing.T, *response.AITenantsResponse)
 	}{
 		{
@@ -133,7 +136,7 @@ func TestAITenantUseCase_GetTenantsWithAIEnabled(t *testing.T) {
 						Name:               "Tenant 1",
 						AIEnabled:          true,
 						BunnyLibraryID:     &bunnyLibraryID1,
-						BunnyLibraryApiKey:  &bunnyLibraryApiKey1,
+						BunnyLibraryApiKey: &bunnyLibraryApiKey1,
 					},
 					{
 						ID:        "tenant-2",
@@ -158,11 +161,14 @@ func TestAITenantUseCase_GetTenantsWithAIEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockTenantRepo := mocks.NewMockTenantRepository(t)
+			mockAILessonUseCase := mocks.NewMockAILessonUseCase(t)
 			mockLogger := mocks.NewMockLogger(t)
+
+			mockLogger.EXPECT().Warn("TRANSCRIPTION_API_URL not configured").Maybe()
 
 			tt.mockSetup(mockTenantRepo, mockLogger)
 
-			useCase := NewAITenantUseCase(mockTenantRepo, mockLogger)
+			useCase := NewAITenantUseCase(mockTenantRepo, mockAILessonUseCase, mockLogger)
 
 			result, err := useCase.GetTenantsWithAIEnabled(context.Background())
 
@@ -188,4 +194,3 @@ func TestAITenantUseCase_GetTenantsWithAIEnabled(t *testing.T) {
 		})
 	}
 }
-

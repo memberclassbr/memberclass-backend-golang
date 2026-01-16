@@ -22,13 +22,13 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
-		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
-		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
-		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
-		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
-		"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
-		user_activity "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user_activity"
-		student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
+	student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
+	user_activity "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user_activity"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
 	"go.uber.org/fx"
 )
@@ -74,7 +74,9 @@ func main() {
 			usecases.NewStudentReportUseCase,
 			usecases.NewAuthUseCase,
 			usecases.NewAILessonUseCase,
-			usecases.NewAITenantUseCase,
+			func(tenantRepo ports.TenantRepository, aiLessonUseCase ports.AILessonUseCase, logger ports.Logger) ports.AITenantUseCase {
+				return usecases.NewAITenantUseCase(tenantRepo, aiLessonUseCase, logger)
+			},
 
 			middlewares.NewRateLimitMiddleware,
 			middlewares.NewRateLimitTenantMiddleware,
@@ -100,7 +102,6 @@ func main() {
 			router.NewRouter,
 			jobs.NewScheduler,
 			transcription.NewTranscriptionJob,
-			transcription.NewTranscriptionStatusCheckerJob,
 		),
 		fx.Invoke(startApplication),
 	)
@@ -114,11 +115,10 @@ func startApplication(
 	router *router.Router,
 	scheduler *jobs.Scheduler,
 	transcriptionJob *transcription.TranscriptionJob,
-	statusCheckerJob *transcription.TranscriptionStatusCheckerJob,
 ) {
 	router.SetupRoutes()
 
-	if err := jobs.InitJobs(scheduler, transcriptionJob, statusCheckerJob); err != nil {
+	if err := jobs.InitJobs(scheduler, transcriptionJob); err != nil {
 		log.Error("Error initializing jobs: " + err.Error())
 	}
 

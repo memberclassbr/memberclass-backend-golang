@@ -7,6 +7,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
+	request "github.com/memberclass-backend-golang/internal/domain/dto/request"
 	response "github.com/memberclass-backend-golang/internal/domain/dto/response"
 )
 
@@ -77,6 +78,65 @@ func (_c *MockAITenantUseCase_GetTenantsWithAIEnabled_Call) Return(_a0 *response
 }
 
 func (_c *MockAITenantUseCase_GetTenantsWithAIEnabled_Call) RunAndReturn(run func(context.Context) (*response.AITenantsResponse, error)) *MockAITenantUseCase_GetTenantsWithAIEnabled_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ProcessLessonsTenant provides a mock function with given fields: ctx, req
+func (_m *MockAITenantUseCase) ProcessLessonsTenant(ctx context.Context, req request.ProcessLessonsTenantRequest) (*response.ProcessLessonsTenantResponse, error) {
+	ret := _m.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ProcessLessonsTenant")
+	}
+
+	var r0 *response.ProcessLessonsTenantResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, request.ProcessLessonsTenantRequest) (*response.ProcessLessonsTenantResponse, error)); ok {
+		return rf(ctx, req)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, request.ProcessLessonsTenantRequest) *response.ProcessLessonsTenantResponse); ok {
+		r0 = rf(ctx, req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*response.ProcessLessonsTenantResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, request.ProcessLessonsTenantRequest) error); ok {
+		r1 = rf(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockAITenantUseCase_ProcessLessonsTenant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ProcessLessonsTenant'
+type MockAITenantUseCase_ProcessLessonsTenant_Call struct {
+	*mock.Call
+}
+
+// ProcessLessonsTenant is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req request.ProcessLessonsTenantRequest
+func (_e *MockAITenantUseCase_Expecter) ProcessLessonsTenant(ctx interface{}, req interface{}) *MockAITenantUseCase_ProcessLessonsTenant_Call {
+	return &MockAITenantUseCase_ProcessLessonsTenant_Call{Call: _e.mock.On("ProcessLessonsTenant", ctx, req)}
+}
+
+func (_c *MockAITenantUseCase_ProcessLessonsTenant_Call) Run(run func(ctx context.Context, req request.ProcessLessonsTenantRequest)) *MockAITenantUseCase_ProcessLessonsTenant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(request.ProcessLessonsTenantRequest))
+	})
+	return _c
+}
+
+func (_c *MockAITenantUseCase_ProcessLessonsTenant_Call) Return(_a0 *response.ProcessLessonsTenantResponse, _a1 error) *MockAITenantUseCase_ProcessLessonsTenant_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockAITenantUseCase_ProcessLessonsTenant_Call) RunAndReturn(run func(context.Context, request.ProcessLessonsTenantRequest) (*response.ProcessLessonsTenantResponse, error)) *MockAITenantUseCase_ProcessLessonsTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }

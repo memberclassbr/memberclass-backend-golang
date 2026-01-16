@@ -19,13 +19,12 @@ import (
 func TestTranscriptionJob_Name(t *testing.T) {
 	mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
 	mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-	mockCache := mocks.NewMockCache(t)
 	mockLogger := mocks.NewMockLogger(t)
 
 	os.Unsetenv("TRANSCRIPTION_API_URL")
 	mockLogger.EXPECT().Error("TRANSCRIPTION_API_URL not configured").Return()
 
-	job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
+	job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockLogger)
 
 	assert.Equal(t, "transcription-job", job.Name())
 }
@@ -70,14 +69,13 @@ func TestNewTranscriptionJob(t *testing.T) {
 
 			mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
 			mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-			mockCache := mocks.NewMockCache(t)
 			mockLogger := mocks.NewMockLogger(t)
 
 			if tt.wantURL == "" {
 				mockLogger.EXPECT().Error("TRANSCRIPTION_API_URL not configured").Return()
 			}
 
-			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
+			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockLogger)
 
 			assert.NotNil(t, job)
 			assert.Equal(t, tt.wantURL, job.apiURL)
@@ -150,7 +148,6 @@ func TestTranscriptionJob_Execute(t *testing.T) {
 
 			mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
 			mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-			mockCache := mocks.NewMockCache(t)
 			mockLogger := mocks.NewMockLogger(t)
 
 			if tt.mockSetup != nil {
@@ -158,7 +155,6 @@ func TestTranscriptionJob_Execute(t *testing.T) {
 			}
 
 			if tt.name == "should process tenants successfully" {
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return("", assert.AnError)
 				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, mock.Anything).Return(&response.AILessonsResponse{
 					Total:   0,
 					Lessons: []response.AILessonData{},
@@ -167,7 +163,7 @@ func TestTranscriptionJob_Execute(t *testing.T) {
 				mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return()
 			}
 
-			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
+			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockLogger)
 			err := job.Execute(context.Background())
 
 			if tt.expectError {
@@ -194,31 +190,13 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 	tests := []struct {
 		name      string
 		tenant    response.AITenantData
-		mockSetup func(*mocks.MockAILessonUseCase, *mocks.MockCache, *mocks.MockLogger, *httptest.Server)
+		mockSetup func(*mocks.MockAILessonUseCase, *mocks.MockLogger, *httptest.Server)
 		expectErr bool
 	}{
 		{
-			name:   "should skip when tenant has pending job",
-			tenant: response.AITenantData{ID: "tenant-1"},
-			mockSetup: func(mockLessonUseCase *mocks.MockAILessonUseCase, mockCache *mocks.MockCache, mockLogger *mocks.MockLogger, server *httptest.Server) {
-				jobListData, _ := json.Marshal([]string{"job-1"})
-				jobData := dto.TranscriptionJobData{
-					JobID:    "job-1",
-					TenantID: "tenant-1",
-				}
-				jobDataJSON, _ := json.Marshal(jobData)
-
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return(string(jobListData), nil)
-				mockCache.EXPECT().Get(mock.Anything, "transcription:job:job-1").Return(string(jobDataJSON), nil)
-				mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return()
-			},
-			expectErr: false,
-		},
-		{
 			name:   "should skip when no unprocessed lessons",
 			tenant: response.AITenantData{ID: "tenant-1"},
-			mockSetup: func(mockLessonUseCase *mocks.MockAILessonUseCase, mockCache *mocks.MockCache, mockLogger *mocks.MockLogger, server *httptest.Server) {
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return("", nil)
+			mockSetup: func(mockLessonUseCase *mocks.MockAILessonUseCase, mockLogger *mocks.MockLogger, server *httptest.Server) {
 				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, request.GetAILessonsRequest{
 					TenantID:        "tenant-1",
 					OnlyUnprocessed: true,
@@ -230,7 +208,7 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 		{
 			name:   "should process tenant successfully",
 			tenant: response.AITenantData{ID: "tenant-1"},
-			mockSetup: func(mockLessonUseCase *mocks.MockAILessonUseCase, mockCache *mocks.MockCache, mockLogger *mocks.MockLogger, server *httptest.Server) {
+			mockSetup: func(mockLessonUseCase *mocks.MockAILessonUseCase, mockLogger *mocks.MockLogger, server *httptest.Server) {
 				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, "/api/v2/extract-and-embed", r.URL.Path)
 					assert.Equal(t, http.MethodPost, r.Method)
@@ -248,7 +226,6 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 					json.NewEncoder(w).Encode(response)
 				}))
 
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return("", nil)
 				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, request.GetAILessonsRequest{
 					TenantID:        "tenant-1",
 					OnlyUnprocessed: true,
@@ -266,11 +243,6 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 
 				mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return().Times(2)
 
-				jobListData, _ := json.Marshal([]string{})
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return(string(jobListData), nil)
-				mockCache.EXPECT().Set(mock.Anything, "transcription:job:job-123", mock.Anything, mock.Anything).Return(nil)
-				mockCache.EXPECT().Set(mock.Anything, "transcription:jobs:list", mock.Anything, mock.Anything).Return(nil)
-
 				os.Setenv("TRANSCRIPTION_API_URL", server.URL)
 			},
 			expectErr: false,
@@ -281,15 +253,14 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
 			mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-			mockCache := mocks.NewMockCache(t)
 			mockLogger := mocks.NewMockLogger(t)
 
 			var server *httptest.Server
 			if tt.mockSetup != nil {
-				tt.mockSetup(mockLessonUseCase, mockCache, mockLogger, server)
+				tt.mockSetup(mockLessonUseCase, mockLogger, server)
 			}
 
-			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
+			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockLogger)
 			err := job.processTenant(context.Background(), tt.tenant)
 
 			if tt.expectErr {
@@ -305,98 +276,15 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 	}
 }
 
-func TestTranscriptionJob_hasPendingJobForTenant(t *testing.T) {
-	mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
-	mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-	mockCache := mocks.NewMockCache(t)
-	mockLogger := mocks.NewMockLogger(t)
-
-	os.Unsetenv("TRANSCRIPTION_API_URL")
-	mockLogger.EXPECT().Error("TRANSCRIPTION_API_URL not configured").Return()
-
-	job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
-
-	tests := []struct {
-		name      string
-		tenantID  string
-		mockSetup func(*mocks.MockCache)
-		expected  bool
-	}{
-		{
-			name:     "should return false when job list is empty",
-			tenantID: "tenant-1",
-			mockSetup: func(mockCache *mocks.MockCache) {
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return("", nil)
-			},
-			expected: false,
-		},
-		{
-			name:     "should return false when job list doesn't exist",
-			tenantID: "tenant-1",
-			mockSetup: func(mockCache *mocks.MockCache) {
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return("", assert.AnError)
-			},
-			expected: false,
-		},
-		{
-			name:     "should return true when tenant has pending job",
-			tenantID: "tenant-1",
-			mockSetup: func(mockCache *mocks.MockCache) {
-				jobListData, _ := json.Marshal([]string{"job-1"})
-				jobData := dto.TranscriptionJobData{
-					JobID:    "job-1",
-					TenantID: "tenant-1",
-				}
-				jobDataJSON, _ := json.Marshal(jobData)
-
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return(string(jobListData), nil)
-				mockCache.EXPECT().Get(mock.Anything, "transcription:job:job-1").Return(string(jobDataJSON), nil)
-			},
-			expected: true,
-		},
-		{
-			name:     "should return false when tenant doesn't have pending job",
-			tenantID: "tenant-1",
-			mockSetup: func(mockCache *mocks.MockCache) {
-				jobListData, _ := json.Marshal([]string{"job-1"})
-				jobData := dto.TranscriptionJobData{
-					JobID:    "job-1",
-					TenantID: "tenant-2",
-				}
-				jobDataJSON, _ := json.Marshal(jobData)
-
-				mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return(string(jobListData), nil)
-				mockCache.EXPECT().Get(mock.Anything, "transcription:job:job-1").Return(string(jobDataJSON), nil)
-			},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockCache := mocks.NewMockCache(t)
-			job.cache = mockCache
-
-			if tt.mockSetup != nil {
-				tt.mockSetup(mockCache)
-			}
-
-			result := job.hasPendingJobForTenant(context.Background(), tt.tenantID)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestTranscriptionJob_buildPayload(t *testing.T) {
 	mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
 	mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-	mockCache := mocks.NewMockCache(t)
 	mockLogger := mocks.NewMockLogger(t)
 
 	os.Unsetenv("TRANSCRIPTION_API_URL")
 	mockLogger.EXPECT().Error("TRANSCRIPTION_API_URL not configured").Return()
 
-	job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
+	job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockLogger)
 
 	lessonType := "video"
 	mediaURL := "https://example.com/video.mp4"
@@ -476,10 +364,9 @@ func TestTranscriptionJob_sendToAPI(t *testing.T) {
 
 			mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
 			mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-			mockCache := mocks.NewMockCache(t)
 			mockLogger := mocks.NewMockLogger(t)
 
-			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
+			job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockLogger)
 
 			payload := dto.TranscriptionJobRequest{
 				TenantID: "tenant-1",
@@ -498,29 +385,4 @@ func TestTranscriptionJob_sendToAPI(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestTranscriptionJob_saveJobToRedis(t *testing.T) {
-	mockTenantUseCase := mocks.NewMockAITenantUseCase(t)
-	mockLessonUseCase := mocks.NewMockAILessonUseCase(t)
-	mockCache := mocks.NewMockCache(t)
-	mockLogger := mocks.NewMockLogger(t)
-
-	os.Unsetenv("TRANSCRIPTION_API_URL")
-	mockLogger.EXPECT().Error("TRANSCRIPTION_API_URL not configured").Return()
-
-	job := NewTranscriptionJob(mockTenantUseCase, mockLessonUseCase, mockCache, mockLogger)
-
-	lessons := []response.AILessonData{
-		{ID: "lesson-1"},
-		{ID: "lesson-2"},
-	}
-
-	jobListData, _ := json.Marshal([]string{})
-	mockCache.EXPECT().Get(mock.Anything, "transcription:jobs:list").Return(string(jobListData), nil)
-	mockCache.EXPECT().Set(mock.Anything, "transcription:job:job-123", mock.Anything, mock.Anything).Return(nil)
-	mockCache.EXPECT().Set(mock.Anything, "transcription:jobs:list", mock.Anything, mock.Anything).Return(nil)
-
-	err := job.saveJobToRedis(context.Background(), "job-123", "tenant-1", lessons)
-	assert.NoError(t, err)
 }

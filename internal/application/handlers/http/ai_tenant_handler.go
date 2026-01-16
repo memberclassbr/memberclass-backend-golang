@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto/request"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 )
@@ -42,6 +43,39 @@ func (h *AITenantHandler) GetTenantsWithAIEnabled(w http.ResponseWriter, r *http
 	}
 
 	h.sendJSONResponse(w, http.StatusOK, response)
+}
+
+func (h *AITenantHandler) ProcessLessonsTenant(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	apiKey := r.Header.Get("x-internal-api-key")
+	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
+	if apiKey == "" || apiKey != expectedKey {
+		h.sendCustomErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório", "UNAUTHORIZED")
+		return
+	}
+
+	var req request.ProcessLessonsTenantRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.sendErrorResponse(w, http.StatusBadRequest, "Corpo da requisição inválido")
+		return
+	}
+
+	response, err := h.useCase.ProcessLessonsTenant(r.Context(), req)
+	if err != nil {
+		h.handleUseCaseError(w, err)
+		return
+	}
+
+	statusCode := http.StatusOK
+	if response.Success {
+		statusCode = http.StatusAccepted
+	}
+
+	h.sendJSONResponse(w, statusCode, response)
 }
 
 func (h *AITenantHandler) handleUseCaseError(w http.ResponseWriter, err error) {
@@ -101,4 +135,3 @@ func (h *AITenantHandler) sendJSONResponse(w http.ResponseWriter, code int, data
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(data)
 }
-

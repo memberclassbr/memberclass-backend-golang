@@ -11,7 +11,6 @@ import (
 
 const (
 	TranscriptionJobSchedule = "0 0 22 * * *"
-	StatusCheckerJobSchedule = "0 */10 * * * *"
 )
 
 type ScheduledJob struct {
@@ -93,18 +92,12 @@ func (s *Scheduler) Stop() {
 	s.logger.Info("Scheduler stopped")
 }
 
-func InitJobs(scheduler *Scheduler, transcriptionJob ports.Job, statusCheckerJob ports.Job) error {
+func InitJobs(scheduler *Scheduler, transcriptionJob ports.Job) error {
 	if err := scheduler.AddJob(transcriptionJob, TranscriptionJobSchedule); err != nil {
 		scheduler.logger.Error("Error scheduling transcription job: " + err.Error())
 		return err
 	}
 	scheduler.logger.Info("Transcription job scheduled to run daily at 10 PM")
-
-	if err := scheduler.AddJob(statusCheckerJob, StatusCheckerJobSchedule); err != nil {
-		scheduler.logger.Error("Error scheduling status checker job: " + err.Error())
-		return err
-	}
-	scheduler.logger.Info("Status checker job scheduled to run every 10 minutes")
 
 	return nil
 }

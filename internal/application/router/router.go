@@ -104,7 +104,10 @@ func (r *Router) SetupRoutes() {
 					r.rateLimitTenantMiddleware.LimitByTenant,
 				).Get("/", r.aiLessonHandler.GetLessons)
 			})
-			router.Get("/tenants", r.aiTenantHandler.GetTenantsWithAIEnabled)
+			router.Route("/tenants", func(router chi.Router) {
+				router.Get("/", r.aiTenantHandler.GetTenantsWithAIEnabled)
+				router.Post("/process-lessons", r.aiTenantHandler.ProcessLessonsTenant)
+			})
 		})
 
 		router.Route("/videos", func(router chi.Router) {
