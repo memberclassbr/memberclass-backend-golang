@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 )
 
 type TenantRepository struct {
@@ -15,7 +16,7 @@ type TenantRepository struct {
 	log ports.Logger
 }
 
-func (t *TenantRepository) FindByID(tenantID string) (*entities.Tenant, error) {
+func (t *TenantRepository) FindByID(tenantID string) (*tenant.Tenant, error) {
 
 	query := `SELECT id, "createdAt", "name", description, "plan", "emailContact", logo, image, favicon, 
 		"bgLogin", "customMenu", "externalCodes", subdomain, "customDomain", "mainColor", 
@@ -24,7 +25,7 @@ func (t *TenantRepository) FindByID(tenantID string) (*entities.Tenant, error) {
 		"hideCards", "hideYoutube", "bunnyLibraryApiKey", "bunnyLibraryId", token_api_auth, 
 		"language", webhook_api, "registerNewUser", "aiEnabled" FROM "Tenant" WHERE id = $1`
 
-	var tenant entities.Tenant
+	var tenant tenant.Tenant
 	err := t.db.QueryRow(query, tenantID).Scan(
 		&tenant.ID,
 		&tenant.CreatedAt,
@@ -75,11 +76,11 @@ func (t *TenantRepository) FindByID(tenantID string) (*entities.Tenant, error) {
 	return &tenant, nil
 }
 
-func (t *TenantRepository) FindBunnyInfoByID(tenantID string) (*entities.Tenant, error) {
+func (t *TenantRepository) FindBunnyInfoByID(tenantID string) (*tenant.Tenant, error) {
 	query := `SELECT id, "bunnyLibraryApiKey", "bunnyLibraryId"
 				FROM "Tenant" WHERE id = $1`
 
-	var tenant entities.Tenant
+	var tenant tenant.Tenant
 	err := t.db.QueryRow(query, tenantID).Scan(
 		&tenant.ID,
 		&tenant.BunnyLibraryApiKey,
@@ -98,7 +99,7 @@ func (t *TenantRepository) FindBunnyInfoByID(tenantID string) (*entities.Tenant,
 	return &tenant, nil
 }
 
-func (t *TenantRepository) FindTenantByToken(ctx context.Context, token string) (*entities.Tenant, error) {
+func (t *TenantRepository) FindTenantByToken(ctx context.Context, token string) (*tenant.Tenant, error) {
 
 	//TODO: create index to token_api_auth
 	query := `
@@ -108,7 +109,7 @@ func (t *TenantRepository) FindTenantByToken(ctx context.Context, token string) 
   LIMIT 1
 `
 
-	var tenant entities.Tenant
+	var tenant tenant.Tenant
 	err := t.db.QueryRowContext(ctx, query, token).Scan(
 		&tenant.ID,
 		&tenant.Name)
@@ -146,7 +147,7 @@ func (t *TenantRepository) UpdateTokenApiAuth(ctx context.Context, tenantID, tok
 
 }
 
-func (t *TenantRepository) FindAllWithAIEnabled(ctx context.Context) ([]*entities.Tenant, error) {
+func (t *TenantRepository) FindAllWithAIEnabled(ctx context.Context) ([]*tenant.Tenant, error) {
 	query := `
 		SELECT id, name, "aiEnabled", "bunnyLibraryId", "bunnyLibraryApiKey"
 		FROM "Tenant"
@@ -163,9 +164,9 @@ func (t *TenantRepository) FindAllWithAIEnabled(ctx context.Context) ([]*entitie
 	}
 	defer rows.Close()
 
-	tenants := make([]*entities.Tenant, 0)
+	tenants := make([]*tenant.Tenant, 0)
 	for rows.Next() {
-		var tenant entities.Tenant
+		var tenant tenant.Tenant
 		var bunnyLibraryID sql.NullString
 		var bunnyLibraryApiKey sql.NullString
 
@@ -205,7 +206,7 @@ func (t *TenantRepository) FindAllWithAIEnabled(ctx context.Context) ([]*entitie
 	return tenants, nil
 }
 
-func NewTenantRepository(db *sql.DB, log ports.Logger) ports.TenantRepository {
+func NewTenantRepository(db *sql.DB, log ports.Logger) tenant2.TenantRepository {
 	return &TenantRepository{
 		db:  db,
 		log: log,

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -633,7 +633,7 @@ func TestLessonRepository_Update_Success(t *testing.T) {
 
 	lessonID := "lesson-123"
 	mediaURL := "https://example.com/media.mp4"
-	lesson := &entities.Lesson{
+	lesson := &lessons.Lesson{
 		ID:                     &lessonID,
 		Access:                 intPtr(1),
 		ReferenceAccess:        stringPtr("public"),
@@ -679,7 +679,7 @@ func TestLessonRepository_Update_WithNullMediaURL(t *testing.T) {
 	repo := &LessonRepository{db: db, log: mockLogger}
 
 	lessonID := "lesson-123"
-	lesson := &entities.Lesson{
+	lesson := &lessons.Lesson{
 		ID:                     &lessonID,
 		Access:                 intPtr(1),
 		ReferenceAccess:        stringPtr("public"),
@@ -728,7 +728,7 @@ func TestLessonRepository_Update_DatabaseError(t *testing.T) {
 
 	lessonID := "lesson-123"
 	mediaURL := "https://example.com/media.mp4"
-	lesson := &entities.Lesson{
+	lesson := &lessons.Lesson{
 		ID:                     &lessonID,
 		Access:                 intPtr(1),
 		ReferenceAccess:        stringPtr("public"),
@@ -826,7 +826,7 @@ func TestLessonRepository_CreatePDFAsset_Success(t *testing.T) {
 	repo := &LessonRepository{db: db, log: mockLogger}
 
 	totalPages := 5
-	asset := &entities.LessonPDFAsset{
+	asset := &lessons.LessonPDFAsset{
 		ID:           "asset-123",
 		LessonID:     "lesson-123",
 		SourcePDFURL: "https://example.com/source.pdf",
@@ -855,7 +855,7 @@ func TestLessonRepository_CreatePDFAsset_WithNullValues(t *testing.T) {
 	repo := &LessonRepository{db: db, log: mockLogger}
 
 	errorMsg := "test error"
-	asset := &entities.LessonPDFAsset{
+	asset := &lessons.LessonPDFAsset{
 		ID:           "asset-123",
 		LessonID:     "lesson-123",
 		SourcePDFURL: "https://example.com/source.pdf",
@@ -884,7 +884,7 @@ func TestLessonRepository_CreatePDFAsset_DatabaseError(t *testing.T) {
 	repo := &LessonRepository{db: db, log: mockLogger}
 
 	totalPages := 5
-	asset := &entities.LessonPDFAsset{
+	asset := &lessons.LessonPDFAsset{
 		ID:           "asset-123",
 		LessonID:     "lesson-123",
 		SourcePDFURL: "https://example.com/source.pdf",
@@ -911,7 +911,7 @@ func TestLessonRepository_UpdatePDFAsset_Success(t *testing.T) {
 	repo := &LessonRepository{db: db, log: mockLogger}
 
 	totalPages := 10
-	asset := &entities.LessonPDFAsset{
+	asset := &lessons.LessonPDFAsset{
 		ID:           "asset-123",
 		SourcePDFURL: "https://example.com/source.pdf",
 		TotalPages:   &totalPages,
@@ -940,7 +940,7 @@ func TestLessonRepository_UpdatePDFAsset_DatabaseError(t *testing.T) {
 	repo := &LessonRepository{db: db, log: mockLogger}
 
 	totalPages := 10
-	asset := &entities.LessonPDFAsset{
+	asset := &lessons.LessonPDFAsset{
 		ID:           "asset-123",
 		SourcePDFURL: "https://example.com/source.pdf",
 		TotalPages:   &totalPages,
@@ -1148,7 +1148,7 @@ func TestLessonRepository_CreatePDFPage_Success(t *testing.T) {
 
 	width := 1920
 	height := 1080
-	page := &entities.LessonPDFPage{
+	page := &lessons.LessonPDFPage{
 		ID:         "page-123",
 		AssetID:    "asset-123",
 		PageNumber: 1,
@@ -1176,7 +1176,7 @@ func TestLessonRepository_CreatePDFPage_WithNullDimensions(t *testing.T) {
 
 	repo := &LessonRepository{db: db, log: mockLogger}
 
-	page := &entities.LessonPDFPage{
+	page := &lessons.LessonPDFPage{
 		ID:         "page-123",
 		AssetID:    "asset-123",
 		PageNumber: 1,
@@ -1204,7 +1204,7 @@ func TestLessonRepository_CreatePDFPage_DatabaseError(t *testing.T) {
 
 	repo := &LessonRepository{db: db, log: mockLogger}
 
-	page := &entities.LessonPDFPage{
+	page := &lessons.LessonPDFPage{
 		ID:         "page-123",
 		AssetID:    "asset-123",
 		PageNumber: 1,
@@ -1631,7 +1631,7 @@ func TestLessonRepository_GetLessonsWithHierarchyByTenant_EmptyResult(t *testing
 
 	assert.NoError(t, err)
 	if result == nil {
-		result = []ports.AILessonWithHierarchy{}
+		result = []lesson.AILessonWithHierarchy{}
 	}
 	assert.Len(t, result, 0)
 	assert.NoError(t, mockDB.ExpectationsWereMet())

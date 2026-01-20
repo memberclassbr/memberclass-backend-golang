@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/dto/request"
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/comment"
+	comment2 "github.com/memberclass-backend-golang/internal/domain/entities/comment"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	comment3 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
 )
 
 type CommentRepository struct {
@@ -20,14 +21,14 @@ type CommentRepository struct {
 	log ports.Logger
 }
 
-func NewCommentRepository(db *sql.DB, log ports.Logger) ports.CommentRepository {
+func NewCommentRepository(db *sql.DB, log ports.Logger) comment3.CommentRepository {
 	return &CommentRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-func (r *CommentRepository) FindByIDAndTenant(ctx context.Context, commentID, tenantID string) (*entities.Comment, error) {
+func (r *CommentRepository) FindByIDAndTenant(ctx context.Context, commentID, tenantID string) (*comment2.Comment, error) {
 	query := `
         SELECT 
             c.id,
@@ -48,7 +49,7 @@ func (r *CommentRepository) FindByIDAndTenant(ctx context.Context, commentID, te
         LIMIT 1
     `
 
-	var comment entities.Comment
+	var comment comment2.Comment
 	var answer sql.NullString
 	var published sql.NullBool
 
@@ -80,7 +81,7 @@ func (r *CommentRepository) FindByIDAndTenant(ctx context.Context, commentID, te
 	return &comment, nil
 }
 
-func (r *CommentRepository) FindByIDAndTenantWithDetails(ctx context.Context, commentID, tenantID string) (*dto.CommentResponse, error) {
+func (r *CommentRepository) FindByIDAndTenantWithDetails(ctx context.Context, commentID, tenantID string) (*comment.CommentResponse, error) {
 	query := `
         SELECT 
             c.id,
@@ -105,7 +106,7 @@ func (r *CommentRepository) FindByIDAndTenantWithDetails(ctx context.Context, co
         LIMIT 1
     `
 
-	var response dto.CommentResponse
+	var response comment.CommentResponse
 	var answer sql.NullString
 	var published sql.NullBool
 
@@ -140,7 +141,7 @@ func (r *CommentRepository) FindByIDAndTenantWithDetails(ctx context.Context, co
 	return &response, nil
 }
 
-func (r *CommentRepository) Update(ctx context.Context, commentID, answer string, published bool) (*entities.Comment, error) {
+func (r *CommentRepository) Update(ctx context.Context, commentID, answer string, published bool) (*comment2.Comment, error) {
 	query := `
         UPDATE "Comment"
         SET answer = $2, published = $3, "updatedAt" = $4
@@ -149,7 +150,7 @@ func (r *CommentRepository) Update(ctx context.Context, commentID, answer string
     `
 
 	now := time.Now()
-	var comment entities.Comment
+	var comment comment2.Comment
 	var answerResult sql.NullString
 	var publishedResult sql.NullBool
 
@@ -174,7 +175,7 @@ func (r *CommentRepository) Update(ctx context.Context, commentID, answer string
 	return &comment, nil
 }
 
-func (r *CommentRepository) FindAllByTenant(ctx context.Context, tenantID string, req *request.GetCommentsRequest) ([]*dto.CommentResponse, int64, error) {
+func (r *CommentRepository) FindAllByTenant(ctx context.Context, tenantID string, req *comments.GetCommentsRequest) ([]*comment.CommentResponse, int64, error) {
 	baseQuery := `
         SELECT 
             c.id,
@@ -257,9 +258,9 @@ func (r *CommentRepository) FindAllByTenant(ctx context.Context, tenantID string
 	}
 	defer rows.Close()
 
-	var comments []*dto.CommentResponse
+	var comments []*comment.CommentResponse
 	for rows.Next() {
-		var response dto.CommentResponse
+		var response comment.CommentResponse
 		var answer sql.NullString
 		var published sql.NullBool
 

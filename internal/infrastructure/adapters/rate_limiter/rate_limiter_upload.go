@@ -8,6 +8,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 )
 
 type RateLimiterUpload struct {
@@ -15,7 +16,7 @@ type RateLimiterUpload struct {
 	log    ports.Logger
 }
 
-func NewRateLimiterUpload(client ports.Cache, log ports.Logger) ports.RateLimiterUpload {
+func NewRateLimiterUpload(client ports.Cache, log ports.Logger) rate_limit.RateLimiterUpload {
 	return &RateLimiterUpload{
 		client: client,
 		log:    log,

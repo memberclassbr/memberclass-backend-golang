@@ -6,7 +6,7 @@ import (
 	context "context"
 
 	dto "github.com/memberclass-backend-golang/internal/domain/dto"
-	entities "github.com/memberclass-backend-golang/internal/domain/entities"
+	entities "github.com/memberclass-backend-golang/internal/domain/entities/lessons"
 
 	mock "github.com/stretchr/testify/mock"
 )

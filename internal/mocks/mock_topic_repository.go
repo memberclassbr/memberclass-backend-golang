@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	ports "github.com/memberclass-backend-golang/internal/domain/ports"
+	ports "github.com/memberclass-backend-golang/internal/domain/ports/topic"
 	mock "github.com/stretchr/testify/mock"
 )
 

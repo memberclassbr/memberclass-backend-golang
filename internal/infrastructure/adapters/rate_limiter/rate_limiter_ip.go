@@ -7,6 +7,7 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 )
 
 type RateLimiterIPImpl struct {
@@ -14,14 +15,14 @@ type RateLimiterIPImpl struct {
 	log   ports.Logger
 }
 
-func NewRateLimiterIP(cache ports.Cache, log ports.Logger) ports.RateLimiterIP {
+func NewRateLimiterIP(cache ports.Cache, log ports.Logger) rate_limit.RateLimiterIP {
 	return &RateLimiterIPImpl{
 		cache: cache,
 		log:   log,
 	}
 }
 
-func (r *RateLimiterIPImpl) CheckLimit(ctx context.Context, ip string) (bool, ports.RateLimitInfo, error) {
+func (r *RateLimiterIPImpl) CheckLimit(ctx context.Context, ip string) (bool, rate_limit.RateLimitInfo, error) {
 	key := constants.APIRateLimitIPKeyPrefix + ip
 	return r.checkLimit(ctx, key, constants.APIRateLimitIPLimit, constants.APIRateLimitWindow)
 }
@@ -31,11 +32,11 @@ func (r *RateLimiterIPImpl) Increment(ctx context.Context, ip string) error {
 	return r.increment(ctx, key, constants.APIRateLimitIPLimit, constants.APIRateLimitWindow)
 }
 
-func (r *RateLimiterIPImpl) checkLimit(ctx context.Context, key string, limit int, window time.Duration) (bool, ports.RateLimitInfo, error) {
+func (r *RateLimiterIPImpl) checkLimit(ctx context.Context, key string, limit int, window time.Duration) (bool, rate_limit.RateLimitInfo, error) {
 	current, err := r.cache.Get(ctx, key)
 	if err != nil {
 		if err.Error() == "redis: nil" {
-			return true, ports.RateLimitInfo{
+			return true, rate_limit.RateLimitInfo{
 				Limit:      limit,
 				Remaining:  limit,
 				Reset:      time.Now().Add(window),
@@ -43,13 +44,13 @@ func (r *RateLimiterIPImpl) checkLimit(ctx context.Context, key string, limit in
 			}, nil
 		}
 		r.log.Error("Error getting rate limit for key " + key + ": " + err.Error())
-		return false, ports.RateLimitInfo{}, err
+		return false, rate_limit.RateLimitInfo{}, err
 	}
 
 	count, err := strconv.Atoi(current)
 	if err != nil {
 		r.log.Error("Error parsing rate limit count for key " + key + ": " + err.Error())
-		return false, ports.RateLimitInfo{}, err
+		return false, rate_limit.RateLimitInfo{}, err
 	}
 
 	ttl, err := r.cache.TTL(ctx, key)
@@ -70,7 +71,7 @@ func (r *RateLimiterIPImpl) checkLimit(ctx context.Context, key string, limit in
 		retryAfter = int(ttl.Seconds())
 	}
 
-	return allowed, ports.RateLimitInfo{
+	return allowed, rate_limit.RateLimitInfo{
 		Limit:      limit,
 		Remaining:  remaining,
 		Reset:      resetTime,
@@ -101,4 +102,3 @@ func (r *RateLimiterIPImpl) increment(ctx context.Context, key string, limit int
 
 	return nil
 }
-

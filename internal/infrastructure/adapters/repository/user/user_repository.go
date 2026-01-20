@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response"
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	purchasesdto "github.com/memberclass-backend-golang/internal/domain/dto/response/purchases"
+	userdto "github.com/memberclass-backend-golang/internal/domain/dto/response/user"
+	userentities "github.com/memberclass-backend-golang/internal/domain/entities/user"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	userports "github.com/memberclass-backend-golang/internal/domain/ports/user"
 )
 
 type UserRepository struct {
@@ -18,19 +20,19 @@ type UserRepository struct {
 	log ports.Logger
 }
 
-func NewUserRepository(db *sql.DB, log ports.Logger) ports.UserRepository {
+func NewUserRepository(db *sql.DB, log ports.Logger) userports.UserRepository {
 	return &UserRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-func (r *UserRepository) FindByID(userID string) (*entities.User, error) {
+func (r *UserRepository) FindByID(userID string) (*userentities.User, error) {
 	query := `SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE id = $1`
 
-	var user entities.User
+	var user userentities.User
 	err := r.db.QueryRow(query, userID).Scan(
 		&user.ID,
 		&user.Username,
@@ -57,12 +59,12 @@ func (r *UserRepository) FindByID(userID string) (*entities.User, error) {
 	return &user, nil
 }
 
-func (r *UserRepository) FindByEmail(email string) (*entities.User, error) {
+func (r *UserRepository) FindByEmail(email string) (*userentities.User, error) {
 	query := `SELECT id, username, phone, email, "emailVerified", image, 
 		"createdAt", "updatedAt", referrals 
 		FROM "User" WHERE email = $1`
 
-	var user entities.User
+	var user userentities.User
 	err := r.db.QueryRow(query, email).Scan(
 		&user.ID,
 		&user.Username,
@@ -124,7 +126,7 @@ func (r *UserRepository) BelongsToTenant(userID string, tenantID string) (bool, 
 	return belongs, nil
 }
 
-func (r *UserRepository) FindPurchasesByUserAndTenant(ctx context.Context, userID, tenantID string, purchaseTypes []string, page, limit int) ([]response.UserPurchaseData, int64, error) {
+func (r *UserRepository) FindPurchasesByUserAndTenant(ctx context.Context, userID, tenantID string, purchaseTypes []string, page, limit int) ([]purchasesdto.UserPurchaseData, int64, error) {
 	offset := (page - 1) * limit
 
 	typesFilter := []string{"purchase", "refund"}
@@ -164,11 +166,11 @@ func (r *UserRepository) FindPurchasesByUserAndTenant(ctx context.Context, userI
 	}
 	defer rows.Close()
 
-	purchases := make([]response.UserPurchaseData, 0)
+	purchases := make([]purchasesdto.UserPurchaseData, 0)
 	var total int64
 
 	for rows.Next() {
-		var purchase response.UserPurchaseData
+		var purchase purchasesdto.UserPurchaseData
 		if err := rows.Scan(
 			&purchase.ID,
 			&purchase.Type,
@@ -200,7 +202,7 @@ func (r *UserRepository) FindPurchasesByUserAndTenant(ctx context.Context, userI
 	return purchases, total, nil
 }
 
-func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID string, email string, page, limit int) ([]response.UserInformation, int64, error) {
+func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID string, email string, page, limit int) ([]userdto.UserInformation, int64, error) {
 	offset := (page - 1) * limit
 
 	var query string
@@ -321,7 +323,7 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 	}
 	defer rows.Close()
 
-	userMap := make(map[string]*response.UserInformation)
+	userMap := make(map[string]*userdto.UserInformation)
 	userIDs := make([]string, 0)
 
 	for rows.Next() {
@@ -343,11 +345,11 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 			lastAccessStr = &formatted
 		}
 
-		userMap[userID] = &response.UserInformation{
+		userMap[userID] = &userdto.UserInformation{
 			UserID:     userID,
 			Email:      userEmail,
 			IsPaid:     isPaid,
-			Deliveries: make([]response.DeliveryInfo, 0),
+			Deliveries: make([]userdto.DeliveryInfo, 0),
 			LastAccess: lastAccessStr,
 		}
 		userIDs = append(userIDs, userID)
@@ -362,7 +364,7 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 	}
 
 	if len(userIDs) == 0 {
-		result := make([]response.UserInformation, 0)
+		result := make([]userdto.UserInformation, 0)
 		return result, total, nil
 	}
 
@@ -399,7 +401,7 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 		}
 
 		if user, exists := userMap[userID]; exists {
-			user.Deliveries = append(user.Deliveries, response.DeliveryInfo{
+			user.Deliveries = append(user.Deliveries, userdto.DeliveryInfo{
 				ID:         deliveryID,
 				Name:       deliveryName,
 				AccessDate: accessDate.Format("2006-01-02T15:04:05.000Z"),
@@ -407,7 +409,7 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 		}
 	}
 
-	result := make([]response.UserInformation, 0, len(userMap))
+	result := make([]userdto.UserInformation, 0, len(userMap))
 	for _, userID := range userIDs {
 		if user, exists := userMap[userID]; exists {
 			result = append(result, *user)
@@ -500,4 +502,3 @@ func (r *UserRepository) UpdateMagicToken(ctx context.Context, userID string, to
 
 	return nil
 }
-

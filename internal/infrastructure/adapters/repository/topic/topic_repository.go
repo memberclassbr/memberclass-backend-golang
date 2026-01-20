@@ -8,6 +8,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/topic"
 )
 
 type TopicRepository struct {
@@ -15,14 +16,14 @@ type TopicRepository struct {
 	log ports.Logger
 }
 
-func NewTopicRepository(db *sql.DB, log ports.Logger) ports.TopicRepository {
+func NewTopicRepository(db *sql.DB, log ports.Logger) topic.TopicRepository {
 	return &TopicRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-func (r *TopicRepository) FindByIDWithDeliveries(ctx context.Context, topicID string) (*ports.TopicInfo, error) {
+func (r *TopicRepository) FindByIDWithDeliveries(ctx context.Context, topicID string) (*topic.TopicInfo, error) {
 	query := `
 		SELECT t.id, t."onlyAdmin", COALESCE(array_agg(tod."deliveryId") FILTER (WHERE tod."deliveryId" IS NOT NULL), '{}')
 		FROM "Topic" t
@@ -31,7 +32,7 @@ func (r *TopicRepository) FindByIDWithDeliveries(ctx context.Context, topicID st
 		GROUP BY t.id, t."onlyAdmin"
 	`
 
-	var topic ports.TopicInfo
+	var topic topic.TopicInfo
 	var deliveryIDs pq.StringArray
 
 	err := r.db.QueryRowContext(ctx, query, topicID).Scan(&topic.ID, &topic.OnlyAdmin, &deliveryIDs)
@@ -49,4 +50,3 @@ func (r *TopicRepository) FindByIDWithDeliveries(ctx context.Context, topicID st
 	topic.DeliveryIDs = []string(deliveryIDs)
 	return &topic, nil
 }
-

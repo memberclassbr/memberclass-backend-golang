@@ -13,6 +13,7 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/bunny"
 )
 
 type BunnyService struct {
@@ -232,7 +233,7 @@ func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess
 
 }
 
-func NewBunnyService(log ports.Logger) ports.BunnyService {
+func NewBunnyService(log ports.Logger) bunny.BunnyService {
 	timeoutStr := os.Getenv("BUNNY_TIMEOUT_SECONDS")
 	timeout := 30 * time.Second
 

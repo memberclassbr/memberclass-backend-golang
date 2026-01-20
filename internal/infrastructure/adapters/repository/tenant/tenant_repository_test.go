@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
@@ -21,23 +21,23 @@ func stringPtr(s string) *string {
 
 func TestTenantRepository_FindByID(t *testing.T) {
 	tests := []struct {
-		name          string
-		tenantID      string
-		mockSetup     func(sqlmock.Sqlmock)
-		expectedError error
-		expectedTenant *entities.Tenant
+		name           string
+		tenantID       string
+		mockSetup      func(sqlmock.Sqlmock)
+		expectedError  error
+		expectedTenant *tenant.Tenant
 	}{
 		{
 			name:     "should return tenant when found",
 			tenantID: "tenant-123",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{
-					"id", "createdAt", "name", "description", "plan", "emailContact", 
-					"logo", "image", "favicon", "bgLogin", "customMenu", "externalCodes", 
-					"subdomain", "customDomain", "mainColor", "dropboxAppId", "dropboxMemberId", 
-					"dropboxRefreshToken", "dropboxAccessToken", "dropboxAccessTokenValid", 
-					"import", "isOpenArea", "listFiles", "comments", "hideCards", "hideYoutube", 
-					"bunnyLibraryApiKey", "bunnyLibraryId", "token_api_auth", "language", 
+					"id", "createdAt", "name", "description", "plan", "emailContact",
+					"logo", "image", "favicon", "bgLogin", "customMenu", "externalCodes",
+					"subdomain", "customDomain", "mainColor", "dropboxAppId", "dropboxMemberId",
+					"dropboxRefreshToken", "dropboxAccessToken", "dropboxAccessTokenValid",
+					"import", "isOpenArea", "listFiles", "comments", "hideCards", "hideYoutube",
+					"bunnyLibraryApiKey", "bunnyLibraryId", "token_api_auth", "language",
 					"webhook_api", "registerNewUser", "aiEnabled",
 				}).AddRow(
 					"tenant-123", time.Now(), "Test Tenant", "Description", "Pro", "contact@test.com",
@@ -54,14 +54,14 @@ func TestTenantRepository_FindByID(t *testing.T) {
 					WithArgs("tenant-123").WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedTenant: &entities.Tenant{
-				ID: "tenant-123",
-				Name: "Test Tenant",
-				Description: stringPtr("Description"),
-				Plan: stringPtr("Pro"),
-				EmailContact: stringPtr("contact@test.com"),
+			expectedTenant: &tenant.Tenant{
+				ID:                 "tenant-123",
+				Name:               "Test Tenant",
+				Description:        stringPtr("Description"),
+				Plan:               stringPtr("Pro"),
+				EmailContact:       stringPtr("contact@test.com"),
 				BunnyLibraryApiKey: stringPtr("bunny-api-key"),
-				BunnyLibraryID: stringPtr("bunny-library-id"),
+				BunnyLibraryID:     stringPtr("bunny-library-id"),
 			},
 		},
 		{
@@ -76,7 +76,7 @@ func TestTenantRepository_FindByID(t *testing.T) {
 		"language", webhook_api, "registerNewUser", "aiEnabled" FROM "Tenant" WHERE id = \$1`).
 					WithArgs("non-existent").WillReturnError(sql.ErrNoRows)
 			},
-			expectedError: memberclasserrors.ErrTenantNotFound,
+			expectedError:  memberclasserrors.ErrTenantNotFound,
 			expectedTenant: nil,
 		},
 		{
@@ -147,11 +147,11 @@ func TestTenantRepository_FindByID(t *testing.T) {
 
 func TestTenantRepository_FindBunnyInfoByID(t *testing.T) {
 	tests := []struct {
-		name          string
-		tenantID      string
-		mockSetup     func(sqlmock.Sqlmock)
-		expectedError error
-		expectedTenant *entities.Tenant
+		name           string
+		tenantID       string
+		mockSetup      func(sqlmock.Sqlmock)
+		expectedError  error
+		expectedTenant *tenant.Tenant
 	}{
 		{
 			name:     "should return tenant bunny info when found",
@@ -164,10 +164,10 @@ func TestTenantRepository_FindBunnyInfoByID(t *testing.T) {
 					WithArgs("tenant-123").WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedTenant: &entities.Tenant{
-				ID: "tenant-123",
+			expectedTenant: &tenant.Tenant{
+				ID:                 "tenant-123",
 				BunnyLibraryApiKey: stringPtr("bunny-api-key"),
-				BunnyLibraryID: stringPtr("bunny-library-id"),
+				BunnyLibraryID:     stringPtr("bunny-library-id"),
 			},
 		},
 		{
@@ -178,7 +178,7 @@ func TestTenantRepository_FindBunnyInfoByID(t *testing.T) {
 				FROM "Tenant" WHERE id = \$1`).
 					WithArgs("non-existent").WillReturnError(sql.ErrNoRows)
 			},
-			expectedError: memberclasserrors.ErrTenantNotFound,
+			expectedError:  memberclasserrors.ErrTenantNotFound,
 			expectedTenant: nil,
 		},
 		{
@@ -235,15 +235,15 @@ func TestTenantRepository_FindBunnyInfoByID(t *testing.T) {
 
 func TestTenantRepository_FindTenantByToken(t *testing.T) {
 	tests := []struct {
-		name          string
-		token         string
-		mockSetup     func(sqlmock.Sqlmock)
-		expectedError error
-		expectedTenant *entities.Tenant
+		name           string
+		token          string
+		mockSetup      func(sqlmock.Sqlmock)
+		expectedError  error
+		expectedTenant *tenant.Tenant
 	}{
 		{
 			name:  "should return tenant when found by token",
-			token:  "token-hash-123",
+			token: "token-hash-123",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{"id", "name"}).
 					AddRow("tenant-123", "Test Tenant")
@@ -252,25 +252,25 @@ func TestTenantRepository_FindTenantByToken(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedTenant: &entities.Tenant{
+			expectedTenant: &tenant.Tenant{
 				ID:   "tenant-123",
 				Name: "Test Tenant",
 			},
 		},
 		{
 			name:  "should return ErrTenantNotFound when tenant does not exist",
-			token:  "non-existent-token",
+			token: "non-existent-token",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				sqlMock.ExpectQuery(`SELECT id, name`).
 					WithArgs("non-existent-token").
 					WillReturnError(sql.ErrNoRows)
 			},
-			expectedError: memberclasserrors.ErrTenantNotFound,
+			expectedError:  memberclasserrors.ErrTenantNotFound,
 			expectedTenant: nil,
 		},
 		{
 			name:  "should return MemberClassError when database error occurs",
-			token:  "token-hash-123",
+			token: "token-hash-123",
 			mockSetup: func(sqlMock sqlmock.Sqlmock) {
 				sqlMock.ExpectQuery(`SELECT id, name`).
 					WithArgs("token-hash-123").

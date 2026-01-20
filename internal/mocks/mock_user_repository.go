@@ -5,10 +5,10 @@ package mocks
 import (
 	context "context"
 
-	entities "github.com/memberclass-backend-golang/internal/domain/entities"
+	response "github.com/memberclass-backend-golang/internal/domain/dto/response/purchases"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/user"
+	entities "github.com/memberclass-backend-golang/internal/domain/entities/user"
 	mock "github.com/stretchr/testify/mock"
-
-	response "github.com/memberclass-backend-golang/internal/domain/dto/response"
 
 	time "time"
 )
@@ -326,24 +326,24 @@ func (_c *MockUserRepository_FindPurchasesByUserAndTenant_Call) RunAndReturn(run
 }
 
 // FindUserInformations provides a mock function with given fields: ctx, tenantID, email, page, limit
-func (_m *MockUserRepository) FindUserInformations(ctx context.Context, tenantID string, email string, page int, limit int) ([]response.UserInformation, int64, error) {
+func (_m *MockUserRepository) FindUserInformations(ctx context.Context, tenantID string, email string, page int, limit int) ([]user.UserInformation, int64, error) {
 	ret := _m.Called(ctx, tenantID, email, page, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindUserInformations")
 	}
 
-	var r0 []response.UserInformation
+	var r0 []user.UserInformation
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) ([]response.UserInformation, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) ([]user.UserInformation, int64, error)); ok {
 		return rf(ctx, tenantID, email, page, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) []response.UserInformation); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, int, int) []user.UserInformation); ok {
 		r0 = rf(ctx, tenantID, email, page, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]response.UserInformation)
+			r0 = ret.Get(0).([]user.UserInformation)
 		}
 	}
 
@@ -384,12 +384,12 @@ func (_c *MockUserRepository_FindUserInformations_Call) Run(run func(ctx context
 	return _c
 }
 
-func (_c *MockUserRepository_FindUserInformations_Call) Return(_a0 []response.UserInformation, _a1 int64, _a2 error) *MockUserRepository_FindUserInformations_Call {
+func (_c *MockUserRepository_FindUserInformations_Call) Return(_a0 []user.UserInformation, _a1 int64, _a2 error) *MockUserRepository_FindUserInformations_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockUserRepository_FindUserInformations_Call) RunAndReturn(run func(context.Context, string, string, int, int) ([]response.UserInformation, int64, error)) *MockUserRepository_FindUserInformations_Call {
+func (_c *MockUserRepository_FindUserInformations_Call) RunAndReturn(run func(context.Context, string, string, int, int) ([]user.UserInformation, int64, error)) *MockUserRepository_FindUserInformations_Call {
 	_c.Call.Return(run)
 	return _c
 }

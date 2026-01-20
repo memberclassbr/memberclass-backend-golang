@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/user"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
 )
 
 type UserActivityRepository struct {
@@ -17,14 +19,14 @@ type UserActivityRepository struct {
 	log ports.Logger
 }
 
-func NewUserActivityRepository(db *sql.DB, log ports.Logger) ports.UserActivityRepository {
+func NewUserActivityRepository(db *sql.DB, log ports.Logger) user2.UserActivityRepository {
 	return &UserActivityRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-func (r *UserActivityRepository) FindActivitiesByEmail(ctx context.Context, email string, page, limit int) ([]response.AccessData, int64, error) {
+func (r *UserActivityRepository) FindActivitiesByEmail(ctx context.Context, email string, page, limit int) ([]activity.AccessData, int64, error) {
 	offset := (page - 1) * limit
 
 	query := `
@@ -47,9 +49,9 @@ func (r *UserActivityRepository) FindActivitiesByEmail(ctx context.Context, emai
 	}
 	defer rows.Close()
 
-	activities := make([]response.AccessData, 0)
+	activities := make([]activity.AccessData, 0)
 	for rows.Next() {
-		var access response.AccessData
+		var access activity.AccessData
 		if err := rows.Scan(&access.Data); err != nil {
 			r.log.Error("Error scanning activity: " + err.Error())
 			return nil, 0, &memberclasserrors.MemberClassError{
@@ -91,7 +93,7 @@ func (r *UserActivityRepository) FindActivitiesByEmail(ctx context.Context, emai
 	return activities, total, nil
 }
 
-func (r *UserActivityRepository) GetActivitySummaryByEmail(ctx context.Context, email string) (*response.ActivitySummaryResponse, error) {
+func (r *UserActivityRepository) GetActivitySummaryByEmail(ctx context.Context, email string) (*user.ActivitySummaryResponse, error) {
 	query := `
 		SELECT 
 			COUNT(DISTINCT sl.id) as total_activities,
@@ -115,13 +117,13 @@ func (r *UserActivityRepository) GetActivitySummaryByEmail(ctx context.Context, 
 
 	// This method is kept for backward compatibility but returns empty structure
 	// The new GetUsersWithActivity/GetUsersWithoutActivity should be used instead
-	return &response.ActivitySummaryResponse{
-		Users:      []response.UserActivitySummary{},
-		Pagination: response.ActivitySummaryPagination{},
+	return &user.ActivitySummaryResponse{
+		Users:      []user.UserActivitySummary{},
+		Pagination: user.ActivitySummaryPagination{},
 	}, nil
 }
 
-func (r *UserActivityRepository) GetUsersWithActivity(ctx context.Context, tenantID string, startDate, endDate time.Time, page, limit int) ([]response.UserActivitySummary, int64, error) {
+func (r *UserActivityRepository) GetUsersWithActivity(ctx context.Context, tenantID string, startDate, endDate time.Time, page, limit int) ([]user.UserActivitySummary, int64, error) {
 	offset := (page - 1) * limit
 
 	// First, get user IDs with activity in the period
@@ -166,7 +168,7 @@ func (r *UserActivityRepository) GetUsersWithActivity(ctx context.Context, tenan
 	}
 
 	if len(userIDs) == 0 {
-		return []response.UserActivitySummary{}, 0, nil
+		return []user.UserActivitySummary{}, 0, nil
 	}
 
 	// Get last access for each user
@@ -225,7 +227,7 @@ func (r *UserActivityRepository) GetUsersWithActivity(ctx context.Context, tenan
 	}
 	defer userRows.Close()
 
-	var users []response.UserActivitySummary
+	var users []user.UserActivitySummary
 	for userRows.Next() {
 		var email, userID string
 		if err := userRows.Scan(&email, &userID); err != nil {
@@ -242,7 +244,7 @@ func (r *UserActivityRepository) GetUsersWithActivity(ctx context.Context, tenan
 			ultimoAcesso = &formatted
 		}
 
-		users = append(users, response.UserActivitySummary{
+		users = append(users, user.UserActivitySummary{
 			Email:        email,
 			UltimoAcesso: ultimoAcesso,
 		})
@@ -276,7 +278,7 @@ func (r *UserActivityRepository) GetUsersWithActivity(ctx context.Context, tenan
 	return users, totalCount, nil
 }
 
-func (r *UserActivityRepository) GetUsersWithoutActivity(ctx context.Context, tenantID string, startDate, endDate time.Time, page, limit int) ([]response.UserActivitySummary, int64, error) {
+func (r *UserActivityRepository) GetUsersWithoutActivity(ctx context.Context, tenantID string, startDate, endDate time.Time, page, limit int) ([]user.UserActivitySummary, int64, error) {
 	offset := (page - 1) * limit
 
 	query := `
@@ -306,7 +308,7 @@ func (r *UserActivityRepository) GetUsersWithoutActivity(ctx context.Context, te
 	}
 	defer rows.Close()
 
-	var users []response.UserActivitySummary
+	var users []user.UserActivitySummary
 	for rows.Next() {
 		var email string
 		if err := rows.Scan(&email); err != nil {
@@ -317,7 +319,7 @@ func (r *UserActivityRepository) GetUsersWithoutActivity(ctx context.Context, te
 			}
 		}
 
-		users = append(users, response.UserActivitySummary{
+		users = append(users, user.UserActivitySummary{
 			Email:        email,
 			UltimoAcesso: nil,
 		})

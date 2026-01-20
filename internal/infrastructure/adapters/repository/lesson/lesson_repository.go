@@ -7,10 +7,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto/response"
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	dtoLessonResponse "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
+	lessonsentities "github.com/memberclass-backend-golang/internal/domain/entities/lessons"
+	tenantentities "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	lessonports "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 )
 
 type LessonRepository struct {
@@ -18,7 +20,7 @@ type LessonRepository struct {
 	log ports.Logger
 }
 
-func NewLessonRepository(db *sql.DB, log ports.Logger) ports.LessonRepository {
+func NewLessonRepository(db *sql.DB, log ports.Logger) lessonports.LessonRepository {
 	return &LessonRepository{
 		db:  db,
 		log: log,
@@ -26,14 +28,14 @@ func NewLessonRepository(db *sql.DB, log ports.Logger) ports.LessonRepository {
 }
 
 // GetByID - Get lesson by ID
-func (l *LessonRepository) GetByID(ctx context.Context, id string) (*entities.Lesson, error) {
+func (l *LessonRepository) GetByID(ctx context.Context, id string) (*lessonsentities.Lesson, error) {
 	query := `SELECT id, "createdAt", "updatedAt", access, "referenceAccess", type, slug, name, 
 		published, "order", "mediaUrl", "fullHdStatus", "fullHdUrl", "fullHdRetries", 
 		thumbnail, content, "moduleId", "createdBy", "showDescriptionToggle", 
 		"bannersTitle", "transcriptionCompleted" 
 		FROM "Lesson" WHERE id = $1`
 
-	var lesson entities.Lesson
+	var lesson lessonsentities.Lesson
 	var mediaURL sql.NullString
 
 	err := l.db.QueryRowContext(ctx, query, id).Scan(
@@ -79,7 +81,7 @@ func (l *LessonRepository) GetByID(ctx context.Context, id string) (*entities.Le
 }
 
 // GetByIDWithPDFAsset - Get lesson with PDF asset relationship
-func (l *LessonRepository) GetByIDWithPDFAsset(ctx context.Context, id string) (*entities.Lesson, error) {
+func (l *LessonRepository) GetByIDWithPDFAsset(ctx context.Context, id string) (*lessonsentities.Lesson, error) {
 	query := `SELECT l.id, l."createdAt", l."updatedAt", l.access, l."referenceAccess", l.type, 
 		l.slug, l.name, l.published, l."order", l."mediaUrl", l."fullHdStatus", 
 		l."fullHdUrl", l."fullHdRetries", l.thumbnail, l.content, l."moduleId", 
@@ -90,7 +92,7 @@ func (l *LessonRepository) GetByIDWithPDFAsset(ctx context.Context, id string) (
 		LEFT JOIN "LessonPdfAsset" p ON l.id = p."lessonId"
 		WHERE l.id = $1`
 
-	var lesson entities.Lesson
+	var lesson lessonsentities.Lesson
 	var mediaURL sql.NullString
 	var pdfAssetID, pdfLessonID, pdfSourceURL, pdfStatus, pdfError sql.NullString
 	var pdfTotalPages sql.NullInt32
@@ -145,7 +147,7 @@ func (l *LessonRepository) GetByIDWithPDFAsset(ctx context.Context, id string) (
 
 	// Build PDF asset if exists
 	if pdfAssetID.Valid {
-		asset := &entities.LessonPDFAsset{
+		asset := &lessonsentities.LessonPDFAsset{
 			ID:           pdfAssetID.String,
 			LessonID:     pdfLessonID.String,
 			SourcePDFURL: pdfSourceURL.String,
@@ -170,7 +172,7 @@ func (l *LessonRepository) GetByIDWithPDFAsset(ctx context.Context, id string) (
 }
 
 // GetPendingPDFLessons - Get lessons that need PDF processing
-func (l *LessonRepository) GetPendingPDFLessons(ctx context.Context, limit int) ([]*entities.Lesson, error) {
+func (l *LessonRepository) GetPendingPDFLessons(ctx context.Context, limit int) ([]*lessonsentities.Lesson, error) {
 	query := `SELECT id, "createdAt", "updatedAt", access, "referenceAccess", type, 
 		slug, name, published, "order", "mediaUrl", "fullHdStatus", 
 		"fullHdUrl", "fullHdRetries", thumbnail, content, "moduleId", 
@@ -195,9 +197,9 @@ func (l *LessonRepository) GetPendingPDFLessons(ctx context.Context, limit int) 
 	}
 	defer rows.Close()
 
-	var lessons []*entities.Lesson
+	var lessons []*lessonsentities.Lesson
 	for rows.Next() {
-		var lesson entities.Lesson
+		var lesson lessonsentities.Lesson
 		var mediaURL sql.NullString
 
 		err := rows.Scan(
@@ -251,7 +253,7 @@ func (l *LessonRepository) GetPendingPDFLessons(ctx context.Context, limit int) 
 }
 
 // Update - Update lesson
-func (l *LessonRepository) Update(ctx context.Context, lesson *entities.Lesson) error {
+func (l *LessonRepository) Update(ctx context.Context, lesson *lessonsentities.Lesson) error {
 	query := `UPDATE "Lesson" 
 		SET "updatedAt" = $1, access = $2, "referenceAccess" = $3, type = $4, slug = $5, 
 		    name = $6, published = $7, "order" = $8, "mediaUrl" = $9, "fullHdStatus" = $10, 
@@ -287,12 +289,12 @@ func (l *LessonRepository) Update(ctx context.Context, lesson *entities.Lesson) 
 // PDF Asset operations
 
 // GetPDFAssetByLessonID - Get PDF asset by lesson ID
-func (l *LessonRepository) GetPDFAssetByLessonID(ctx context.Context, lessonID string) (*entities.LessonPDFAsset, error) {
+func (l *LessonRepository) GetPDFAssetByLessonID(ctx context.Context, lessonID string) (*lessonsentities.LessonPDFAsset, error) {
 	query := `SELECT id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt"
 		FROM "LessonPdfAsset" 
 		WHERE "lessonId" = $1`
 
-	var asset entities.LessonPDFAsset
+	var asset lessonsentities.LessonPDFAsset
 	var totalPages sql.NullInt32
 	var error sql.NullString
 
@@ -331,7 +333,7 @@ func (l *LessonRepository) GetPDFAssetByLessonID(ctx context.Context, lessonID s
 }
 
 // CreatePDFAsset - Create new PDF asset
-func (l *LessonRepository) CreatePDFAsset(ctx context.Context, asset *entities.LessonPDFAsset) error {
+func (l *LessonRepository) CreatePDFAsset(ctx context.Context, asset *lessonsentities.LessonPDFAsset) error {
 	query := `INSERT INTO "LessonPdfAsset" (id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt")
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
@@ -365,7 +367,7 @@ func (l *LessonRepository) CreatePDFAsset(ctx context.Context, asset *entities.L
 }
 
 // UpdatePDFAsset - Update PDF asset
-func (l *LessonRepository) UpdatePDFAsset(ctx context.Context, asset *entities.LessonPDFAsset) error {
+func (l *LessonRepository) UpdatePDFAsset(ctx context.Context, asset *lessonsentities.LessonPDFAsset) error {
 	query := `UPDATE "LessonPdfAsset" 
 		SET "sourcePdfUrl" = $1, "totalPages" = $2, status = $3, error = $4, "updatedAt" = $5
 		WHERE id = $6`
@@ -427,7 +429,7 @@ func (l *LessonRepository) UpdatePDFAssetStatus(ctx context.Context, assetID, st
 }
 
 // GetFailedPDFAssets - Get failed PDF assets for retry
-func (l *LessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*entities.LessonPDFAsset, error) {
+func (l *LessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*lessonsentities.LessonPDFAsset, error) {
 	query := `SELECT id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt"
 		FROM "LessonPdfAsset" 
 		WHERE status IN ('failed', 'partial')
@@ -443,9 +445,9 @@ func (l *LessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*entities.
 	}
 	defer rows.Close()
 
-	var assets []*entities.LessonPDFAsset
+	var assets []*lessonsentities.LessonPDFAsset
 	for rows.Next() {
-		var asset entities.LessonPDFAsset
+		var asset lessonsentities.LessonPDFAsset
 		var totalPages sql.NullInt32
 		var error sql.NullString
 
@@ -494,7 +496,7 @@ func (l *LessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*entities.
 // PDF Page operations
 
 // CreatePDFPage - Create new PDF page
-func (l *LessonRepository) CreatePDFPage(ctx context.Context, page *entities.LessonPDFPage) error {
+func (l *LessonRepository) CreatePDFPage(ctx context.Context, page *lessonsentities.LessonPDFPage) error {
 	query := `INSERT INTO "LessonPdfPage" (id, "assetId", "pageNumber", "imageUrl", width, height, "createdAt", "updatedAt")
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
@@ -525,12 +527,12 @@ func (l *LessonRepository) CreatePDFPage(ctx context.Context, page *entities.Les
 }
 
 // GetPDFPageByAssetAndNumber - Get PDF page by asset ID and page number
-func (l *LessonRepository) GetPDFPageByAssetAndNumber(ctx context.Context, assetID string, pageNumber int) (*entities.LessonPDFPage, error) {
+func (l *LessonRepository) GetPDFPageByAssetAndNumber(ctx context.Context, assetID string, pageNumber int) (*lessonsentities.LessonPDFPage, error) {
 	query := `SELECT id, "assetId", "pageNumber", "imageUrl", width, height, "createdAt", "updatedAt"
 		FROM "LessonPdfPage" 
 		WHERE "assetId" = $1 AND "pageNumber" = $2`
 
-	var page entities.LessonPDFPage
+	var page lessonsentities.LessonPDFPage
 	var width, height sql.NullInt32
 
 	err := l.db.QueryRowContext(ctx, query, assetID, pageNumber).Scan(
@@ -569,7 +571,7 @@ func (l *LessonRepository) GetPDFPageByAssetAndNumber(ctx context.Context, asset
 }
 
 // GetPDFPagesByAssetID - Get all PDF pages by asset ID
-func (l *LessonRepository) GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*entities.LessonPDFPage, error) {
+func (l *LessonRepository) GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*lessonsentities.LessonPDFPage, error) {
 	query := `SELECT id, "assetId", "pageNumber", "imageUrl", width, height, "createdAt", "updatedAt"
 		FROM "LessonPdfPage" 
 		WHERE "assetId" = $1
@@ -585,9 +587,9 @@ func (l *LessonRepository) GetPDFPagesByAssetID(ctx context.Context, assetID str
 	}
 	defer rows.Close()
 
-	var pages []*entities.LessonPDFPage
+	var pages []*lessonsentities.LessonPDFPage
 	for rows.Next() {
-		var page entities.LessonPDFPage
+		var page lessonsentities.LessonPDFPage
 		var width, height sql.NullInt32
 
 		err := rows.Scan(
@@ -666,7 +668,7 @@ func (l *LessonRepository) DeletePDFPagesByAssetID(ctx context.Context, assetID 
 }
 
 // FindCompletedLessonsByEmail - Find completed lessons by user ID
-func (l *LessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]response.CompletedLesson, int64, error) {
+func (l *LessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]dtoLessonResponse.CompletedLesson, int64, error) {
 	offset := (page - 1) * limit
 
 	query := `
@@ -727,9 +729,9 @@ func (l *LessonRepository) FindCompletedLessonsByEmail(ctx context.Context, user
 	}
 	defer rows.Close()
 
-	lessons := make([]response.CompletedLesson, 0)
+	lessons := make([]dtoLessonResponse.CompletedLesson, 0)
 	for rows.Next() {
-		var lesson response.CompletedLesson
+		var lesson dtoLessonResponse.CompletedLesson
 		var completedAt time.Time
 
 		if err := rows.Scan(&completedAt, &lesson.LessonName, &lesson.CourseName); err != nil {
@@ -792,7 +794,7 @@ func (l *LessonRepository) FindCompletedLessonsByEmail(ctx context.Context, user
 	return lessons, total, nil
 }
 
-func (l *LessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+func (l *LessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*lessonsentities.Lesson, *tenantentities.Tenant, error) {
 	query := `
 		SELECT 
 			l.id,
@@ -812,8 +814,8 @@ func (l *LessonRepository) GetByIDWithTenant(ctx context.Context, lessonID strin
 		WHERE l.id = $1
 	`
 
-	var lesson entities.Lesson
-	var tenant entities.Tenant
+	var lesson lessonsentities.Lesson
+	var tenant tenantentities.Tenant
 	var transcriptionCompleted sql.NullBool
 	var lessonIDStr, lessonName, lessonSlug string
 
@@ -871,7 +873,7 @@ func (l *LessonRepository) UpdateTranscriptionStatus(ctx context.Context, lesson
 	return nil
 }
 
-func (l *LessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]ports.AILessonWithHierarchy, error) {
+func (l *LessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]lessonports.AILessonWithHierarchy, error) {
 	query := `
 		SELECT 
 			l.id,
@@ -917,9 +919,9 @@ func (l *LessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, 
 	}
 	defer rows.Close()
 
-	var lessons []ports.AILessonWithHierarchy
+	var lessons []lessonports.AILessonWithHierarchy
 	for rows.Next() {
-		var lesson ports.AILessonWithHierarchy
+		var lesson lessonports.AILessonWithHierarchy
 		var typeVal, mediaURLVal, thumbnailVal, contentVal sql.NullString
 		var transcriptionCompleted sql.NullBool
 

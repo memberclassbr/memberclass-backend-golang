@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	"github.com/memberclass-backend-golang/internal/domain/entities/user"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
@@ -35,7 +35,7 @@ func TestUserRepository_FindByID(t *testing.T) {
 		mockSetup    func(sqlmock.Sqlmock)
 		expectError  bool
 		expectedErr  error
-		expectedUser *entities.User
+		expectedUser *user.User
 	}{
 		{
 			name:   "should return user when found",
@@ -60,7 +60,7 @@ func TestUserRepository_FindByID(t *testing.T) {
 					WithArgs("user-123").WillReturnRows(rows)
 			},
 			expectError: false,
-			expectedUser: &entities.User{
+			expectedUser: &user.User{
 				ID:    "user-123",
 				Email: "test@example.com",
 			},
@@ -596,4 +596,3 @@ func TestUserRepository_UpdateMagicToken(t *testing.T) {
 		})
 	}
 }
-

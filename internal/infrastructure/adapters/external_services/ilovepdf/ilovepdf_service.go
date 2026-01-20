@@ -18,17 +18,18 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor"
 )
 
 type IlovePdfService struct {
-	apiKeys   []dto.ApiKeyInfo
-	baseURL   string
-	log       ports.Logger
-	cache     ports.Cache
-	mutex     sync.RWMutex
+	apiKeys []dto.ApiKeyInfo
+	baseURL string
+	log     ports.Logger
+	cache   ports.Cache
+	mutex   sync.RWMutex
 }
 
-func NewIlovePdfService(log ports.Logger, cache ports.Cache) (ports.PdfProcessService, error) {
+func NewIlovePdfService(log ports.Logger, cache ports.Cache) (pdf_processor.PdfProcessService, error) {
 	service := &IlovePdfService{
 		log:   log,
 		cache: cache,
@@ -85,7 +86,7 @@ func (i *IlovePdfService) getActiveKey() (string, error) {
 
 	for _, keyInfo := range i.apiKeys {
 		blacklistKey := fmt.Sprintf("ilovepdf_blacklist:%s", keyInfo.Key)
-		
+
 		exists, err := i.cache.Exists(ctx, blacklistKey)
 		if err != nil {
 			i.log.Warn(fmt.Sprintf("Failed to check blacklist for key: %v", err))
@@ -126,10 +127,10 @@ func (i *IlovePdfService) isCreditsExhaustedError(err error) bool {
 	}
 
 	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "credits") || 
-		   strings.Contains(errStr, "limit") || 
-		   strings.Contains(errStr, "exhausted") ||
-		   strings.Contains(errStr, "quota")
+	return strings.Contains(errStr, "credits") ||
+		strings.Contains(errStr, "limit") ||
+		strings.Contains(errStr, "exhausted") ||
+		strings.Contains(errStr, "quota")
 }
 
 // GetToken - Get authentication token
@@ -159,14 +160,14 @@ func (i *IlovePdfService) GetToken() (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		errorMsg := fmt.Sprintf("authentication failed: %s - %s", resp.Status, string(body))
-		
+
 		// Check if it's a credits exhausted error
 		if i.isCreditsExhaustedError(fmt.Errorf("%s", errorMsg)) {
 			if blacklistErr := i.blacklistKey(activeKey); blacklistErr != nil {
 				i.log.Warn(fmt.Sprintf("Failed to blacklist key: %v", blacklistErr))
 			}
 		}
-		
+
 		return "", fmt.Errorf("%s", errorMsg)
 	}
 
@@ -370,17 +371,17 @@ func (i *IlovePdfService) ExtractImagesFromZip(zipData []byte) ([]string, error)
 	if len(zipData) < 4 {
 		return nil, fmt.Errorf("data too short to be a valid file (%d bytes)", len(zipData))
 	}
-	
+
 	// Check if it's a JPEG image (starts with JPEG signature)
 	if i.isJPEGImage(zipData) {
 		return i.handleSingleJPEG(zipData)
 	}
-	
+
 	// Check if it's a ZIP file (starts with ZIP signature)
 	if i.isZIPFile(zipData) {
 		return i.handleZIPFile(zipData)
 	}
-	
+
 	return nil, fmt.Errorf("data is neither a valid JPEG image nor ZIP file")
 }
 
@@ -407,7 +408,7 @@ func (i *IlovePdfService) handleSingleJPEG(jpegData []byte) ([]string, error) {
 	// Convert to base64
 	base64Data := fmt.Sprintf("data:image/jpeg;base64,%s",
 		base64.StdEncoding.EncodeToString(jpegData))
-	
+
 	images := []string{base64Data}
 	return images, nil
 }

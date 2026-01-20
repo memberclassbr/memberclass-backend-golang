@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/dto/request"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -34,7 +34,7 @@ func TestSocialCommentRepository_Create(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		req           request.CreateSocialCommentRequest
+		req           comments.CreateSocialCommentRequest
 		tenantID      string
 		mockSetup     func(sqlmock.Sqlmock)
 		expectedError error
@@ -42,7 +42,7 @@ func TestSocialCommentRepository_Create(t *testing.T) {
 	}{
 		{
 			name: "should create post successfully",
-			req: request.CreateSocialCommentRequest{
+			req: comments.CreateSocialCommentRequest{
 				UserID:     "user-123",
 				TopicID:    "topic-123",
 				Title:      "Test Post",
@@ -61,7 +61,7 @@ func TestSocialCommentRepository_Create(t *testing.T) {
 		},
 		{
 			name: "should create post without image and video",
-			req: request.CreateSocialCommentRequest{
+			req: comments.CreateSocialCommentRequest{
 				UserID:  "user-123",
 				TopicID: "topic-123",
 				Title:   "Test Post",
@@ -78,7 +78,7 @@ func TestSocialCommentRepository_Create(t *testing.T) {
 		},
 		{
 			name: "should return MemberClassError when database error occurs",
-			req: request.CreateSocialCommentRequest{
+			req: comments.CreateSocialCommentRequest{
 				UserID:  "user-123",
 				TopicID: "topic-123",
 				Title:   "Test Post",
@@ -136,7 +136,7 @@ func TestSocialCommentRepository_FindByID(t *testing.T) {
 		postID        string
 		mockSetup     func(sqlmock.Sqlmock)
 		expectedError error
-		expectedPost  *ports.PostInfo
+		expectedPost  *comment.PostInfo
 	}{
 		{
 			name:   "should return post when found",
@@ -149,7 +149,7 @@ func TestSocialCommentRepository_FindByID(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedPost: &ports.PostInfo{
+			expectedPost: &comment.PostInfo{
 				ID:     "post-123",
 				UserID: "user-123",
 			},
@@ -222,14 +222,14 @@ func TestSocialCommentRepository_Update(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		req           request.CreateSocialCommentRequest
+		req           comments.CreateSocialCommentRequest
 		tenantID      string
 		mockSetup     func(sqlmock.Sqlmock)
 		expectedError error
 	}{
 		{
 			name: "should update post successfully",
-			req: request.CreateSocialCommentRequest{
+			req: comments.CreateSocialCommentRequest{
 				PostID:     "post-123",
 				Title:      "Updated Post",
 				Content:    "Updated Content",
@@ -246,7 +246,7 @@ func TestSocialCommentRepository_Update(t *testing.T) {
 		},
 		{
 			name: "should update post without image and video",
-			req: request.CreateSocialCommentRequest{
+			req: comments.CreateSocialCommentRequest{
 				PostID:  "post-123",
 				Title:   "Updated Post",
 				Content: "Updated Content",
@@ -261,7 +261,7 @@ func TestSocialCommentRepository_Update(t *testing.T) {
 		},
 		{
 			name: "should return MemberClassError when database error occurs",
-			req: request.CreateSocialCommentRequest{
+			req: comments.CreateSocialCommentRequest{
 				PostID:  "post-123",
 				Title:   "Updated Post",
 				Content: "Updated Content",

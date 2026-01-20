@@ -4,52 +4,61 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/middlewares"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/student"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
+	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
+	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 )
 
 type Router struct {
 	chi.Router
-	videoHandler              *http.VideoHandler
-	lessonHandler             *http.LessonHandler
-	commentHandler            *http.CommentHandler
-	userActivityHandler       *http.UserActivityHandler
-	userPurchaseHandler       *http.UserPurchaseHandler
-	userInformationsHandler   *http.UserInformationsHandler
-	socialCommentHandler      *http.SocialCommentHandler
-	activitySummaryHandler    *http.ActivitySummaryHandler
-	lessonsCompletedHandler   *http.LessonsCompletedHandler
-	studentReportHandler      *http.StudentReportHandler
+	videoHandler              *video.VideoHandler
+	lessonHandler             *lesson.LessonHandler
+	commentHandler            *comment.CommentHandler
+	userActivityHandler       *user.UserActivityHandler
+	userPurchaseHandler       *purchase.UserPurchaseHandler
+	userInformationsHandler   *user.UserInformationsHandler
+	socialCommentHandler      *comment.SocialCommentHandler
+	activitySummaryHandler    *user.ActivitySummaryHandler
+	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
+	studentReportHandler      *student.StudentReportHandler
 	swaggerHandler            *http.SwaggerHandler
-	authHandler               *http.AuthHandler
-	aiLessonHandler           *http.AILessonHandler
-	aiTenantHandler           *http.AITenantHandler
-	rateLimitMiddleware       *middlewares.RateLimitMiddleware
-	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware
-	rateLimitIPMiddleware     *middlewares.RateLimitIPMiddleware
-	authMiddleware            *middlewares.AuthMiddleware
-	authExternalMiddleware    *middlewares.AuthExternalMiddleware
+	authHandler               *auth.AuthHandler
+	aiLessonHandler           *ai.AILessonHandler
+	aiTenantHandler           *ai.AITenantHandler
+	rateLimitMiddleware       *rate_limit.RateLimitMiddleware
+	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware
+	rateLimitIPMiddleware     *rate_limit.RateLimitIPMiddleware
+	authMiddleware            *auth2.AuthMiddleware
+	authExternalMiddleware    *auth2.AuthExternalMiddleware
 }
 
 func NewRouter(
-	videoHandler *http.VideoHandler,
-	lessonHandler *http.LessonHandler,
-	commentHandler *http.CommentHandler,
-	userActivityHandler *http.UserActivityHandler,
-	userPurchaseHandler *http.UserPurchaseHandler,
-	userInformationsHandler *http.UserInformationsHandler,
-	socialCommentHandler *http.SocialCommentHandler,
-	activitySummaryHandler *http.ActivitySummaryHandler,
-	lessonsCompletedHandler *http.LessonsCompletedHandler,
-	studentReportHandler *http.StudentReportHandler,
+	videoHandler *video.VideoHandler,
+	lessonHandler *lesson.LessonHandler,
+	commentHandler *comment.CommentHandler,
+	userActivityHandler *user.UserActivityHandler,
+	userPurchaseHandler *purchase.UserPurchaseHandler,
+	userInformationsHandler *user.UserInformationsHandler,
+	socialCommentHandler *comment.SocialCommentHandler,
+	activitySummaryHandler *user.ActivitySummaryHandler,
+	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
+	studentReportHandler *student.StudentReportHandler,
 	swaggerHandler *http.SwaggerHandler,
-	authHandler *http.AuthHandler,
-	aiLessonHandler *http.AILessonHandler,
-	aiTenantHandler *http.AITenantHandler,
-	rateLimitMiddleware *middlewares.RateLimitMiddleware,
-	rateLimitTenantMiddleware *middlewares.RateLimitTenantMiddleware,
-	rateLimitIPMiddleware *middlewares.RateLimitIPMiddleware,
-	authMiddleware *middlewares.AuthMiddleware,
-	authExternalMiddleware *middlewares.AuthExternalMiddleware,
+	authHandler *auth.AuthHandler,
+	aiLessonHandler *ai.AILessonHandler,
+	aiTenantHandler *ai.AITenantHandler,
+	rateLimitMiddleware *rate_limit.RateLimitMiddleware,
+	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware,
+	rateLimitIPMiddleware *rate_limit.RateLimitIPMiddleware,
+	authMiddleware *auth2.AuthMiddleware,
+	authExternalMiddleware *auth2.AuthExternalMiddleware,
 ) *Router {
 	router := chi.NewRouter()
 

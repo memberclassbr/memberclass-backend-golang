@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	student2 "github.com/memberclass-backend-golang/internal/domain/ports/student"
 )
 
 type StudentReportRepository struct {
@@ -18,14 +19,14 @@ type StudentReportRepository struct {
 	log ports.Logger
 }
 
-func NewStudentReportRepository(db *sql.DB, log ports.Logger) ports.StudentReportRepository {
+func NewStudentReportRepository(db *sql.DB, log ports.Logger) student2.StudentReportRepository {
 	return &StudentReportRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantID string, startDate, endDate *time.Time, page, limit int) ([]response.StudentReport, int64, error) {
+func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantID string, startDate, endDate *time.Time, page, limit int) ([]student.StudentReport, int64, error) {
 	offset := (page - 1) * limit
 
 	query := `
@@ -67,7 +68,7 @@ func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantI
 	}
 	defer rows.Close()
 
-	studentsMap := make(map[string]*response.StudentReport)
+	studentsMap := make(map[string]*student.StudentReport)
 
 	for rows.Next() {
 		var userID, email, cpf string
@@ -82,7 +83,7 @@ func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantI
 		}
 
 		if _, exists := studentsMap[userID]; !exists {
-			studentsMap[userID] = &response.StudentReport{
+			studentsMap[userID] = &student.StudentReport{
 				AlunoIDMemberClass:        userID,
 				Email:                     email,
 				Cpf:                       cpf,
@@ -90,7 +91,7 @@ func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantI
 				EntregasVinculadas:        []string{},
 				UltimoAcesso:              nil,
 				QuantidadeAulasAssistidas: 0,
-				AulasAssistidas:           []response.LessonWatched{},
+				AulasAssistidas:           []student.LessonWatched{},
 			}
 		}
 	}
@@ -109,7 +110,7 @@ func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantI
 	}
 
 	if len(userIDs) == 0 {
-		return []response.StudentReport{}, 0, nil
+		return []student.StudentReport{}, 0, nil
 	}
 
 	deliveries, err := r.getDeliveries(ctx, tenantID)
@@ -163,7 +164,7 @@ func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantI
 		}
 	}
 
-	students := make([]response.StudentReport, 0, len(studentsMap))
+	students := make([]student.StudentReport, 0, len(studentsMap))
 	for _, student := range studentsMap {
 		students = append(students, *student)
 	}
@@ -282,7 +283,7 @@ func (r *StudentReportRepository) getUserDeliveries(ctx context.Context, userIDs
 	return userOnDeliveries, memberOnDeliveries, nil
 }
 
-func (r *StudentReportRepository) getLessonsWatched(ctx context.Context, userIDs []string, tenantID string) (map[string][]response.LessonWatched, error) {
+func (r *StudentReportRepository) getLessonsWatched(ctx context.Context, userIDs []string, tenantID string) (map[string][]student.LessonWatched, error) {
 	query := `
 		SELECT 
 			r."userId",
@@ -310,7 +311,7 @@ func (r *StudentReportRepository) getLessonsWatched(ctx context.Context, userIDs
 	}
 	defer rows.Close()
 
-	lessonsMap := make(map[string][]response.LessonWatched)
+	lessonsMap := make(map[string][]student.LessonWatched)
 	for rows.Next() {
 		var userID, lessonID, lessonName string
 		var createdAt time.Time
@@ -323,9 +324,9 @@ func (r *StudentReportRepository) getLessonsWatched(ctx context.Context, userIDs
 			}
 		}
 
-		lessonsMap[userID] = append(lessonsMap[userID], response.LessonWatched{
-			AulaID:       lessonID,
-			Titulo:       lessonName,
+		lessonsMap[userID] = append(lessonsMap[userID], student.LessonWatched{
+			AulaID:        lessonID,
+			Titulo:        lessonName,
 			DataAssistida: createdAt.Format(time.RFC3339),
 		})
 	}
@@ -384,4 +385,3 @@ func contains(slice []string, item string) bool {
 	}
 	return false
 }
-
