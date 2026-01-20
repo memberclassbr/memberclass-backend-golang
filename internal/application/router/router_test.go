@@ -11,6 +11,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/student"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
@@ -35,6 +36,7 @@ func createTestRouter(t *testing.T) *Router {
 	mockStudentReportHandler := &student.StudentReportHandler{}
 	mockSwaggerHandler := httpHandlers.NewSwaggerHandler()
 	mockAuthHandler := &auth.AuthHandler{}
+	mockSSOHandler := &sso.SSOHandler{}
 	mockAILessonHandler := &ai.AILessonHandler{}
 	mockAITenantHandler := &ai.AITenantHandler{}
 	mockLogger := &mocks.MockLogger{}
@@ -55,7 +57,7 @@ func createTestRouter(t *testing.T) *Router {
 	authMiddleware := auth2.NewAuthMiddleware(mockLogger, mockSessionValidator)
 	authExternalMiddleware := auth2.NewAuthExternalMiddleware(mockApiTokenUseCase)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockAILessonHandler, mockAITenantHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {

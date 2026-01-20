@@ -8,6 +8,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/student"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
@@ -30,6 +31,7 @@ type Router struct {
 	studentReportHandler      *student.StudentReportHandler
 	swaggerHandler            *http.SwaggerHandler
 	authHandler               *auth.AuthHandler
+	ssoHandler                *sso.SSOHandler
 	aiLessonHandler           *ai.AILessonHandler
 	aiTenantHandler           *ai.AITenantHandler
 	rateLimitMiddleware       *rate_limit.RateLimitMiddleware
@@ -52,6 +54,7 @@ func NewRouter(
 	studentReportHandler *student.StudentReportHandler,
 	swaggerHandler *http.SwaggerHandler,
 	authHandler *auth.AuthHandler,
+	ssoHandler *sso.SSOHandler,
 	aiLessonHandler *ai.AILessonHandler,
 	aiTenantHandler *ai.AITenantHandler,
 	rateLimitMiddleware *rate_limit.RateLimitMiddleware,
@@ -81,6 +84,7 @@ func NewRouter(
 		studentReportHandler:      studentReportHandler,
 		swaggerHandler:            swaggerHandler,
 		authHandler:               authHandler,
+		ssoHandler:                ssoHandler,
 		aiLessonHandler:           aiLessonHandler,
 		aiTenantHandler:           aiTenantHandler,
 		rateLimitMiddleware:       rateLimitMiddleware,
@@ -104,6 +108,14 @@ func (r *Router) SetupRoutes() {
 				r.authExternalMiddleware.Authenticate,
 				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Post("/", r.authHandler.GenerateMagicLink)
+		})
+
+		router.Route("/sso", func(router chi.Router) {
+			router.With(
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Post("/generate-token", r.ssoHandler.GenerateSSOToken)
+
+			router.Post("/validate-token", r.ssoHandler.ValidateSSOToken)
 		})
 
 		router.Route("/ai", func(router chi.Router) {

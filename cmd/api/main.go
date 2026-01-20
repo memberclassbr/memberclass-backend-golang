@@ -14,6 +14,7 @@ import (
 	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
+	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	student2 "github.com/memberclass-backend-golang/internal/application/handlers/http/student"
 	user4 "github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	purchase2 "github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
@@ -26,6 +27,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/ai"
 	comment2 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
+	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
 	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
@@ -33,6 +35,7 @@ import (
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
 	comment3 "github.com/memberclass-backend-golang/internal/domain/usecases/comment"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
+	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
@@ -43,6 +46,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
+	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
 	student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
@@ -58,6 +62,7 @@ func main() {
 		fx.Provide(
 			logger.NewLogger,
 			database.NewDB,
+			database.NewMigrationService,
 			cache.NewRedisCache,
 			storage.NewDigitalOceanSpaces,
 
@@ -69,6 +74,7 @@ func main() {
 			topic.NewTopicRepository,
 			user_activity.NewUserActivityRepository,
 			student_report.NewStudentReportRepository,
+			sso_repository.NewSSORepository,
 
 			rate_limiter.NewRateLimiterUpload,
 			rate_limiter.NewRateLimiterTenant,
@@ -96,6 +102,9 @@ func main() {
 			func(tenantRepo tenant2.TenantRepository, aiLessonUseCase ai.AILessonUseCase, logger ports.Logger) ai.AITenantUseCase {
 				return ai2.NewAITenantUseCase(tenantRepo, aiLessonUseCase, logger)
 			},
+			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
+				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
+			},
 
 			rate_limit.NewRateLimitMiddleware,
 			rate_limit.NewRateLimitTenantMiddleware,
@@ -115,6 +124,7 @@ func main() {
 			student2.NewStudentReportHandler,
 			internalhttp.NewSwaggerHandler,
 			auth2.NewAuthHandler,
+			sso2.NewSSOHandler,
 			ai3.NewAILessonHandler,
 			ai3.NewAITenantHandler,
 
@@ -131,6 +141,7 @@ func startApplication(
 	log ports.Logger,
 	db *sql.DB,
 	cache ports.Cache,
+	migrationService *database.MigrationService,
 	router *router.Router,
 	scheduler *jobs.Scheduler,
 	transcriptionJob *transcription.TranscriptionJob,

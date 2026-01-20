@@ -19,8 +19,12 @@ type User struct {
 }
 
 type UserOnTenant struct {
-	UserID    string    `json:"userId"`
-	TenantID  string    `json:"tenantId"`
-	Role      string    `json:"role"`
-	CreatedAt time.Time `json:"createdAt"`
+	UserID             string     `json:"userId"`
+	TenantID           string     `json:"tenantId"`
+	Role               string     `json:"role"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	SSOToken           *string    `json:"-"`
+	SSOTokenValidUntil *time.Time `json:"-"`
+	SSOTokenUsedAt     *time.Time `json:"-"`
+	SSOTokenIP         *string    `json:"-"`
 }
