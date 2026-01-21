@@ -34,7 +34,7 @@ func (h *CommentHandler) GetComments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenant := constants.GetTenantFromContext(r.Context())
-	if tenant == nil {
+	if tenant == nil && r.URL.Path == "/api/v1/comments" {
 		h.sendCustomErrorResponse(w, http.StatusUnauthorized, "API key inválida", "INVALID_API_KEY")
 		return
 	}

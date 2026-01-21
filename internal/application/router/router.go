@@ -202,5 +202,10 @@ func (r *Router) SetupRoutes() {
 			})
 		})
 
+		router.Route("/comments", func(router chi.Router) {
+			router.With(
+				r.authMiddleware.Authenticate).Get("/", r.commentHandler.GetComments)
+		})
+
 	})
 }
