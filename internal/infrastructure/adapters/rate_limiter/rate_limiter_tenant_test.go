@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/constants"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -25,98 +25,98 @@ func TestNewRateLimiterTenant(t *testing.T) {
 
 func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 	tests := []struct {
-		name          string
-		tenantID      string
-		endpoint      string
-		currentCount  string
-		getError      error
-		ttl           time.Duration
-		ttlError      error
+		name            string
+		tenantID        string
+		endpoint        string
+		currentCount    string
+		getError        error
+		ttl             time.Duration
+		ttlError        error
 		expectedAllowed bool
-		expectedInfo  ports.RateLimitInfo
-		expectedError bool
+		expectedInfo    rate_limit.RateLimitInfo
+		expectedError   bool
 	}{
 		{
-			name:          "should allow when count is below limit",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			currentCount:  strconv.Itoa(constants.APIRateLimitTenantLimit / 2),
-			getError:      nil,
-			ttl:           30 * time.Second,
-			ttlError:      nil,
+			name:            "should allow when count is below limit",
+			tenantID:        "tenant-123",
+			endpoint:        "/api/v1/comments",
+			currentCount:    strconv.Itoa(constants.APIRateLimitTenantLimit / 2),
+			getError:        nil,
+			ttl:             30 * time.Second,
+			ttlError:        nil,
 			expectedAllowed: true,
-			expectedInfo: ports.RateLimitInfo{
+			expectedInfo: rate_limit.RateLimitInfo{
 				Limit:     constants.APIRateLimitTenantLimit,
 				Remaining: constants.APIRateLimitTenantLimit - constants.APIRateLimitTenantLimit/2,
 			},
 			expectedError: false,
 		},
 		{
-			name:          "should deny when count reaches limit",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			currentCount:  strconv.Itoa(constants.APIRateLimitTenantLimit),
-			getError:      nil,
-			ttl:           30 * time.Second,
-			ttlError:      nil,
+			name:            "should deny when count reaches limit",
+			tenantID:        "tenant-123",
+			endpoint:        "/api/v1/comments",
+			currentCount:    strconv.Itoa(constants.APIRateLimitTenantLimit),
+			getError:        nil,
+			ttl:             30 * time.Second,
+			ttlError:        nil,
 			expectedAllowed: false,
-			expectedInfo: ports.RateLimitInfo{
-				Limit:     constants.APIRateLimitTenantLimit,
-				Remaining: 0,
+			expectedInfo: rate_limit.RateLimitInfo{
+				Limit:      constants.APIRateLimitTenantLimit,
+				Remaining:  0,
 				RetryAfter: 30,
 			},
 			expectedError: false,
 		},
 		{
-			name:          "should allow when key does not exist",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			currentCount:  "",
-			getError:      errors.New("redis: nil"),
-			ttl:           0,
-			ttlError:      nil,
+			name:            "should allow when key does not exist",
+			tenantID:        "tenant-123",
+			endpoint:        "/api/v1/comments",
+			currentCount:    "",
+			getError:        errors.New("redis: nil"),
+			ttl:             0,
+			ttlError:        nil,
 			expectedAllowed: true,
-			expectedInfo: ports.RateLimitInfo{
-				Limit:     constants.APIRateLimitTenantLimit,
-				Remaining: constants.APIRateLimitTenantLimit,
+			expectedInfo: rate_limit.RateLimitInfo{
+				Limit:      constants.APIRateLimitTenantLimit,
+				Remaining:  constants.APIRateLimitTenantLimit,
 				RetryAfter: 0,
 			},
 			expectedError: false,
 		},
 		{
-			name:          "should return error when get fails with non-nil error",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			currentCount:  "",
-			getError:      errors.New("redis connection error"),
-			ttl:           0,
-			ttlError:      nil,
+			name:            "should return error when get fails with non-nil error",
+			tenantID:        "tenant-123",
+			endpoint:        "/api/v1/comments",
+			currentCount:    "",
+			getError:        errors.New("redis connection error"),
+			ttl:             0,
+			ttlError:        nil,
 			expectedAllowed: false,
-			expectedInfo:  ports.RateLimitInfo{},
-			expectedError: true,
+			expectedInfo:    rate_limit.RateLimitInfo{},
+			expectedError:   true,
 		},
 		{
-			name:          "should return error when parsing count fails",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			currentCount:  "invalid",
-			getError:      nil,
-			ttl:           0,
-			ttlError:      nil,
+			name:            "should return error when parsing count fails",
+			tenantID:        "tenant-123",
+			endpoint:        "/api/v1/comments",
+			currentCount:    "invalid",
+			getError:        nil,
+			ttl:             0,
+			ttlError:        nil,
 			expectedAllowed: false,
-			expectedInfo:  ports.RateLimitInfo{},
-			expectedError: true,
+			expectedInfo:    rate_limit.RateLimitInfo{},
+			expectedError:   true,
 		},
 		{
-			name:          "should handle TTL error gracefully",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			currentCount:  strconv.Itoa(constants.APIRateLimitTenantLimit / 2),
-			getError:      nil,
-			ttl:           constants.APIRateLimitWindow,
-			ttlError:      errors.New("ttl error"),
+			name:            "should handle TTL error gracefully",
+			tenantID:        "tenant-123",
+			endpoint:        "/api/v1/comments",
+			currentCount:    strconv.Itoa(constants.APIRateLimitTenantLimit / 2),
+			getError:        nil,
+			ttl:             constants.APIRateLimitWindow,
+			ttlError:        errors.New("ttl error"),
 			expectedAllowed: true,
-			expectedInfo: ports.RateLimitInfo{
+			expectedInfo: rate_limit.RateLimitInfo{
 				Limit:     constants.APIRateLimitTenantLimit,
 				Remaining: constants.APIRateLimitTenantLimit - constants.APIRateLimitTenantLimit/2,
 			},
@@ -172,70 +172,70 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 
 func TestRateLimiterTenant_Increment(t *testing.T) {
 	tests := []struct {
-		name          string
-		tenantID      string
-		endpoint      string
-		exists        bool
-		existsError   error
-		increment     int64
+		name           string
+		tenantID       string
+		endpoint       string
+		exists         bool
+		existsError    error
+		increment      int64
 		incrementError error
-		setError      error
-		expectedError bool
+		setError       error
+		expectedError  bool
 	}{
 		{
-			name:          "should increment successfully when key exists",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			exists:        true,
-			existsError:   nil,
-			increment:     51,
+			name:           "should increment successfully when key exists",
+			tenantID:       "tenant-123",
+			endpoint:       "/api/v1/comments",
+			exists:         true,
+			existsError:    nil,
+			increment:      51,
 			incrementError: nil,
-			setError:      nil,
-			expectedError: false,
+			setError:       nil,
+			expectedError:  false,
 		},
 		{
-			name:          "should increment and set expiration when key does not exist",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			exists:        false,
-			existsError:   nil,
-			increment:     1,
+			name:           "should increment and set expiration when key does not exist",
+			tenantID:       "tenant-123",
+			endpoint:       "/api/v1/comments",
+			exists:         false,
+			existsError:    nil,
+			increment:      1,
 			incrementError: nil,
-			setError:      nil,
-			expectedError: false,
+			setError:       nil,
+			expectedError:  false,
 		},
 		{
-			name:          "should return error when exists check fails",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			exists:        false,
-			existsError:   errors.New("redis error"),
-			increment:     0,
+			name:           "should return error when exists check fails",
+			tenantID:       "tenant-123",
+			endpoint:       "/api/v1/comments",
+			exists:         false,
+			existsError:    errors.New("redis error"),
+			increment:      0,
 			incrementError: nil,
-			setError:      nil,
-			expectedError: true,
+			setError:       nil,
+			expectedError:  true,
 		},
 		{
-			name:          "should return error when increment fails",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			exists:        true,
-			existsError:   nil,
-			increment:     0,
+			name:           "should return error when increment fails",
+			tenantID:       "tenant-123",
+			endpoint:       "/api/v1/comments",
+			exists:         true,
+			existsError:    nil,
+			increment:      0,
 			incrementError: errors.New("redis error"),
-			setError:      nil,
-			expectedError: true,
+			setError:       nil,
+			expectedError:  true,
 		},
 		{
-			name:          "should return error when set expiration fails",
-			tenantID:      "tenant-123",
-			endpoint:      "/api/v1/comments",
-			exists:        false,
-			existsError:   nil,
-			increment:     1,
+			name:           "should return error when set expiration fails",
+			tenantID:       "tenant-123",
+			endpoint:       "/api/v1/comments",
+			exists:         false,
+			existsError:    nil,
+			increment:      1,
 			incrementError: nil,
-			setError:      errors.New("redis error"),
-			expectedError: true,
+			setError:       errors.New("redis error"),
+			expectedError:  true,
 		},
 	}
 
@@ -278,4 +278,3 @@ func TestRateLimiterTenant_Increment(t *testing.T) {
 		})
 	}
 }
-

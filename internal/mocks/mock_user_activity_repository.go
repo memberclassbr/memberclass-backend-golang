@@ -5,9 +5,9 @@ package mocks
 import (
 	context "context"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/user"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	mock "github.com/stretchr/testify/mock"
-
-	response "github.com/memberclass-backend-golang/internal/domain/dto/response"
 
 	time "time"
 )
@@ -26,24 +26,24 @@ func (_m *MockUserActivityRepository) EXPECT() *MockUserActivityRepository_Expec
 }
 
 // FindActivitiesByEmail provides a mock function with given fields: ctx, email, page, limit
-func (_m *MockUserActivityRepository) FindActivitiesByEmail(ctx context.Context, email string, page int, limit int) ([]response.AccessData, int64, error) {
+func (_m *MockUserActivityRepository) FindActivitiesByEmail(ctx context.Context, email string, page int, limit int) ([]activity.AccessData, int64, error) {
 	ret := _m.Called(ctx, email, page, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindActivitiesByEmail")
 	}
 
-	var r0 []response.AccessData
+	var r0 []activity.AccessData
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, int, int) ([]response.AccessData, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, int) ([]activity.AccessData, int64, error)); ok {
 		return rf(ctx, email, page, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, int, int) []response.AccessData); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, int) []activity.AccessData); ok {
 		r0 = rf(ctx, email, page, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]response.AccessData)
+			r0 = ret.Get(0).([]activity.AccessData)
 		}
 	}
 
@@ -83,34 +83,34 @@ func (_c *MockUserActivityRepository_FindActivitiesByEmail_Call) Run(run func(ct
 	return _c
 }
 
-func (_c *MockUserActivityRepository_FindActivitiesByEmail_Call) Return(_a0 []response.AccessData, _a1 int64, _a2 error) *MockUserActivityRepository_FindActivitiesByEmail_Call {
+func (_c *MockUserActivityRepository_FindActivitiesByEmail_Call) Return(_a0 []activity.AccessData, _a1 int64, _a2 error) *MockUserActivityRepository_FindActivitiesByEmail_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockUserActivityRepository_FindActivitiesByEmail_Call) RunAndReturn(run func(context.Context, string, int, int) ([]response.AccessData, int64, error)) *MockUserActivityRepository_FindActivitiesByEmail_Call {
+func (_c *MockUserActivityRepository_FindActivitiesByEmail_Call) RunAndReturn(run func(context.Context, string, int, int) ([]activity.AccessData, int64, error)) *MockUserActivityRepository_FindActivitiesByEmail_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetActivitySummaryByEmail provides a mock function with given fields: ctx, email
-func (_m *MockUserActivityRepository) GetActivitySummaryByEmail(ctx context.Context, email string) (*response.ActivitySummaryResponse, error) {
+func (_m *MockUserActivityRepository) GetActivitySummaryByEmail(ctx context.Context, email string) (*user.ActivitySummaryResponse, error) {
 	ret := _m.Called(ctx, email)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActivitySummaryByEmail")
 	}
 
-	var r0 *response.ActivitySummaryResponse
+	var r0 *user.ActivitySummaryResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*response.ActivitySummaryResponse, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*user.ActivitySummaryResponse, error)); ok {
 		return rf(ctx, email)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *response.ActivitySummaryResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *user.ActivitySummaryResponse); ok {
 		r0 = rf(ctx, email)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*response.ActivitySummaryResponse)
+			r0 = ret.Get(0).(*user.ActivitySummaryResponse)
 		}
 	}
 
@@ -142,35 +142,35 @@ func (_c *MockUserActivityRepository_GetActivitySummaryByEmail_Call) Run(run fun
 	return _c
 }
 
-func (_c *MockUserActivityRepository_GetActivitySummaryByEmail_Call) Return(_a0 *response.ActivitySummaryResponse, _a1 error) *MockUserActivityRepository_GetActivitySummaryByEmail_Call {
+func (_c *MockUserActivityRepository_GetActivitySummaryByEmail_Call) Return(_a0 *user.ActivitySummaryResponse, _a1 error) *MockUserActivityRepository_GetActivitySummaryByEmail_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockUserActivityRepository_GetActivitySummaryByEmail_Call) RunAndReturn(run func(context.Context, string) (*response.ActivitySummaryResponse, error)) *MockUserActivityRepository_GetActivitySummaryByEmail_Call {
+func (_c *MockUserActivityRepository_GetActivitySummaryByEmail_Call) RunAndReturn(run func(context.Context, string) (*user.ActivitySummaryResponse, error)) *MockUserActivityRepository_GetActivitySummaryByEmail_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetUsersWithActivity provides a mock function with given fields: ctx, tenantID, startDate, endDate, page, limit
-func (_m *MockUserActivityRepository) GetUsersWithActivity(ctx context.Context, tenantID string, startDate time.Time, endDate time.Time, page int, limit int) ([]response.UserActivitySummary, int64, error) {
+func (_m *MockUserActivityRepository) GetUsersWithActivity(ctx context.Context, tenantID string, startDate time.Time, endDate time.Time, page int, limit int) ([]user.UserActivitySummary, int64, error) {
 	ret := _m.Called(ctx, tenantID, startDate, endDate, page, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUsersWithActivity")
 	}
 
-	var r0 []response.UserActivitySummary
+	var r0 []user.UserActivitySummary
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) ([]response.UserActivitySummary, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) ([]user.UserActivitySummary, int64, error)); ok {
 		return rf(ctx, tenantID, startDate, endDate, page, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) []response.UserActivitySummary); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) []user.UserActivitySummary); ok {
 		r0 = rf(ctx, tenantID, startDate, endDate, page, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]response.UserActivitySummary)
+			r0 = ret.Get(0).([]user.UserActivitySummary)
 		}
 	}
 
@@ -212,35 +212,35 @@ func (_c *MockUserActivityRepository_GetUsersWithActivity_Call) Run(run func(ctx
 	return _c
 }
 
-func (_c *MockUserActivityRepository_GetUsersWithActivity_Call) Return(_a0 []response.UserActivitySummary, _a1 int64, _a2 error) *MockUserActivityRepository_GetUsersWithActivity_Call {
+func (_c *MockUserActivityRepository_GetUsersWithActivity_Call) Return(_a0 []user.UserActivitySummary, _a1 int64, _a2 error) *MockUserActivityRepository_GetUsersWithActivity_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockUserActivityRepository_GetUsersWithActivity_Call) RunAndReturn(run func(context.Context, string, time.Time, time.Time, int, int) ([]response.UserActivitySummary, int64, error)) *MockUserActivityRepository_GetUsersWithActivity_Call {
+func (_c *MockUserActivityRepository_GetUsersWithActivity_Call) RunAndReturn(run func(context.Context, string, time.Time, time.Time, int, int) ([]user.UserActivitySummary, int64, error)) *MockUserActivityRepository_GetUsersWithActivity_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetUsersWithoutActivity provides a mock function with given fields: ctx, tenantID, startDate, endDate, page, limit
-func (_m *MockUserActivityRepository) GetUsersWithoutActivity(ctx context.Context, tenantID string, startDate time.Time, endDate time.Time, page int, limit int) ([]response.UserActivitySummary, int64, error) {
+func (_m *MockUserActivityRepository) GetUsersWithoutActivity(ctx context.Context, tenantID string, startDate time.Time, endDate time.Time, page int, limit int) ([]user.UserActivitySummary, int64, error) {
 	ret := _m.Called(ctx, tenantID, startDate, endDate, page, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUsersWithoutActivity")
 	}
 
-	var r0 []response.UserActivitySummary
+	var r0 []user.UserActivitySummary
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) ([]response.UserActivitySummary, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) ([]user.UserActivitySummary, int64, error)); ok {
 		return rf(ctx, tenantID, startDate, endDate, page, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) []response.UserActivitySummary); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, time.Time, time.Time, int, int) []user.UserActivitySummary); ok {
 		r0 = rf(ctx, tenantID, startDate, endDate, page, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]response.UserActivitySummary)
+			r0 = ret.Get(0).([]user.UserActivitySummary)
 		}
 	}
 
@@ -282,12 +282,12 @@ func (_c *MockUserActivityRepository_GetUsersWithoutActivity_Call) Run(run func(
 	return _c
 }
 
-func (_c *MockUserActivityRepository_GetUsersWithoutActivity_Call) Return(_a0 []response.UserActivitySummary, _a1 int64, _a2 error) *MockUserActivityRepository_GetUsersWithoutActivity_Call {
+func (_c *MockUserActivityRepository_GetUsersWithoutActivity_Call) Return(_a0 []user.UserActivitySummary, _a1 int64, _a2 error) *MockUserActivityRepository_GetUsersWithoutActivity_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockUserActivityRepository_GetUsersWithoutActivity_Call) RunAndReturn(run func(context.Context, string, time.Time, time.Time, int, int) ([]response.UserActivitySummary, int64, error)) *MockUserActivityRepository_GetUsersWithoutActivity_Call {
+func (_c *MockUserActivityRepository_GetUsersWithoutActivity_Call) RunAndReturn(run func(context.Context, string, time.Time, time.Time, int, int) ([]user.UserActivitySummary, int64, error)) *MockUserActivityRepository_GetUsersWithoutActivity_Call {
 	_c.Call.Return(run)
 	return _c
 }

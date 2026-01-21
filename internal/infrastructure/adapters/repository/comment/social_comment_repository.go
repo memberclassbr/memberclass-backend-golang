@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto/request"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	"github.com/memberclass-backend-golang/internal/domain/utils"
 )
 
@@ -16,14 +17,14 @@ type SocialCommentRepository struct {
 	log ports.Logger
 }
 
-func NewSocialCommentRepository(db *sql.DB, log ports.Logger) ports.SocialCommentRepository {
+func NewSocialCommentRepository(db *sql.DB, log ports.Logger) comment.SocialCommentRepository {
 	return &SocialCommentRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-func (r *SocialCommentRepository) Create(ctx context.Context, req request.CreateSocialCommentRequest, tenantID string) (string, error) {
+func (r *SocialCommentRepository) Create(ctx context.Context, req comments.CreateSocialCommentRequest, tenantID string) (string, error) {
 	id := utils.GenerateCUID()
 
 	query := `
@@ -44,14 +45,14 @@ func (r *SocialCommentRepository) Create(ctx context.Context, req request.Create
 	return id, nil
 }
 
-func (r *SocialCommentRepository) FindByID(ctx context.Context, postID string) (*ports.PostInfo, error) {
+func (r *SocialCommentRepository) FindByID(ctx context.Context, postID string) (*comment.PostInfo, error) {
 	query := `
 		SELECT id, "userId" 
 		FROM "Post" 
 		WHERE id = $1
 	`
 
-	var post ports.PostInfo
+	var post comment.PostInfo
 	err := r.db.QueryRowContext(ctx, query, postID).Scan(&post.ID, &post.UserID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -67,7 +68,7 @@ func (r *SocialCommentRepository) FindByID(ctx context.Context, postID string) (
 	return &post, nil
 }
 
-func (r *SocialCommentRepository) Update(ctx context.Context, req request.CreateSocialCommentRequest, tenantID string) error {
+func (r *SocialCommentRepository) Update(ctx context.Context, req comments.CreateSocialCommentRequest, tenantID string) error {
 	query := `
 		UPDATE "Post" 
 		SET title = $2, content = $3, image = $4, "videoEmbed" = $5, "updatedAt" = NOW()
@@ -85,5 +86,3 @@ func (r *SocialCommentRepository) Update(ctx context.Context, req request.Create
 
 	return nil
 }
-
-

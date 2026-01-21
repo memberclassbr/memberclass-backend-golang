@@ -7,27 +7,38 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	httpHandlers "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/middlewares"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/student"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
+	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
+	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
 func createTestRouter(t *testing.T) *Router {
-	mockVideoHandler := &httpHandlers.VideoHandler{}
-	mockLessonHandler := &httpHandlers.LessonHandler{}
-	mockCommentHandler := &httpHandlers.CommentHandler{}
-	mockUserActivityHandler := &httpHandlers.UserActivityHandler{}
-	mockUserPurchaseHandler := &httpHandlers.UserPurchaseHandler{}
-	mockUserInformationsHandler := &httpHandlers.UserInformationsHandler{}
-	mockSocialCommentHandler := &httpHandlers.SocialCommentHandler{}
-	mockActivitySummaryHandler := &httpHandlers.ActivitySummaryHandler{}
-	mockLessonsCompletedHandler := &httpHandlers.LessonsCompletedHandler{}
-	mockStudentReportHandler := &httpHandlers.StudentReportHandler{}
+	mockVideoHandler := &video.VideoHandler{}
+	mockLessonHandler := &lesson.LessonHandler{}
+	mockCommentHandler := &comment.CommentHandler{}
+	mockUserActivityHandler := &user.UserActivityHandler{}
+	mockUserPurchaseHandler := &purchase.UserPurchaseHandler{}
+	mockUserInformationsHandler := &user.UserInformationsHandler{}
+	mockSocialCommentHandler := &comment.SocialCommentHandler{}
+	mockActivitySummaryHandler := &user.ActivitySummaryHandler{}
+	mockLessonsCompletedHandler := &lesson.LessonsCompletedHandler{}
+	mockStudentReportHandler := &student.StudentReportHandler{}
 	mockSwaggerHandler := httpHandlers.NewSwaggerHandler()
-	mockAuthHandler := &httpHandlers.AuthHandler{}
-	mockAILessonHandler := &httpHandlers.AILessonHandler{}
-	mockAITenantHandler := &httpHandlers.AITenantHandler{}
+	mockAuthHandler := &auth.AuthHandler{}
+	mockSSOHandler := &sso.SSOHandler{}
+	mockAILessonHandler := &ai.AILessonHandler{}
+	mockAITenantHandler := &ai.AITenantHandler{}
 	mockLogger := &mocks.MockLogger{}
 	mockRateLimiter := &mocks.MockRateLimiterUpload{}
 	mockRateLimiterTenant := &mocks.MockRateLimiterTenant{}
@@ -40,13 +51,13 @@ func createTestRouter(t *testing.T) *Router {
 	mockLogger.On("Info", mock.Anything).Return().Maybe()
 	mockLogger.On("Debug", mock.Anything).Return().Maybe()
 
-	rateLimitMiddleware := middlewares.NewRateLimitMiddleware(mockRateLimiter, mockLogger)
-	rateLimitTenantMiddleware := middlewares.NewRateLimitTenantMiddleware(mockRateLimiterTenant, mockLogger)
-	rateLimitIPMiddleware := middlewares.NewRateLimitIPMiddleware(mockRateLimiterIP, mockLogger)
-	authMiddleware := middlewares.NewAuthMiddleware(mockLogger, mockSessionValidator)
-	authExternalMiddleware := middlewares.NewAuthExternalMiddleware(mockApiTokenUseCase)
+	rateLimitMiddleware := rate_limit.NewRateLimitMiddleware(mockRateLimiter, mockLogger)
+	rateLimitTenantMiddleware := rate_limit.NewRateLimitTenantMiddleware(mockRateLimiterTenant, mockLogger)
+	rateLimitIPMiddleware := rate_limit.NewRateLimitIPMiddleware(mockRateLimiterIP, mockLogger)
+	authMiddleware := auth2.NewAuthMiddleware(mockLogger, mockSessionValidator)
+	authExternalMiddleware := auth2.NewAuthExternalMiddleware(mockApiTokenUseCase)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockAILessonHandler, mockAITenantHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
@@ -72,12 +83,12 @@ func TestRouter_SetupRoutes(t *testing.T) {
 	}{
 		// Video routes
 		{"POST", "/api/v1/videos/upload", 404}, // Will be 404 because we don't have actual handler implementation
-		
+
 		// Lesson routes
-		{"POST", "/api/lessons/pdf-process", 404}, // Will be 404 because we don't have actual handler implementation
-		{"POST", "/api/lessons/process-all-pdfs", 404}, // Will be 404 because we don't have actual handler implementation
+		{"POST", "/api/lessons/pdf-process", 404},               // Will be 404 because we don't have actual handler implementation
+		{"POST", "/api/lessons/process-all-pdfs", 404},          // Will be 404 because we don't have actual handler implementation
 		{"POST", "/api/lessons/lesson-123/pdf-regenerate", 404}, // Will be 404 because we don't have actual handler implementation
-		
+
 		// Non-existent routes
 		{"GET", "/api/lessons", 404},
 		{"POST", "/api/v1/videos", 404},
@@ -95,7 +106,7 @@ func TestRouter_SetupRoutes(t *testing.T) {
 			// The actual status codes will depend on the handler implementations
 			// We expect either the route to be found (and potentially return an error from handler)
 			// or to return 404 if the route doesn't exist
-			assert.True(t, w.Code == http.StatusNotFound || w.Code >= 400, 
+			assert.True(t, w.Code == http.StatusNotFound || w.Code >= 400,
 				"Expected 404 or error status, got %d for %s %s", w.Code, tc.method, tc.path)
 		})
 	}
@@ -106,7 +117,7 @@ func TestRouter_MiddlewareConfiguration(t *testing.T) {
 	router.SetupRoutes()
 
 	assert.NotNil(t, router.Router)
-	
+
 	req := httptest.NewRequest("GET", "/api/lessons", nil)
 	w := httptest.NewRecorder()
 
@@ -167,7 +178,7 @@ func TestRouter_MiddlewareOrder(t *testing.T) {
 	router.SetupRoutes()
 
 	assert.NotNil(t, router.Router)
-	
+
 	req := httptest.NewRequest("GET", "/api/lessons", nil)
 	w := httptest.NewRecorder()
 

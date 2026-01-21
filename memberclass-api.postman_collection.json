@@ -40,6 +40,21 @@
 			"key": "internalAiApiKey",
 			"value": "your-internal-ai-api-key",
 			"type": "string"
+		},
+		{
+			"key": "userId",
+			"value": "your-user-id",
+			"type": "string"
+		},
+		{
+			"key": "externalUrl",
+			"value": "https://external-platform.com",
+			"type": "string"
+		},
+		{
+			"key": "ssoToken",
+			"value": "your-sso-token",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -2897,6 +2912,426 @@
 								}
 							],
 							"body": "{\n    \"ok\": false,\n    \"error\": \"Muitas requisições. Tente novamente em 5 minutos.\",\n    \"errorCode\": \"RATE_LIMIT_EXCEEDED\",\n    \"retryAfter\": 300\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "SSO External",
+			"description": "Endpoints para autenticação externa via SSO (Single Sign-On)",
+			"item": [
+				{
+					"name": "Generate SSO Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "x-internal-api-key",
+								"value": "{{internalAiApiKey}}",
+								"type": "text",
+								"description": "API Key interna para autenticação"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"userId\": \"{{userId}}\",\n    \"tenantId\": \"{{tenantId}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl={{externalUrl}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sso",
+								"generate-token"
+							],
+							"query": [
+								{
+									"key": "externalUrl",
+									"value": "{{externalUrl}}",
+									"description": "URL da plataforma externa para redirecionamento"
+								}
+							]
+						},
+						"description": "Gera um token SSO de uso único válido por 5 minutos para autenticação em plataforma externa. Retorna o token e a URL de redirecionamento."
+					},
+					"response": [
+						{
+							"name": "Generate SSO Token - Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"user123\",\n    \"tenantId\": \"tenant456\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"sso",
+										"generate-token"
+									],
+									"query": [
+										{
+											"key": "externalUrl",
+											"value": "https://external-platform.com"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"token\": \"abc123token456\",\n    \"redirectUrl\": \"https://external-platform.com?token-mc=abc123token456\",\n    \"expiresInSecs\": 300\n}"
+						},
+						{
+							"name": "Generate SSO Token - Unauthorized",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"user123\",\n    \"tenantId\": \"tenant456\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"sso",
+										"generate-token"
+									],
+									"query": [
+										{
+											"key": "externalUrl",
+											"value": "https://external-platform.com"
+										}
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
+						},
+						{
+							"name": "Generate SSO Token - User Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "x-internal-api-key",
+										"value": "valid-internal-key"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userId\": \"nonexistent\",\n    \"tenantId\": \"tenant456\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"sso",
+										"generate-token"
+									],
+									"query": [
+										{
+											"key": "externalUrl",
+											"value": "https://external-platform.com"
+										}
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"usuário não encontrado\",\n    \"errorCode\": \"NOT_FOUND\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Validate SSO Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"{{ssoToken}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/sso/validate-token",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"sso",
+								"validate-token"
+							]
+						},
+						"description": "Valida um token SSO e retorna os dados do usuário e tenant. Token é de uso único e expira em 5 minutos. Endpoint público."
+					},
+					"response": [
+						{
+							"name": "Validate SSO Token - Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"token\": \"valid-token-123\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/sso/validate-token",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"sso",
+										"validate-token"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"user\": {\n        \"id\": \"user123\",\n        \"email\": \"user@example.com\",\n        \"name\": \"João da Silva\",\n        \"phone\": \"+5511999999999\",\n        \"document\": \"12345678900\"\n    },\n    \"tenant\": {\n        \"id\": \"tenant456\",\n        \"name\": \"Meu Tenant\"\n    }\n}"
+						},
+						{
+							"name": "Validate SSO Token - Invalid Token",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"token\": \"invalid-token\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/sso/validate-token",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"sso",
+										"validate-token"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"token inválido\",\n    \"errorCode\": \"INVALID_TOKEN\"\n}"
+						},
+						{
+							"name": "Validate SSO Token - Already Used",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"token\": \"already-used-token\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/sso/validate-token",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"sso",
+										"validate-token"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"token já foi utilizado\",\n    \"errorCode\": \"INVALID_TOKEN\"\n}"
+						},
+						{
+							"name": "Validate SSO Token - Expired",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"token\": \"expired-token\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/sso/validate-token",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"sso",
+										"validate-token"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"token expirado\",\n    \"errorCode\": \"INVALID_TOKEN\"\n}"
 						}
 					]
 				}

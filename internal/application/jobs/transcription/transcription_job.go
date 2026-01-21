@@ -11,22 +11,23 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/dto/request"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request/ai"
+	ai2 "github.com/memberclass-backend-golang/internal/domain/dto/response/ai"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
+	ai3 "github.com/memberclass-backend-golang/internal/domain/ports/ai"
 )
 
 type TranscriptionJob struct {
-	aiTenantUseCase ports.AITenantUseCase
-	aiLessonUseCase ports.AILessonUseCase
+	aiTenantUseCase ai3.AITenantUseCase
+	aiLessonUseCase ai3.AILessonUseCase
 	logger          ports.Logger
 	httpClient      *http.Client
 	apiURL          string
 }
 
 func NewTranscriptionJob(
-	aiTenantUseCase ports.AITenantUseCase,
-	aiLessonUseCase ports.AILessonUseCase,
+	aiTenantUseCase ai3.AITenantUseCase,
+	aiLessonUseCase ai3.AILessonUseCase,
 	logger ports.Logger,
 ) *TranscriptionJob {
 	apiURL := os.Getenv("TRANSCRIPTION_API_URL")
@@ -73,8 +74,8 @@ func (j *TranscriptionJob) Execute(ctx context.Context) error {
 	return nil
 }
 
-func (j *TranscriptionJob) processTenant(ctx context.Context, tenant response.AITenantData) error {
-	req := request.GetAILessonsRequest{
+func (j *TranscriptionJob) processTenant(ctx context.Context, tenant ai2.AITenantData) error {
+	req := ai.GetAILessonsRequest{
 		TenantID:        tenant.ID,
 		OnlyUnprocessed: true,
 	}
@@ -102,7 +103,7 @@ func (j *TranscriptionJob) processTenant(ctx context.Context, tenant response.AI
 	return nil
 }
 
-func (j *TranscriptionJob) buildPayload(lessons []response.AILessonData, tenantID string) dto.TranscriptionJobRequest {
+func (j *TranscriptionJob) buildPayload(lessons []ai2.AILessonData, tenantID string) dto.TranscriptionJobRequest {
 	lessonsData := make([]dto.TranscriptionLessonData, len(lessons))
 	for i, lesson := range lessons {
 		lessonsData[i] = dto.TranscriptionLessonData{

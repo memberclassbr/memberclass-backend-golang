@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/dto/request"
-	"github.com/memberclass-backend-golang/internal/domain/entities"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/comment"
+	comment2 "github.com/memberclass-backend-golang/internal/domain/entities/comment"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
@@ -32,12 +32,12 @@ func TestNewCommentRepository(t *testing.T) {
 
 func TestCommentRepository_FindByIDAndTenant(t *testing.T) {
 	tests := []struct {
-		name          string
-		commentID     string
-		tenantID      string
-		mockSetup     func(sqlmock.Sqlmock)
-		expectedError error
-		expectedComment *entities.Comment
+		name            string
+		commentID       string
+		tenantID        string
+		mockSetup       func(sqlmock.Sqlmock)
+		expectedError   error
+		expectedComment *comment2.Comment
 	}{
 		{
 			name:      "should return comment when found",
@@ -61,13 +61,13 @@ func TestCommentRepository_FindByIDAndTenant(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedComment: func() *entities.Comment {
+			expectedComment: func() *comment2.Comment {
 				commentID := "comment-123"
 				question := "Test question?"
 				answer := "Test answer"
 				lessonID := "lesson-123"
 				userID := "user-123"
-				return &entities.Comment{
+				return &comment2.Comment{
 					ID:        &commentID,
 					Question:  &question,
 					Answer:    &answer,
@@ -98,12 +98,12 @@ func TestCommentRepository_FindByIDAndTenant(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedComment: func() *entities.Comment {
+			expectedComment: func() *comment2.Comment {
 				commentID := "comment-123"
 				question := "Test question?"
 				lessonID := "lesson-123"
 				userID := "user-123"
-				return &entities.Comment{
+				return &comment2.Comment{
 					ID:        &commentID,
 					Question:  &question,
 					Answer:    nil,
@@ -178,12 +178,12 @@ func TestCommentRepository_FindByIDAndTenant(t *testing.T) {
 
 func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 	tests := []struct {
-		name          string
-		commentID     string
-		tenantID      string
-		mockSetup     func(sqlmock.Sqlmock)
-		expectedError error
-		expectedResponse *dto.CommentResponse
+		name             string
+		commentID        string
+		tenantID         string
+		mockSetup        func(sqlmock.Sqlmock)
+		expectedError    error
+		expectedResponse *comment.CommentResponse
 	}{
 		{
 			name:      "should return comment response when found",
@@ -205,7 +205,7 @@ func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedResponse: &dto.CommentResponse{
+			expectedResponse: &comment.CommentResponse{
 				ID:         "comment-123",
 				CreatedAt:  time.Now(),
 				UpdatedAt:  time.Now(),
@@ -227,7 +227,7 @@ func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 					WithArgs("non-existent", "tenant-123").
 					WillReturnError(sql.ErrNoRows)
 			},
-			expectedError:   memberclasserrors.ErrCommentNotFound,
+			expectedError:    memberclasserrors.ErrCommentNotFound,
 			expectedResponse: nil,
 		},
 		{
@@ -239,7 +239,7 @@ func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 					WithArgs("comment-123", "tenant-123").
 					WillReturnError(errors.New("database connection error"))
 			},
-			expectedError:   errors.New("database connection error"),
+			expectedError:    errors.New("database connection error"),
 			expectedResponse: nil,
 		},
 	}
@@ -283,13 +283,13 @@ func TestCommentRepository_FindByIDAndTenantWithDetails(t *testing.T) {
 
 func TestCommentRepository_Update(t *testing.T) {
 	tests := []struct {
-		name          string
-		commentID     string
-		answer        string
-		published     bool
-		mockSetup     func(sqlmock.Sqlmock)
-		expectedError error
-		expectedComment *entities.Comment
+		name            string
+		commentID       string
+		answer          string
+		published       bool
+		mockSetup       func(sqlmock.Sqlmock)
+		expectedError   error
+		expectedComment *comment2.Comment
 	}{
 		{
 			name:      "should update comment successfully",
@@ -310,11 +310,11 @@ func TestCommentRepository_Update(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedComment: func() *entities.Comment {
+			expectedComment: func() *comment2.Comment {
 				commentID := "comment-123"
 				question := "Test question?"
 				answer := "Updated answer"
-				return &entities.Comment{
+				return &comment2.Comment{
 					ID:        &commentID,
 					Question:  &question,
 					Answer:    &answer,
@@ -370,7 +370,7 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 	tests := []struct {
 		name              string
 		tenantID          string
-		req               *request.GetCommentsRequest
+		req               *comments.GetCommentsRequest
 		mockSetup         func(sqlmock.Sqlmock)
 		expectedError     error
 		expectedCount     int
@@ -379,8 +379,8 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 	}{
 		{
 			name:     "should return comments with pagination",
-			tenantID:  "tenant-123",
-			req: &request.GetCommentsRequest{
+			tenantID: "tenant-123",
+			req: &comments.GetCommentsRequest{
 				Page:  1,
 				Limit: 10,
 			},
@@ -411,8 +411,8 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 		},
 		{
 			name:     "should return empty list when no comments found",
-			tenantID:  "tenant-123",
-			req: &request.GetCommentsRequest{
+			tenantID: "tenant-123",
+			req: &comments.GetCommentsRequest{
 				Page:  1,
 				Limit: 10,
 			},
@@ -436,8 +436,8 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 		},
 		{
 			name:     "should return error when query fails",
-			tenantID:  "tenant-123",
-			req: &request.GetCommentsRequest{
+			tenantID: "tenant-123",
+			req: &comments.GetCommentsRequest{
 				Page:  1,
 				Limit: 10,
 			},
@@ -450,14 +450,14 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 				Code:    500,
 				Message: "error finding comments",
 			},
-			expectedCount: 0,
-			expectedTotal: 0,
+			expectedCount:     0,
+			expectedTotal:     0,
 			expectLoggerError: true,
 		},
 		{
 			name:     "should return error when count query fails",
-			tenantID:  "tenant-123",
-			req: &request.GetCommentsRequest{
+			tenantID: "tenant-123",
+			req: &comments.GetCommentsRequest{
 				Page:  1,
 				Limit: 10,
 			},
@@ -482,8 +482,8 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 				Code:    500,
 				Message: "error counting comments",
 			},
-			expectedCount: 0,
-			expectedTotal: 0,
+			expectedCount:     0,
+			expectedTotal:     0,
 			expectLoggerError: true,
 		},
 	}
@@ -512,7 +512,7 @@ func TestCommentRepository_FindAllByTenant(t *testing.T) {
 					assert.Equal(t, memberClassErr.Code, actualErr.Code)
 					assert.Equal(t, memberClassErr.Message, actualErr.Message)
 				} else {
-				assert.Equal(t, tt.expectedError.Error(), err.Error())
+					assert.Equal(t, tt.expectedError.Error(), err.Error())
 				}
 				assert.Nil(t, result)
 				assert.Equal(t, int64(0), total)

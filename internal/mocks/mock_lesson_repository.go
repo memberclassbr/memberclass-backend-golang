@@ -5,11 +5,11 @@ package mocks
 import (
 	context "context"
 
-	entities "github.com/memberclass-backend-golang/internal/domain/entities"
+	response "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
+	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
+	entities "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
+	ports "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 	mock "github.com/stretchr/testify/mock"
-
-	ports "github.com/memberclass-backend-golang/internal/domain/ports"
-	response "github.com/memberclass-backend-golang/internal/domain/dto/response"
 
 	time "time"
 )
@@ -28,7 +28,7 @@ func (_m *MockLessonRepository) EXPECT() *MockLessonRepository_Expecter {
 }
 
 // CreatePDFAsset provides a mock function with given fields: ctx, asset
-func (_m *MockLessonRepository) CreatePDFAsset(ctx context.Context, asset *entities.LessonPDFAsset) error {
+func (_m *MockLessonRepository) CreatePDFAsset(ctx context.Context, asset *lessons.LessonPDFAsset) error {
 	ret := _m.Called(ctx, asset)
 
 	if len(ret) == 0 {
@@ -36,7 +36,7 @@ func (_m *MockLessonRepository) CreatePDFAsset(ctx context.Context, asset *entit
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *entities.LessonPDFAsset) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *lessons.LessonPDFAsset) error); ok {
 		r0 = rf(ctx, asset)
 	} else {
 		r0 = ret.Error(0)
@@ -57,9 +57,9 @@ func (_e *MockLessonRepository_Expecter) CreatePDFAsset(ctx interface{}, asset i
 	return &MockLessonRepository_CreatePDFAsset_Call{Call: _e.mock.On("CreatePDFAsset", ctx, asset)}
 }
 
-func (_c *MockLessonRepository_CreatePDFAsset_Call) Run(run func(ctx context.Context, asset *entities.LessonPDFAsset)) *MockLessonRepository_CreatePDFAsset_Call {
+func (_c *MockLessonRepository_CreatePDFAsset_Call) Run(run func(ctx context.Context, asset *lessons.LessonPDFAsset)) *MockLessonRepository_CreatePDFAsset_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*entities.LessonPDFAsset))
+		run(args[0].(context.Context), args[1].(*lessons.LessonPDFAsset))
 	})
 	return _c
 }
@@ -69,13 +69,13 @@ func (_c *MockLessonRepository_CreatePDFAsset_Call) Return(_a0 error) *MockLesso
 	return _c
 }
 
-func (_c *MockLessonRepository_CreatePDFAsset_Call) RunAndReturn(run func(context.Context, *entities.LessonPDFAsset) error) *MockLessonRepository_CreatePDFAsset_Call {
+func (_c *MockLessonRepository_CreatePDFAsset_Call) RunAndReturn(run func(context.Context, *lessons.LessonPDFAsset) error) *MockLessonRepository_CreatePDFAsset_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // CreatePDFPage provides a mock function with given fields: ctx, page
-func (_m *MockLessonRepository) CreatePDFPage(ctx context.Context, page *entities.LessonPDFPage) error {
+func (_m *MockLessonRepository) CreatePDFPage(ctx context.Context, page *lessons.LessonPDFPage) error {
 	ret := _m.Called(ctx, page)
 
 	if len(ret) == 0 {
@@ -83,7 +83,7 @@ func (_m *MockLessonRepository) CreatePDFPage(ctx context.Context, page *entitie
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *entities.LessonPDFPage) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *lessons.LessonPDFPage) error); ok {
 		r0 = rf(ctx, page)
 	} else {
 		r0 = ret.Error(0)
@@ -104,9 +104,9 @@ func (_e *MockLessonRepository_Expecter) CreatePDFPage(ctx interface{}, page int
 	return &MockLessonRepository_CreatePDFPage_Call{Call: _e.mock.On("CreatePDFPage", ctx, page)}
 }
 
-func (_c *MockLessonRepository_CreatePDFPage_Call) Run(run func(ctx context.Context, page *entities.LessonPDFPage)) *MockLessonRepository_CreatePDFPage_Call {
+func (_c *MockLessonRepository_CreatePDFPage_Call) Run(run func(ctx context.Context, page *lessons.LessonPDFPage)) *MockLessonRepository_CreatePDFPage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*entities.LessonPDFPage))
+		run(args[0].(context.Context), args[1].(*lessons.LessonPDFPage))
 	})
 	return _c
 }
@@ -116,7 +116,7 @@ func (_c *MockLessonRepository_CreatePDFPage_Call) Return(_a0 error) *MockLesson
 	return _c
 }
 
-func (_c *MockLessonRepository_CreatePDFPage_Call) RunAndReturn(run func(context.Context, *entities.LessonPDFPage) error) *MockLessonRepository_CreatePDFPage_Call {
+func (_c *MockLessonRepository_CreatePDFPage_Call) RunAndReturn(run func(context.Context, *lessons.LessonPDFPage) error) *MockLessonRepository_CreatePDFPage_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -288,23 +288,23 @@ func (_c *MockLessonRepository_FindCompletedLessonsByEmail_Call) RunAndReturn(ru
 }
 
 // GetByID provides a mock function with given fields: ctx, id
-func (_m *MockLessonRepository) GetByID(ctx context.Context, id string) (*entities.Lesson, error) {
+func (_m *MockLessonRepository) GetByID(ctx context.Context, id string) (*lessons.Lesson, error) {
 	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetByID")
 	}
 
-	var r0 *entities.Lesson
+	var r0 *lessons.Lesson
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*entities.Lesson, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*lessons.Lesson, error)); ok {
 		return rf(ctx, id)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *entities.Lesson); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *lessons.Lesson); ok {
 		r0 = rf(ctx, id)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.Lesson)
+			r0 = ret.Get(0).(*lessons.Lesson)
 		}
 	}
 
@@ -336,34 +336,34 @@ func (_c *MockLessonRepository_GetByID_Call) Run(run func(ctx context.Context, i
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByID_Call) Return(_a0 *entities.Lesson, _a1 error) *MockLessonRepository_GetByID_Call {
+func (_c *MockLessonRepository_GetByID_Call) Return(_a0 *lessons.Lesson, _a1 error) *MockLessonRepository_GetByID_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByID_Call) RunAndReturn(run func(context.Context, string) (*entities.Lesson, error)) *MockLessonRepository_GetByID_Call {
+func (_c *MockLessonRepository_GetByID_Call) RunAndReturn(run func(context.Context, string) (*lessons.Lesson, error)) *MockLessonRepository_GetByID_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetByIDWithPDFAsset provides a mock function with given fields: ctx, id
-func (_m *MockLessonRepository) GetByIDWithPDFAsset(ctx context.Context, id string) (*entities.Lesson, error) {
+func (_m *MockLessonRepository) GetByIDWithPDFAsset(ctx context.Context, id string) (*lessons.Lesson, error) {
 	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetByIDWithPDFAsset")
 	}
 
-	var r0 *entities.Lesson
+	var r0 *lessons.Lesson
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*entities.Lesson, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*lessons.Lesson, error)); ok {
 		return rf(ctx, id)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *entities.Lesson); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *lessons.Lesson); ok {
 		r0 = rf(ctx, id)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.Lesson)
+			r0 = ret.Get(0).(*lessons.Lesson)
 		}
 	}
 
@@ -395,35 +395,35 @@ func (_c *MockLessonRepository_GetByIDWithPDFAsset_Call) Run(run func(ctx contex
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByIDWithPDFAsset_Call) Return(_a0 *entities.Lesson, _a1 error) *MockLessonRepository_GetByIDWithPDFAsset_Call {
+func (_c *MockLessonRepository_GetByIDWithPDFAsset_Call) Return(_a0 *lessons.Lesson, _a1 error) *MockLessonRepository_GetByIDWithPDFAsset_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByIDWithPDFAsset_Call) RunAndReturn(run func(context.Context, string) (*entities.Lesson, error)) *MockLessonRepository_GetByIDWithPDFAsset_Call {
+func (_c *MockLessonRepository_GetByIDWithPDFAsset_Call) RunAndReturn(run func(context.Context, string) (*lessons.Lesson, error)) *MockLessonRepository_GetByIDWithPDFAsset_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetByIDWithTenant provides a mock function with given fields: ctx, lessonID
-func (_m *MockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*entities.Lesson, *entities.Tenant, error) {
+func (_m *MockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*lessons.Lesson, *entities.Tenant, error) {
 	ret := _m.Called(ctx, lessonID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetByIDWithTenant")
 	}
 
-	var r0 *entities.Lesson
+	var r0 *lessons.Lesson
 	var r1 *entities.Tenant
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*entities.Lesson, *entities.Tenant, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*lessons.Lesson, *entities.Tenant, error)); ok {
 		return rf(ctx, lessonID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *entities.Lesson); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *lessons.Lesson); ok {
 		r0 = rf(ctx, lessonID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.Lesson)
+			r0 = ret.Get(0).(*lessons.Lesson)
 		}
 	}
 
@@ -463,34 +463,34 @@ func (_c *MockLessonRepository_GetByIDWithTenant_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByIDWithTenant_Call) Return(_a0 *entities.Lesson, _a1 *entities.Tenant, _a2 error) *MockLessonRepository_GetByIDWithTenant_Call {
+func (_c *MockLessonRepository_GetByIDWithTenant_Call) Return(_a0 *lessons.Lesson, _a1 *entities.Tenant, _a2 error) *MockLessonRepository_GetByIDWithTenant_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByIDWithTenant_Call) RunAndReturn(run func(context.Context, string) (*entities.Lesson, *entities.Tenant, error)) *MockLessonRepository_GetByIDWithTenant_Call {
+func (_c *MockLessonRepository_GetByIDWithTenant_Call) RunAndReturn(run func(context.Context, string) (*lessons.Lesson, *entities.Tenant, error)) *MockLessonRepository_GetByIDWithTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetFailedPDFAssets provides a mock function with given fields: ctx
-func (_m *MockLessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*entities.LessonPDFAsset, error) {
+func (_m *MockLessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*lessons.LessonPDFAsset, error) {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetFailedPDFAssets")
 	}
 
-	var r0 []*entities.LessonPDFAsset
+	var r0 []*lessons.LessonPDFAsset
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]*entities.LessonPDFAsset, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) ([]*lessons.LessonPDFAsset, error)); ok {
 		return rf(ctx)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []*entities.LessonPDFAsset); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) []*lessons.LessonPDFAsset); ok {
 		r0 = rf(ctx)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*entities.LessonPDFAsset)
+			r0 = ret.Get(0).([]*lessons.LessonPDFAsset)
 		}
 	}
 
@@ -521,34 +521,34 @@ func (_c *MockLessonRepository_GetFailedPDFAssets_Call) Run(run func(ctx context
 	return _c
 }
 
-func (_c *MockLessonRepository_GetFailedPDFAssets_Call) Return(_a0 []*entities.LessonPDFAsset, _a1 error) *MockLessonRepository_GetFailedPDFAssets_Call {
+func (_c *MockLessonRepository_GetFailedPDFAssets_Call) Return(_a0 []*lessons.LessonPDFAsset, _a1 error) *MockLessonRepository_GetFailedPDFAssets_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetFailedPDFAssets_Call) RunAndReturn(run func(context.Context) ([]*entities.LessonPDFAsset, error)) *MockLessonRepository_GetFailedPDFAssets_Call {
+func (_c *MockLessonRepository_GetFailedPDFAssets_Call) RunAndReturn(run func(context.Context) ([]*lessons.LessonPDFAsset, error)) *MockLessonRepository_GetFailedPDFAssets_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetPDFAssetByLessonID provides a mock function with given fields: ctx, lessonID
-func (_m *MockLessonRepository) GetPDFAssetByLessonID(ctx context.Context, lessonID string) (*entities.LessonPDFAsset, error) {
+func (_m *MockLessonRepository) GetPDFAssetByLessonID(ctx context.Context, lessonID string) (*lessons.LessonPDFAsset, error) {
 	ret := _m.Called(ctx, lessonID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetPDFAssetByLessonID")
 	}
 
-	var r0 *entities.LessonPDFAsset
+	var r0 *lessons.LessonPDFAsset
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*entities.LessonPDFAsset, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*lessons.LessonPDFAsset, error)); ok {
 		return rf(ctx, lessonID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *entities.LessonPDFAsset); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *lessons.LessonPDFAsset); ok {
 		r0 = rf(ctx, lessonID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.LessonPDFAsset)
+			r0 = ret.Get(0).(*lessons.LessonPDFAsset)
 		}
 	}
 
@@ -580,34 +580,34 @@ func (_c *MockLessonRepository_GetPDFAssetByLessonID_Call) Run(run func(ctx cont
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPDFAssetByLessonID_Call) Return(_a0 *entities.LessonPDFAsset, _a1 error) *MockLessonRepository_GetPDFAssetByLessonID_Call {
+func (_c *MockLessonRepository_GetPDFAssetByLessonID_Call) Return(_a0 *lessons.LessonPDFAsset, _a1 error) *MockLessonRepository_GetPDFAssetByLessonID_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPDFAssetByLessonID_Call) RunAndReturn(run func(context.Context, string) (*entities.LessonPDFAsset, error)) *MockLessonRepository_GetPDFAssetByLessonID_Call {
+func (_c *MockLessonRepository_GetPDFAssetByLessonID_Call) RunAndReturn(run func(context.Context, string) (*lessons.LessonPDFAsset, error)) *MockLessonRepository_GetPDFAssetByLessonID_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetPDFPageByAssetAndNumber provides a mock function with given fields: ctx, assetID, pageNumber
-func (_m *MockLessonRepository) GetPDFPageByAssetAndNumber(ctx context.Context, assetID string, pageNumber int) (*entities.LessonPDFPage, error) {
+func (_m *MockLessonRepository) GetPDFPageByAssetAndNumber(ctx context.Context, assetID string, pageNumber int) (*lessons.LessonPDFPage, error) {
 	ret := _m.Called(ctx, assetID, pageNumber)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetPDFPageByAssetAndNumber")
 	}
 
-	var r0 *entities.LessonPDFPage
+	var r0 *lessons.LessonPDFPage
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, int) (*entities.LessonPDFPage, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, int) (*lessons.LessonPDFPage, error)); ok {
 		return rf(ctx, assetID, pageNumber)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, int) *entities.LessonPDFPage); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, int) *lessons.LessonPDFPage); ok {
 		r0 = rf(ctx, assetID, pageNumber)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.LessonPDFPage)
+			r0 = ret.Get(0).(*lessons.LessonPDFPage)
 		}
 	}
 
@@ -640,34 +640,34 @@ func (_c *MockLessonRepository_GetPDFPageByAssetAndNumber_Call) Run(run func(ctx
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPDFPageByAssetAndNumber_Call) Return(_a0 *entities.LessonPDFPage, _a1 error) *MockLessonRepository_GetPDFPageByAssetAndNumber_Call {
+func (_c *MockLessonRepository_GetPDFPageByAssetAndNumber_Call) Return(_a0 *lessons.LessonPDFPage, _a1 error) *MockLessonRepository_GetPDFPageByAssetAndNumber_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPDFPageByAssetAndNumber_Call) RunAndReturn(run func(context.Context, string, int) (*entities.LessonPDFPage, error)) *MockLessonRepository_GetPDFPageByAssetAndNumber_Call {
+func (_c *MockLessonRepository_GetPDFPageByAssetAndNumber_Call) RunAndReturn(run func(context.Context, string, int) (*lessons.LessonPDFPage, error)) *MockLessonRepository_GetPDFPageByAssetAndNumber_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetPDFPagesByAssetID provides a mock function with given fields: ctx, assetID
-func (_m *MockLessonRepository) GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*entities.LessonPDFPage, error) {
+func (_m *MockLessonRepository) GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*lessons.LessonPDFPage, error) {
 	ret := _m.Called(ctx, assetID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetPDFPagesByAssetID")
 	}
 
-	var r0 []*entities.LessonPDFPage
+	var r0 []*lessons.LessonPDFPage
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) ([]*entities.LessonPDFPage, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]*lessons.LessonPDFPage, error)); ok {
 		return rf(ctx, assetID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) []*entities.LessonPDFPage); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) []*lessons.LessonPDFPage); ok {
 		r0 = rf(ctx, assetID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*entities.LessonPDFPage)
+			r0 = ret.Get(0).([]*lessons.LessonPDFPage)
 		}
 	}
 
@@ -699,34 +699,34 @@ func (_c *MockLessonRepository_GetPDFPagesByAssetID_Call) Run(run func(ctx conte
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPDFPagesByAssetID_Call) Return(_a0 []*entities.LessonPDFPage, _a1 error) *MockLessonRepository_GetPDFPagesByAssetID_Call {
+func (_c *MockLessonRepository_GetPDFPagesByAssetID_Call) Return(_a0 []*lessons.LessonPDFPage, _a1 error) *MockLessonRepository_GetPDFPagesByAssetID_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPDFPagesByAssetID_Call) RunAndReturn(run func(context.Context, string) ([]*entities.LessonPDFPage, error)) *MockLessonRepository_GetPDFPagesByAssetID_Call {
+func (_c *MockLessonRepository_GetPDFPagesByAssetID_Call) RunAndReturn(run func(context.Context, string) ([]*lessons.LessonPDFPage, error)) *MockLessonRepository_GetPDFPagesByAssetID_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetPendingPDFLessons provides a mock function with given fields: ctx, limit
-func (_m *MockLessonRepository) GetPendingPDFLessons(ctx context.Context, limit int) ([]*entities.Lesson, error) {
+func (_m *MockLessonRepository) GetPendingPDFLessons(ctx context.Context, limit int) ([]*lessons.Lesson, error) {
 	ret := _m.Called(ctx, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetPendingPDFLessons")
 	}
 
-	var r0 []*entities.Lesson
+	var r0 []*lessons.Lesson
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int) ([]*entities.Lesson, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int) ([]*lessons.Lesson, error)); ok {
 		return rf(ctx, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int) []*entities.Lesson); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int) []*lessons.Lesson); ok {
 		r0 = rf(ctx, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*entities.Lesson)
+			r0 = ret.Get(0).([]*lessons.Lesson)
 		}
 	}
 
@@ -758,18 +758,18 @@ func (_c *MockLessonRepository_GetPendingPDFLessons_Call) Run(run func(ctx conte
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPendingPDFLessons_Call) Return(_a0 []*entities.Lesson, _a1 error) *MockLessonRepository_GetPendingPDFLessons_Call {
+func (_c *MockLessonRepository_GetPendingPDFLessons_Call) Return(_a0 []*lessons.Lesson, _a1 error) *MockLessonRepository_GetPendingPDFLessons_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetPendingPDFLessons_Call) RunAndReturn(run func(context.Context, int) ([]*entities.Lesson, error)) *MockLessonRepository_GetPendingPDFLessons_Call {
+func (_c *MockLessonRepository_GetPendingPDFLessons_Call) RunAndReturn(run func(context.Context, int) ([]*lessons.Lesson, error)) *MockLessonRepository_GetPendingPDFLessons_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Update provides a mock function with given fields: ctx, lesson
-func (_m *MockLessonRepository) Update(ctx context.Context, lesson *entities.Lesson) error {
+func (_m *MockLessonRepository) Update(ctx context.Context, lesson *lessons.Lesson) error {
 	ret := _m.Called(ctx, lesson)
 
 	if len(ret) == 0 {
@@ -777,7 +777,7 @@ func (_m *MockLessonRepository) Update(ctx context.Context, lesson *entities.Les
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *entities.Lesson) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *lessons.Lesson) error); ok {
 		r0 = rf(ctx, lesson)
 	} else {
 		r0 = ret.Error(0)
@@ -798,9 +798,9 @@ func (_e *MockLessonRepository_Expecter) Update(ctx interface{}, lesson interfac
 	return &MockLessonRepository_Update_Call{Call: _e.mock.On("Update", ctx, lesson)}
 }
 
-func (_c *MockLessonRepository_Update_Call) Run(run func(ctx context.Context, lesson *entities.Lesson)) *MockLessonRepository_Update_Call {
+func (_c *MockLessonRepository_Update_Call) Run(run func(ctx context.Context, lesson *lessons.Lesson)) *MockLessonRepository_Update_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*entities.Lesson))
+		run(args[0].(context.Context), args[1].(*lessons.Lesson))
 	})
 	return _c
 }
@@ -810,13 +810,13 @@ func (_c *MockLessonRepository_Update_Call) Return(_a0 error) *MockLessonReposit
 	return _c
 }
 
-func (_c *MockLessonRepository_Update_Call) RunAndReturn(run func(context.Context, *entities.Lesson) error) *MockLessonRepository_Update_Call {
+func (_c *MockLessonRepository_Update_Call) RunAndReturn(run func(context.Context, *lessons.Lesson) error) *MockLessonRepository_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // UpdatePDFAsset provides a mock function with given fields: ctx, asset
-func (_m *MockLessonRepository) UpdatePDFAsset(ctx context.Context, asset *entities.LessonPDFAsset) error {
+func (_m *MockLessonRepository) UpdatePDFAsset(ctx context.Context, asset *lessons.LessonPDFAsset) error {
 	ret := _m.Called(ctx, asset)
 
 	if len(ret) == 0 {
@@ -824,7 +824,7 @@ func (_m *MockLessonRepository) UpdatePDFAsset(ctx context.Context, asset *entit
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *entities.LessonPDFAsset) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, *lessons.LessonPDFAsset) error); ok {
 		r0 = rf(ctx, asset)
 	} else {
 		r0 = ret.Error(0)
@@ -845,9 +845,9 @@ func (_e *MockLessonRepository_Expecter) UpdatePDFAsset(ctx interface{}, asset i
 	return &MockLessonRepository_UpdatePDFAsset_Call{Call: _e.mock.On("UpdatePDFAsset", ctx, asset)}
 }
 
-func (_c *MockLessonRepository_UpdatePDFAsset_Call) Run(run func(ctx context.Context, asset *entities.LessonPDFAsset)) *MockLessonRepository_UpdatePDFAsset_Call {
+func (_c *MockLessonRepository_UpdatePDFAsset_Call) Run(run func(ctx context.Context, asset *lessons.LessonPDFAsset)) *MockLessonRepository_UpdatePDFAsset_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*entities.LessonPDFAsset))
+		run(args[0].(context.Context), args[1].(*lessons.LessonPDFAsset))
 	})
 	return _c
 }
@@ -857,7 +857,7 @@ func (_c *MockLessonRepository_UpdatePDFAsset_Call) Return(_a0 error) *MockLesso
 	return _c
 }
 
-func (_c *MockLessonRepository_UpdatePDFAsset_Call) RunAndReturn(run func(context.Context, *entities.LessonPDFAsset) error) *MockLessonRepository_UpdatePDFAsset_Call {
+func (_c *MockLessonRepository_UpdatePDFAsset_Call) RunAndReturn(run func(context.Context, *lessons.LessonPDFAsset) error) *MockLessonRepository_UpdatePDFAsset_Call {
 	_c.Call.Return(run)
 	return _c
 }

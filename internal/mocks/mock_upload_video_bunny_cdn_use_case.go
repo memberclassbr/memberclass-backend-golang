@@ -6,6 +6,7 @@ import (
 	context "context"
 
 	dto "github.com/memberclass-backend-golang/internal/domain/dto"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -23,23 +24,23 @@ func (_m *MockUploadVideoBunnyCdnUseCase) EXPECT() *MockUploadVideoBunnyCdnUseCa
 }
 
 // Execute provides a mock function with given fields: ctx, bunnyParams, fileBytes, title
-func (_m *MockUploadVideoBunnyCdnUseCase) Execute(ctx context.Context, bunnyParams dto.BunnyParametersAccess, fileBytes []byte, title string) (*dto.UploadVideoResponse, error) {
+func (_m *MockUploadVideoBunnyCdnUseCase) Execute(ctx context.Context, bunnyParams dto.BunnyParametersAccess, fileBytes []byte, title string) (*response.UploadVideoResponse, error) {
 	ret := _m.Called(ctx, bunnyParams, fileBytes, title)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Execute")
 	}
 
-	var r0 *dto.UploadVideoResponse
+	var r0 *response.UploadVideoResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, dto.BunnyParametersAccess, []byte, string) (*dto.UploadVideoResponse, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, dto.BunnyParametersAccess, []byte, string) (*response.UploadVideoResponse, error)); ok {
 		return rf(ctx, bunnyParams, fileBytes, title)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, dto.BunnyParametersAccess, []byte, string) *dto.UploadVideoResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, dto.BunnyParametersAccess, []byte, string) *response.UploadVideoResponse); ok {
 		r0 = rf(ctx, bunnyParams, fileBytes, title)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*dto.UploadVideoResponse)
+			r0 = ret.Get(0).(*response.UploadVideoResponse)
 		}
 	}
 
@@ -73,12 +74,12 @@ func (_c *MockUploadVideoBunnyCdnUseCase_Execute_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockUploadVideoBunnyCdnUseCase_Execute_Call) Return(_a0 *dto.UploadVideoResponse, _a1 error) *MockUploadVideoBunnyCdnUseCase_Execute_Call {
+func (_c *MockUploadVideoBunnyCdnUseCase_Execute_Call) Return(_a0 *response.UploadVideoResponse, _a1 error) *MockUploadVideoBunnyCdnUseCase_Execute_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockUploadVideoBunnyCdnUseCase_Execute_Call) RunAndReturn(run func(context.Context, dto.BunnyParametersAccess, []byte, string) (*dto.UploadVideoResponse, error)) *MockUploadVideoBunnyCdnUseCase_Execute_Call {
+func (_c *MockUploadVideoBunnyCdnUseCase_Execute_Call) RunAndReturn(run func(context.Context, dto.BunnyParametersAccess, []byte, string) (*response.UploadVideoResponse, error)) *MockUploadVideoBunnyCdnUseCase_Execute_Call {
 	_c.Call.Return(run)
 	return _c
 }

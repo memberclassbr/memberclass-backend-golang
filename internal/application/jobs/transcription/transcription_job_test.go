@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/dto/request"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response"
+	"github.com/memberclass-backend-golang/internal/domain/dto/request/ai"
+	ai2 "github.com/memberclass-backend-golang/internal/domain/dto/response/ai"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -131,9 +131,9 @@ func TestTranscriptionJob_Execute(t *testing.T) {
 				os.Setenv("TRANSCRIPTION_API_URL", "https://api.example.com")
 			},
 			mockSetup: func(mockTenantUseCase *mocks.MockAITenantUseCase, mockLogger *mocks.MockLogger) {
-				tenants := &response.AITenantsResponse{
+				tenants := &ai2.AITenantsResponse{
 					Total:   1,
-					Tenants: []response.AITenantData{{ID: "tenant-1"}},
+					Tenants: []ai2.AITenantData{{ID: "tenant-1"}},
 				}
 				mockTenantUseCase.EXPECT().GetTenantsWithAIEnabled(mock.Anything).Return(tenants, nil)
 				mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return()
@@ -155,9 +155,9 @@ func TestTranscriptionJob_Execute(t *testing.T) {
 			}
 
 			if tt.name == "should process tenants successfully" {
-				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, mock.Anything).Return(&response.AILessonsResponse{
+				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, mock.Anything).Return(&ai2.AILessonsResponse{
 					Total:   0,
-					Lessons: []response.AILessonData{},
+					Lessons: []ai2.AILessonData{},
 				}, nil)
 				mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return()
 				mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return()
@@ -189,25 +189,25 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		tenant    response.AITenantData
+		tenant    ai2.AITenantData
 		mockSetup func(*mocks.MockAILessonUseCase, *mocks.MockLogger, *httptest.Server)
 		expectErr bool
 	}{
 		{
 			name:   "should skip when no unprocessed lessons",
-			tenant: response.AITenantData{ID: "tenant-1"},
+			tenant: ai2.AITenantData{ID: "tenant-1"},
 			mockSetup: func(mockLessonUseCase *mocks.MockAILessonUseCase, mockLogger *mocks.MockLogger, server *httptest.Server) {
-				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, request.GetAILessonsRequest{
+				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, ai.GetAILessonsRequest{
 					TenantID:        "tenant-1",
 					OnlyUnprocessed: true,
-				}).Return(&response.AILessonsResponse{Total: 0}, nil)
+				}).Return(&ai2.AILessonsResponse{Total: 0}, nil)
 				mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return()
 			},
 			expectErr: false,
 		},
 		{
 			name:   "should process tenant successfully",
-			tenant: response.AITenantData{ID: "tenant-1"},
+			tenant: ai2.AITenantData{ID: "tenant-1"},
 			mockSetup: func(mockLessonUseCase *mocks.MockAILessonUseCase, mockLogger *mocks.MockLogger, server *httptest.Server) {
 				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					assert.Equal(t, "/api/v2/extract-and-embed", r.URL.Path)
@@ -226,12 +226,12 @@ func TestTranscriptionJob_processTenant(t *testing.T) {
 					json.NewEncoder(w).Encode(response)
 				}))
 
-				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, request.GetAILessonsRequest{
+				mockLessonUseCase.EXPECT().GetLessons(mock.Anything, ai.GetAILessonsRequest{
 					TenantID:        "tenant-1",
 					OnlyUnprocessed: true,
-				}).Return(&response.AILessonsResponse{
+				}).Return(&ai2.AILessonsResponse{
 					Total: 1,
-					Lessons: []response.AILessonData{
+					Lessons: []ai2.AILessonData{
 						{
 							ID:                     "lesson-1",
 							Name:                   "Test Lesson",
@@ -288,7 +288,7 @@ func TestTranscriptionJob_buildPayload(t *testing.T) {
 
 	lessonType := "video"
 	mediaURL := "https://example.com/video.mp4"
-	lessons := []response.AILessonData{
+	lessons := []ai2.AILessonData{
 		{
 			ID:                     "lesson-1",
 			Name:                   "Test Lesson",

@@ -5,9 +5,8 @@ package mocks
 import (
 	context "context"
 
+	response "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 	mock "github.com/stretchr/testify/mock"
-
-	response "github.com/memberclass-backend-golang/internal/domain/dto/response"
 
 	time "time"
 )

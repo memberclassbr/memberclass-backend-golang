@@ -10,12 +10,34 @@ import (
 	"time"
 
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	ai3 "github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
+	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
+	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
+	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
+	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
+	student2 "github.com/memberclass-backend-golang/internal/application/handlers/http/student"
+	user4 "github.com/memberclass-backend-golang/internal/application/handlers/http/user"
+	purchase2 "github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
+	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	"github.com/memberclass-backend-golang/internal/application/jobs/transcription"
-	"github.com/memberclass-backend-golang/internal/application/middlewares"
+	auth3 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
+	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/usecases"
+	"github.com/memberclass-backend-golang/internal/domain/ports/ai"
+	comment2 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
+	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
+	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
+	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
+	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
+	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
+	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
+	comment3 "github.com/memberclass-backend-golang/internal/domain/usecases/comment"
+	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
+	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
+	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
+	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
@@ -24,6 +46,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
+	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
 	student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
@@ -39,6 +62,7 @@ func main() {
 		fx.Provide(
 			logger.NewLogger,
 			database.NewDB,
+			database.NewMigrationService,
 			cache.NewRedisCache,
 			storage.NewDigitalOceanSpaces,
 
@@ -50,6 +74,7 @@ func main() {
 			topic.NewTopicRepository,
 			user_activity.NewUserActivityRepository,
 			student_report.NewStudentReportRepository,
+			sso_repository.NewSSORepository,
 
 			rate_limiter.NewRateLimiterUpload,
 			rate_limiter.NewRateLimiterTenant,
@@ -57,47 +82,51 @@ func main() {
 			ilovepdf.NewIlovePdfService,
 			bunny.NewBunnyService,
 
-			usecases.NewValidateSessionUseCase,
-			usecases.NewPdfProcessorUseCase,
-			usecases.NewTenantGetTenantBunnyCredentialsUseCase,
-			usecases.NewUploadVideoBunnyCdnUseCase,
-			func(logger ports.Logger, commentRepo ports.CommentRepository, userRepo ports.UserRepository) ports.CommentUseCase {
-				return usecases.NewCommentUseCase(logger, commentRepo, userRepo)
+			user3.NewValidateSessionUseCase,
+			lessons.NewPdfProcessorUseCase,
+			bunny2.NewTenantGetTenantBunnyCredentialsUseCase,
+			bunny2.NewUploadVideoBunnyCdnUseCase,
+			func(logger ports.Logger, commentRepo comment2.CommentRepository, userRepo user2.UserRepository) comment2.CommentUseCase {
+				return comment3.NewCommentUseCase(logger, commentRepo, userRepo)
 			},
-			usecases.NewApiTokenTenantUseCase,
-			usecases.NewUserActivityUseCase,
-			usecases.NewUserPurchaseUseCase,
-			usecases.NewUserInformationsUseCase,
-			usecases.NewSocialCommentUseCase,
-			usecases.NewActivitySummaryUseCase,
-			usecases.NewLessonsCompletedUseCase,
-			usecases.NewStudentReportUseCase,
-			usecases.NewAuthUseCase,
-			usecases.NewAILessonUseCase,
-			func(tenantRepo ports.TenantRepository, aiLessonUseCase ports.AILessonUseCase, logger ports.Logger) ports.AITenantUseCase {
-				return usecases.NewAITenantUseCase(tenantRepo, aiLessonUseCase, logger)
+			auth.NewApiTokenTenantUseCase,
+			user3.NewUserActivityUseCase,
+			user3.NewUserPurchaseUseCase,
+			user3.NewUserInformationsUseCase,
+			comment3.NewSocialCommentUseCase,
+			user3.NewActivitySummaryUseCase,
+			lessons.NewLessonsCompletedUseCase,
+			student.NewStudentReportUseCase,
+			auth.NewAuthUseCase,
+			ai2.NewAILessonUseCase,
+			func(tenantRepo tenant2.TenantRepository, aiLessonUseCase ai.AILessonUseCase, logger ports.Logger) ai.AITenantUseCase {
+				return ai2.NewAITenantUseCase(tenantRepo, aiLessonUseCase, logger)
+			},
+			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
+				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
 			},
 
-			middlewares.NewRateLimitMiddleware,
-			middlewares.NewRateLimitTenantMiddleware,
-			middlewares.NewRateLimitIPMiddleware,
-			middlewares.NewAuthMiddleware,
-			middlewares.NewAuthExternalMiddleware,
+			rate_limit.NewRateLimitMiddleware,
+			rate_limit.NewRateLimitTenantMiddleware,
+			rate_limit.NewRateLimitIPMiddleware,
+			auth3.NewAuthMiddleware,
+			auth3.NewAuthExternalMiddleware,
 
-			internalhttp.NewLessonHandler,
-			internalhttp.NewVideoHandler,
-			internalhttp.NewCommentHandler,
-			internalhttp.NewUserActivityHandler,
-			internalhttp.NewUserPurchaseHandler,
-			internalhttp.NewUserInformationsHandler,
-			internalhttp.NewSocialCommentHandler,
-			internalhttp.NewActivitySummaryHandler,
-			internalhttp.NewLessonsCompletedHandler,
-			internalhttp.NewStudentReportHandler,
+			lesson2.NewLessonHandler,
+			video.NewVideoHandler,
+			comment4.NewCommentHandler,
+			user4.NewUserActivityHandler,
+			purchase2.NewUserPurchaseHandler,
+			user4.NewUserInformationsHandler,
+			comment4.NewSocialCommentHandler,
+			user4.NewActivitySummaryHandler,
+			lesson2.NewLessonsCompletedHandler,
+			student2.NewStudentReportHandler,
 			internalhttp.NewSwaggerHandler,
-			internalhttp.NewAuthHandler,
-			internalhttp.NewAILessonHandler,
-			internalhttp.NewAITenantHandler,
+			auth2.NewAuthHandler,
+			sso2.NewSSOHandler,
+			ai3.NewAILessonHandler,
+			ai3.NewAITenantHandler,
 
 			router.NewRouter,
 			jobs.NewScheduler,
@@ -112,6 +141,7 @@ func startApplication(
 	log ports.Logger,
 	db *sql.DB,
 	cache ports.Cache,
+	migrationService *database.MigrationService,
 	router *router.Router,
 	scheduler *jobs.Scheduler,
 	transcriptionJob *transcription.TranscriptionJob,

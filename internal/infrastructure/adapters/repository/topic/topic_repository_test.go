@@ -9,7 +9,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/lib/pq"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/domain/ports/topic"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -21,7 +21,7 @@ func TestTopicRepository_FindByIDWithDeliveries(t *testing.T) {
 		topicID       string
 		mockSetup     func(sqlmock.Sqlmock)
 		expectedError error
-		expectedTopic *ports.TopicInfo
+		expectedTopic *topic.TopicInfo
 	}{
 		{
 			name:    "should return topic with deliveries when found",
@@ -35,7 +35,7 @@ func TestTopicRepository_FindByIDWithDeliveries(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedTopic: &ports.TopicInfo{
+			expectedTopic: &topic.TopicInfo{
 				ID:          "topic-123",
 				OnlyAdmin:   true,
 				DeliveryIDs: []string{"delivery-1", "delivery-2", "delivery-3"},
@@ -53,7 +53,7 @@ func TestTopicRepository_FindByIDWithDeliveries(t *testing.T) {
 					WillReturnRows(rows)
 			},
 			expectedError: nil,
-			expectedTopic: &ports.TopicInfo{
+			expectedTopic: &topic.TopicInfo{
 				ID:          "topic-456",
 				OnlyAdmin:   false,
 				DeliveryIDs: []string{},
@@ -68,7 +68,7 @@ func TestTopicRepository_FindByIDWithDeliveries(t *testing.T) {
 					WillReturnError(sql.ErrNoRows)
 			},
 			expectedError: nil,
-			expectedTopic:  nil,
+			expectedTopic: nil,
 		},
 		{
 			name:    "should return MemberClassError when database error occurs",
