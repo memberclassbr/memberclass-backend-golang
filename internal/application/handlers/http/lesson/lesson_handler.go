@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
@@ -33,6 +34,12 @@ func (h *LessonHandler) ProcessLesson(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
+	}
+
+	apiKey := r.Header.Get("x-internal-api-key")
+	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
+	if apiKey != expectedKey {
+		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
 	}
 
 	var req dto.ProcessLessonRequest
@@ -95,6 +102,12 @@ func (h *LessonHandler) ProcessAllPendingLessons(w http.ResponseWriter, r *http.
 		return
 	}
 
+	apiKey := r.Header.Get("x-internal-api-key")
+	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
+	if apiKey != expectedKey {
+		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
+	}
+
 	var req dto.ProcessAllRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		// If no body provided, use default limit
@@ -142,6 +155,12 @@ func (h *LessonHandler) RegeneratePDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	apiKey := r.Header.Get("x-internal-api-key")
+	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
+	if apiKey != expectedKey {
+		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
+	}
+
 	// Extract lesson ID from Chi URL parameter
 	lessonID := chi.URLParam(r, "lessonId")
 	if lessonID == "" {
@@ -166,6 +185,12 @@ func (h *LessonHandler) RegeneratePDF(w http.ResponseWriter, r *http.Request) {
 
 // GetLessonsPage - GET /api/lessons/:lessonId/pdf-pages
 func (h *LessonHandler) GetLessonsPage(w http.ResponseWriter, r *http.Request) {
+
+	apiKey := r.Header.Get("x-internal-api-key")
+	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
+	if apiKey != expectedKey {
+		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
+	}
 
 	lessonID := chi.URLParam(r, "lessonId")
 	if lessonID == "" {
