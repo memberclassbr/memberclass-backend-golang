@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	ports "github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
+	rate_limit "github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -23,7 +23,7 @@ func (_m *MockRateLimiterIP) EXPECT() *MockRateLimiterIP_Expecter {
 }
 
 // CheckLimit provides a mock function with given fields: ctx, ip
-func (_m *MockRateLimiterIP) CheckLimit(ctx context.Context, ip string) (bool, ports.RateLimitInfo, error) {
+func (_m *MockRateLimiterIP) CheckLimit(ctx context.Context, ip string) (bool, rate_limit.RateLimitInfo, error) {
 	ret := _m.Called(ctx, ip)
 
 	if len(ret) == 0 {
@@ -31,9 +31,9 @@ func (_m *MockRateLimiterIP) CheckLimit(ctx context.Context, ip string) (bool, p
 	}
 
 	var r0 bool
-	var r1 ports.RateLimitInfo
+	var r1 rate_limit.RateLimitInfo
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (bool, ports.RateLimitInfo, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (bool, rate_limit.RateLimitInfo, error)); ok {
 		return rf(ctx, ip)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, string) bool); ok {
@@ -42,10 +42,10 @@ func (_m *MockRateLimiterIP) CheckLimit(ctx context.Context, ip string) (bool, p
 		r0 = ret.Get(0).(bool)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) ports.RateLimitInfo); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string) rate_limit.RateLimitInfo); ok {
 		r1 = rf(ctx, ip)
 	} else {
-		r1 = ret.Get(1).(ports.RateLimitInfo)
+		r1 = ret.Get(1).(rate_limit.RateLimitInfo)
 	}
 
 	if rf, ok := ret.Get(2).(func(context.Context, string) error); ok {
@@ -76,12 +76,12 @@ func (_c *MockRateLimiterIP_CheckLimit_Call) Run(run func(ctx context.Context, i
 	return _c
 }
 
-func (_c *MockRateLimiterIP_CheckLimit_Call) Return(_a0 bool, _a1 ports.RateLimitInfo, _a2 error) *MockRateLimiterIP_CheckLimit_Call {
+func (_c *MockRateLimiterIP_CheckLimit_Call) Return(_a0 bool, _a1 rate_limit.RateLimitInfo, _a2 error) *MockRateLimiterIP_CheckLimit_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockRateLimiterIP_CheckLimit_Call) RunAndReturn(run func(context.Context, string) (bool, ports.RateLimitInfo, error)) *MockRateLimiterIP_CheckLimit_Call {
+func (_c *MockRateLimiterIP_CheckLimit_Call) RunAndReturn(run func(context.Context, string) (bool, rate_limit.RateLimitInfo, error)) *MockRateLimiterIP_CheckLimit_Call {
 	_c.Call.Return(run)
 	return _c
 }

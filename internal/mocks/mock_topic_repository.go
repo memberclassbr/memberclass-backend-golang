@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	ports "github.com/memberclass-backend-golang/internal/domain/ports/topic"
+	topic "github.com/memberclass-backend-golang/internal/domain/ports/topic"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -23,23 +23,23 @@ func (_m *MockTopicRepository) EXPECT() *MockTopicRepository_Expecter {
 }
 
 // FindByIDWithDeliveries provides a mock function with given fields: ctx, topicID
-func (_m *MockTopicRepository) FindByIDWithDeliveries(ctx context.Context, topicID string) (*ports.TopicInfo, error) {
+func (_m *MockTopicRepository) FindByIDWithDeliveries(ctx context.Context, topicID string) (*topic.TopicInfo, error) {
 	ret := _m.Called(ctx, topicID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindByIDWithDeliveries")
 	}
 
-	var r0 *ports.TopicInfo
+	var r0 *topic.TopicInfo
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*ports.TopicInfo, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*topic.TopicInfo, error)); ok {
 		return rf(ctx, topicID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *ports.TopicInfo); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *topic.TopicInfo); ok {
 		r0 = rf(ctx, topicID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*ports.TopicInfo)
+			r0 = ret.Get(0).(*topic.TopicInfo)
 		}
 	}
 
@@ -71,12 +71,12 @@ func (_c *MockTopicRepository_FindByIDWithDeliveries_Call) Run(run func(ctx cont
 	return _c
 }
 
-func (_c *MockTopicRepository_FindByIDWithDeliveries_Call) Return(_a0 *ports.TopicInfo, _a1 error) *MockTopicRepository_FindByIDWithDeliveries_Call {
+func (_c *MockTopicRepository_FindByIDWithDeliveries_Call) Return(_a0 *topic.TopicInfo, _a1 error) *MockTopicRepository_FindByIDWithDeliveries_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockTopicRepository_FindByIDWithDeliveries_Call) RunAndReturn(run func(context.Context, string) (*ports.TopicInfo, error)) *MockTopicRepository_FindByIDWithDeliveries_Call {
+func (_c *MockTopicRepository_FindByIDWithDeliveries_Call) RunAndReturn(run func(context.Context, string) (*topic.TopicInfo, error)) *MockTopicRepository_FindByIDWithDeliveries_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -1,25 +1,25 @@
-package catalog
+package vitrine
 
 import (
 	"context"
 
 	"github.com/memberclass-backend-golang/internal/domain/constants"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/catalog"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/vitrine"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
-	catalogports "github.com/memberclass-backend-golang/internal/domain/ports/catalog"
+	vitrineports "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
 )
 
-type CatalogUseCaseImpl struct {
-	catalogRepository catalogports.CatalogRepository
+type VitrineUseCaseImpl struct {
+	vitrineRepository vitrineports.VitrineRepository
 }
 
-func NewCatalogUseCase(catalogRepository catalogports.CatalogRepository) catalogports.CatalogUseCase {
-	return &CatalogUseCaseImpl{
-		catalogRepository: catalogRepository,
+func NewVitrineUseCase(vitrineRepository vitrineports.VitrineRepository) vitrineports.VitrineUseCase {
+	return &VitrineUseCaseImpl{
+		vitrineRepository: vitrineRepository,
 	}
 }
 
-func (uc *CatalogUseCaseImpl) GetCatalog(ctx context.Context, tenantID string) (*catalog.CatalogResponse, error) {
+func (uc *VitrineUseCaseImpl) GetVitrines(ctx context.Context, tenantID string) (*vitrine.VitrineResponse, error) {
 	if tenantID == "" {
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    400,
@@ -27,10 +27,10 @@ func (uc *CatalogUseCaseImpl) GetCatalog(ctx context.Context, tenantID string) (
 		}
 	}
 
-	return uc.catalogRepository.GetCatalogByTenant(ctx, tenantID)
+	return uc.vitrineRepository.GetVitrinesByTenant(ctx, tenantID)
 }
 
-func (uc *CatalogUseCaseImpl) GetVitrine(ctx context.Context, vitrineID, tenantID string, includeChildren bool) (*catalog.VitrineDetailResponse, error) {
+func (uc *VitrineUseCaseImpl) GetVitrine(ctx context.Context, vitrineID, tenantID string, includeChildren bool) (*vitrine.VitrineDetailResponse, error) {
 	if vitrineID == "" {
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    400,
@@ -49,10 +49,10 @@ func (uc *CatalogUseCaseImpl) GetVitrine(ctx context.Context, vitrineID, tenantI
 		tenantID = tenant.ID
 	}
 
-	return uc.catalogRepository.GetVitrineByID(ctx, vitrineID, tenantID, includeChildren)
+	return uc.vitrineRepository.GetVitrineByID(ctx, vitrineID, tenantID, includeChildren)
 }
 
-func (uc *CatalogUseCaseImpl) GetCourse(ctx context.Context, courseID, tenantID string, includeChildren bool) (*catalog.CourseDetailResponse, error) {
+func (uc *VitrineUseCaseImpl) GetCourse(ctx context.Context, courseID, tenantID string, includeChildren bool) (*vitrine.CourseDetailResponse, error) {
 	if courseID == "" {
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    400,
@@ -71,10 +71,10 @@ func (uc *CatalogUseCaseImpl) GetCourse(ctx context.Context, courseID, tenantID 
 		tenantID = tenant.ID
 	}
 
-	return uc.catalogRepository.GetCourseByID(ctx, courseID, tenantID, includeChildren)
+	return uc.vitrineRepository.GetCourseByID(ctx, courseID, tenantID, includeChildren)
 }
 
-func (uc *CatalogUseCaseImpl) GetModule(ctx context.Context, moduleID, tenantID string, includeChildren bool) (*catalog.ModuleDetailResponse, error) {
+func (uc *VitrineUseCaseImpl) GetModule(ctx context.Context, moduleID, tenantID string, includeChildren bool) (*vitrine.ModuleDetailResponse, error) {
 	if moduleID == "" {
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    400,
@@ -93,10 +93,10 @@ func (uc *CatalogUseCaseImpl) GetModule(ctx context.Context, moduleID, tenantID 
 		tenantID = tenant.ID
 	}
 
-	return uc.catalogRepository.GetModuleByID(ctx, moduleID, tenantID, includeChildren)
+	return uc.vitrineRepository.GetModuleByID(ctx, moduleID, tenantID, includeChildren)
 }
 
-func (uc *CatalogUseCaseImpl) GetLesson(ctx context.Context, lessonID, tenantID string) (*catalog.LessonDetailResponse, error) {
+func (uc *VitrineUseCaseImpl) GetLesson(ctx context.Context, lessonID, tenantID string) (*vitrine.LessonDetailResponse, error) {
 	if lessonID == "" {
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    400,
@@ -115,5 +115,5 @@ func (uc *CatalogUseCaseImpl) GetLesson(ctx context.Context, lessonID, tenantID 
 		tenantID = tenant.ID
 	}
 
-	return uc.catalogRepository.GetLessonByID(ctx, lessonID, tenantID)
+	return uc.vitrineRepository.GetLessonByID(ctx, lessonID, tenantID)
 }

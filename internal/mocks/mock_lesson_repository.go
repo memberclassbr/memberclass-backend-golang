@@ -5,11 +5,14 @@ package mocks
 import (
 	context "context"
 
-	response "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
-	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
-	entities "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	ports "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
+	lessons "github.com/memberclass-backend-golang/internal/domain/entities/lessons"
+	lesson "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
+
 	mock "github.com/stretchr/testify/mock"
+
+	responselesson "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
+
+	tenant "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 
 	time "time"
 )
@@ -52,7 +55,7 @@ type MockLessonRepository_CreatePDFAsset_Call struct {
 
 // CreatePDFAsset is a helper method to define mock.On call
 //   - ctx context.Context
-//   - asset *entities.LessonPDFAsset
+//   - asset *lessons.LessonPDFAsset
 func (_e *MockLessonRepository_Expecter) CreatePDFAsset(ctx interface{}, asset interface{}) *MockLessonRepository_CreatePDFAsset_Call {
 	return &MockLessonRepository_CreatePDFAsset_Call{Call: _e.mock.On("CreatePDFAsset", ctx, asset)}
 }
@@ -99,7 +102,7 @@ type MockLessonRepository_CreatePDFPage_Call struct {
 
 // CreatePDFPage is a helper method to define mock.On call
 //   - ctx context.Context
-//   - page *entities.LessonPDFPage
+//   - page *lessons.LessonPDFPage
 func (_e *MockLessonRepository_Expecter) CreatePDFPage(ctx interface{}, page interface{}) *MockLessonRepository_CreatePDFPage_Call {
 	return &MockLessonRepository_CreatePDFPage_Call{Call: _e.mock.On("CreatePDFPage", ctx, page)}
 }
@@ -216,24 +219,24 @@ func (_c *MockLessonRepository_DeletePDFPagesByAssetID_Call) RunAndReturn(run fu
 }
 
 // FindCompletedLessonsByEmail provides a mock function with given fields: ctx, userID, tenantID, startDate, endDate, courseID, page, limit
-func (_m *MockLessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID string, tenantID string, startDate time.Time, endDate time.Time, courseID string, page int, limit int) ([]response.CompletedLesson, int64, error) {
+func (_m *MockLessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID string, tenantID string, startDate time.Time, endDate time.Time, courseID string, page int, limit int) ([]responselesson.CompletedLesson, int64, error) {
 	ret := _m.Called(ctx, userID, tenantID, startDate, endDate, courseID, page, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindCompletedLessonsByEmail")
 	}
 
-	var r0 []response.CompletedLesson
+	var r0 []responselesson.CompletedLesson
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, time.Time, time.Time, string, int, int) ([]response.CompletedLesson, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, time.Time, time.Time, string, int, int) ([]responselesson.CompletedLesson, int64, error)); ok {
 		return rf(ctx, userID, tenantID, startDate, endDate, courseID, page, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, time.Time, time.Time, string, int, int) []response.CompletedLesson); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, time.Time, time.Time, string, int, int) []responselesson.CompletedLesson); ok {
 		r0 = rf(ctx, userID, tenantID, startDate, endDate, courseID, page, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]response.CompletedLesson)
+			r0 = ret.Get(0).([]responselesson.CompletedLesson)
 		}
 	}
 
@@ -277,12 +280,12 @@ func (_c *MockLessonRepository_FindCompletedLessonsByEmail_Call) Run(run func(ct
 	return _c
 }
 
-func (_c *MockLessonRepository_FindCompletedLessonsByEmail_Call) Return(_a0 []response.CompletedLesson, _a1 int64, _a2 error) *MockLessonRepository_FindCompletedLessonsByEmail_Call {
+func (_c *MockLessonRepository_FindCompletedLessonsByEmail_Call) Return(_a0 []responselesson.CompletedLesson, _a1 int64, _a2 error) *MockLessonRepository_FindCompletedLessonsByEmail_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockLessonRepository_FindCompletedLessonsByEmail_Call) RunAndReturn(run func(context.Context, string, string, time.Time, time.Time, string, int, int) ([]response.CompletedLesson, int64, error)) *MockLessonRepository_FindCompletedLessonsByEmail_Call {
+func (_c *MockLessonRepository_FindCompletedLessonsByEmail_Call) RunAndReturn(run func(context.Context, string, string, time.Time, time.Time, string, int, int) ([]responselesson.CompletedLesson, int64, error)) *MockLessonRepository_FindCompletedLessonsByEmail_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -406,7 +409,7 @@ func (_c *MockLessonRepository_GetByIDWithPDFAsset_Call) RunAndReturn(run func(c
 }
 
 // GetByIDWithTenant provides a mock function with given fields: ctx, lessonID
-func (_m *MockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*lessons.Lesson, *entities.Tenant, error) {
+func (_m *MockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*lessons.Lesson, *tenant.Tenant, error) {
 	ret := _m.Called(ctx, lessonID)
 
 	if len(ret) == 0 {
@@ -414,9 +417,9 @@ func (_m *MockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID 
 	}
 
 	var r0 *lessons.Lesson
-	var r1 *entities.Tenant
+	var r1 *tenant.Tenant
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*lessons.Lesson, *entities.Tenant, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*lessons.Lesson, *tenant.Tenant, error)); ok {
 		return rf(ctx, lessonID)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, string) *lessons.Lesson); ok {
@@ -427,11 +430,11 @@ func (_m *MockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID 
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) *entities.Tenant); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string) *tenant.Tenant); ok {
 		r1 = rf(ctx, lessonID)
 	} else {
 		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(*entities.Tenant)
+			r1 = ret.Get(1).(*tenant.Tenant)
 		}
 	}
 
@@ -463,12 +466,12 @@ func (_c *MockLessonRepository_GetByIDWithTenant_Call) Run(run func(ctx context.
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByIDWithTenant_Call) Return(_a0 *lessons.Lesson, _a1 *entities.Tenant, _a2 error) *MockLessonRepository_GetByIDWithTenant_Call {
+func (_c *MockLessonRepository_GetByIDWithTenant_Call) Return(_a0 *lessons.Lesson, _a1 *tenant.Tenant, _a2 error) *MockLessonRepository_GetByIDWithTenant_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockLessonRepository_GetByIDWithTenant_Call) RunAndReturn(run func(context.Context, string) (*lessons.Lesson, *entities.Tenant, error)) *MockLessonRepository_GetByIDWithTenant_Call {
+func (_c *MockLessonRepository_GetByIDWithTenant_Call) RunAndReturn(run func(context.Context, string) (*lessons.Lesson, *tenant.Tenant, error)) *MockLessonRepository_GetByIDWithTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -527,6 +530,66 @@ func (_c *MockLessonRepository_GetFailedPDFAssets_Call) Return(_a0 []*lessons.Le
 }
 
 func (_c *MockLessonRepository_GetFailedPDFAssets_Call) RunAndReturn(run func(context.Context) ([]*lessons.LessonPDFAsset, error)) *MockLessonRepository_GetFailedPDFAssets_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetLessonsWithHierarchyByTenant provides a mock function with given fields: ctx, tenantID, onlyUnprocessed
+func (_m *MockLessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]lesson.AILessonWithHierarchy, error) {
+	ret := _m.Called(ctx, tenantID, onlyUnprocessed)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLessonsWithHierarchyByTenant")
+	}
+
+	var r0 []lesson.AILessonWithHierarchy
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) ([]lesson.AILessonWithHierarchy, error)); ok {
+		return rf(ctx, tenantID, onlyUnprocessed)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) []lesson.AILessonWithHierarchy); ok {
+		r0 = rf(ctx, tenantID, onlyUnprocessed)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]lesson.AILessonWithHierarchy)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, bool) error); ok {
+		r1 = rf(ctx, tenantID, onlyUnprocessed)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockLessonRepository_GetLessonsWithHierarchyByTenant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLessonsWithHierarchyByTenant'
+type MockLessonRepository_GetLessonsWithHierarchyByTenant_Call struct {
+	*mock.Call
+}
+
+// GetLessonsWithHierarchyByTenant is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+//   - onlyUnprocessed bool
+func (_e *MockLessonRepository_Expecter) GetLessonsWithHierarchyByTenant(ctx interface{}, tenantID interface{}, onlyUnprocessed interface{}) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
+	return &MockLessonRepository_GetLessonsWithHierarchyByTenant_Call{Call: _e.mock.On("GetLessonsWithHierarchyByTenant", ctx, tenantID, onlyUnprocessed)}
+}
+
+func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) Run(run func(ctx context.Context, tenantID string, onlyUnprocessed bool)) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(bool))
+	})
+	return _c
+}
+
+func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) Return(_a0 []lesson.AILessonWithHierarchy, _a1 error) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) RunAndReturn(run func(context.Context, string, bool) ([]lesson.AILessonWithHierarchy, error)) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -768,9 +831,9 @@ func (_c *MockLessonRepository_GetPendingPDFLessons_Call) RunAndReturn(run func(
 	return _c
 }
 
-// Update provides a mock function with given fields: ctx, lesson
-func (_m *MockLessonRepository) Update(ctx context.Context, lesson *lessons.Lesson) error {
-	ret := _m.Called(ctx, lesson)
+// Update provides a mock function with given fields: ctx, _a1
+func (_m *MockLessonRepository) Update(ctx context.Context, _a1 *lessons.Lesson) error {
+	ret := _m.Called(ctx, _a1)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Update")
@@ -778,7 +841,7 @@ func (_m *MockLessonRepository) Update(ctx context.Context, lesson *lessons.Less
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *lessons.Lesson) error); ok {
-		r0 = rf(ctx, lesson)
+		r0 = rf(ctx, _a1)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -793,12 +856,12 @@ type MockLessonRepository_Update_Call struct {
 
 // Update is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lesson *entities.Lesson
-func (_e *MockLessonRepository_Expecter) Update(ctx interface{}, lesson interface{}) *MockLessonRepository_Update_Call {
-	return &MockLessonRepository_Update_Call{Call: _e.mock.On("Update", ctx, lesson)}
+//   - _a1 *lessons.Lesson
+func (_e *MockLessonRepository_Expecter) Update(ctx interface{}, _a1 interface{}) *MockLessonRepository_Update_Call {
+	return &MockLessonRepository_Update_Call{Call: _e.mock.On("Update", ctx, _a1)}
 }
 
-func (_c *MockLessonRepository_Update_Call) Run(run func(ctx context.Context, lesson *lessons.Lesson)) *MockLessonRepository_Update_Call {
+func (_c *MockLessonRepository_Update_Call) Run(run func(ctx context.Context, _a1 *lessons.Lesson)) *MockLessonRepository_Update_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context), args[1].(*lessons.Lesson))
 	})
@@ -840,7 +903,7 @@ type MockLessonRepository_UpdatePDFAsset_Call struct {
 
 // UpdatePDFAsset is a helper method to define mock.On call
 //   - ctx context.Context
-//   - asset *entities.LessonPDFAsset
+//   - asset *lessons.LessonPDFAsset
 func (_e *MockLessonRepository_Expecter) UpdatePDFAsset(ctx interface{}, asset interface{}) *MockLessonRepository_UpdatePDFAsset_Call {
 	return &MockLessonRepository_UpdatePDFAsset_Call{Call: _e.mock.On("UpdatePDFAsset", ctx, asset)}
 }
@@ -956,66 +1019,6 @@ func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) Return(_a0 error)
 }
 
 func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) RunAndReturn(run func(context.Context, string, bool) error) *MockLessonRepository_UpdateTranscriptionStatus_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetLessonsWithHierarchyByTenant provides a mock function with given fields: ctx, tenantID, onlyUnprocessed
-func (_m *MockLessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]ports.AILessonWithHierarchy, error) {
-	ret := _m.Called(ctx, tenantID, onlyUnprocessed)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetLessonsWithHierarchyByTenant")
-	}
-
-	var r0 []ports.AILessonWithHierarchy
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, bool) ([]ports.AILessonWithHierarchy, error)); ok {
-		return rf(ctx, tenantID, onlyUnprocessed)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, bool) []ports.AILessonWithHierarchy); ok {
-		r0 = rf(ctx, tenantID, onlyUnprocessed)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]ports.AILessonWithHierarchy)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, string, bool) error); ok {
-		r1 = rf(ctx, tenantID, onlyUnprocessed)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockLessonRepository_GetLessonsWithHierarchyByTenant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLessonsWithHierarchyByTenant'
-type MockLessonRepository_GetLessonsWithHierarchyByTenant_Call struct {
-	*mock.Call
-}
-
-// GetLessonsWithHierarchyByTenant is a helper method to define mock.On call
-//   - ctx context.Context
-//   - tenantID string
-//   - onlyUnprocessed bool
-func (_e *MockLessonRepository_Expecter) GetLessonsWithHierarchyByTenant(ctx interface{}, tenantID interface{}, onlyUnprocessed interface{}) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
-	return &MockLessonRepository_GetLessonsWithHierarchyByTenant_Call{Call: _e.mock.On("GetLessonsWithHierarchyByTenant", ctx, tenantID, onlyUnprocessed)}
-}
-
-func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) Run(run func(ctx context.Context, tenantID string, onlyUnprocessed bool)) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(bool))
-	})
-	return _c
-}
-
-func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) Return(_a0 []ports.AILessonWithHierarchy, _a1 error) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call) RunAndReturn(run func(context.Context, string, bool) ([]ports.AILessonWithHierarchy, error)) *MockLessonRepository_GetLessonsWithHierarchyByTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }

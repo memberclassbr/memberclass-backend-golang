@@ -3,11 +3,12 @@
 package mocks
 
 import (
+	comments "github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
+	comment "github.com/memberclass-backend-golang/internal/domain/dto/response/comment"
+
 	context "context"
 
-	request "github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
-	dto "github.com/memberclass-backend-golang/internal/domain/dto/response/comment"
-	entities "github.com/memberclass-backend-golang/internal/domain/entities/comment"
+	entitiescomment "github.com/memberclass-backend-golang/internal/domain/entities/comment"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -26,34 +27,34 @@ func (_m *MockCommentRepository) EXPECT() *MockCommentRepository_Expecter {
 }
 
 // FindAllByTenant provides a mock function with given fields: ctx, tenantID, req
-func (_m *MockCommentRepository) FindAllByTenant(ctx context.Context, tenantID string, req *request.GetCommentsRequest) ([]*dto.CommentResponse, int64, error) {
+func (_m *MockCommentRepository) FindAllByTenant(ctx context.Context, tenantID string, req *comments.GetCommentsRequest) ([]*comment.CommentResponse, int64, error) {
 	ret := _m.Called(ctx, tenantID, req)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindAllByTenant")
 	}
 
-	var r0 []*dto.CommentResponse
+	var r0 []*comment.CommentResponse
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *request.GetCommentsRequest) ([]*dto.CommentResponse, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *comments.GetCommentsRequest) ([]*comment.CommentResponse, int64, error)); ok {
 		return rf(ctx, tenantID, req)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, *request.GetCommentsRequest) []*dto.CommentResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *comments.GetCommentsRequest) []*comment.CommentResponse); ok {
 		r0 = rf(ctx, tenantID, req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*dto.CommentResponse)
+			r0 = ret.Get(0).([]*comment.CommentResponse)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, *request.GetCommentsRequest) int64); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, *comments.GetCommentsRequest) int64); ok {
 		r1 = rf(ctx, tenantID, req)
 	} else {
 		r1 = ret.Get(1).(int64)
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, string, *request.GetCommentsRequest) error); ok {
+	if rf, ok := ret.Get(2).(func(context.Context, string, *comments.GetCommentsRequest) error); ok {
 		r2 = rf(ctx, tenantID, req)
 	} else {
 		r2 = ret.Error(2)
@@ -70,46 +71,46 @@ type MockCommentRepository_FindAllByTenant_Call struct {
 // FindAllByTenant is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tenantID string
-//   - req *request.GetCommentsRequest
+//   - req *comments.GetCommentsRequest
 func (_e *MockCommentRepository_Expecter) FindAllByTenant(ctx interface{}, tenantID interface{}, req interface{}) *MockCommentRepository_FindAllByTenant_Call {
 	return &MockCommentRepository_FindAllByTenant_Call{Call: _e.mock.On("FindAllByTenant", ctx, tenantID, req)}
 }
 
-func (_c *MockCommentRepository_FindAllByTenant_Call) Run(run func(ctx context.Context, tenantID string, req *request.GetCommentsRequest)) *MockCommentRepository_FindAllByTenant_Call {
+func (_c *MockCommentRepository_FindAllByTenant_Call) Run(run func(ctx context.Context, tenantID string, req *comments.GetCommentsRequest)) *MockCommentRepository_FindAllByTenant_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(*request.GetCommentsRequest))
+		run(args[0].(context.Context), args[1].(string), args[2].(*comments.GetCommentsRequest))
 	})
 	return _c
 }
 
-func (_c *MockCommentRepository_FindAllByTenant_Call) Return(_a0 []*dto.CommentResponse, _a1 int64, _a2 error) *MockCommentRepository_FindAllByTenant_Call {
+func (_c *MockCommentRepository_FindAllByTenant_Call) Return(_a0 []*comment.CommentResponse, _a1 int64, _a2 error) *MockCommentRepository_FindAllByTenant_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockCommentRepository_FindAllByTenant_Call) RunAndReturn(run func(context.Context, string, *request.GetCommentsRequest) ([]*dto.CommentResponse, int64, error)) *MockCommentRepository_FindAllByTenant_Call {
+func (_c *MockCommentRepository_FindAllByTenant_Call) RunAndReturn(run func(context.Context, string, *comments.GetCommentsRequest) ([]*comment.CommentResponse, int64, error)) *MockCommentRepository_FindAllByTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // FindByIDAndTenant provides a mock function with given fields: ctx, commentID, tenantID
-func (_m *MockCommentRepository) FindByIDAndTenant(ctx context.Context, commentID string, tenantID string) (*entities.Comment, error) {
+func (_m *MockCommentRepository) FindByIDAndTenant(ctx context.Context, commentID string, tenantID string) (*entitiescomment.Comment, error) {
 	ret := _m.Called(ctx, commentID, tenantID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindByIDAndTenant")
 	}
 
-	var r0 *entities.Comment
+	var r0 *entitiescomment.Comment
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) (*entities.Comment, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) (*entitiescomment.Comment, error)); ok {
 		return rf(ctx, commentID, tenantID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) *entities.Comment); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) *entitiescomment.Comment); ok {
 		r0 = rf(ctx, commentID, tenantID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.Comment)
+			r0 = ret.Get(0).(*entitiescomment.Comment)
 		}
 	}
 
@@ -142,34 +143,34 @@ func (_c *MockCommentRepository_FindByIDAndTenant_Call) Run(run func(ctx context
 	return _c
 }
 
-func (_c *MockCommentRepository_FindByIDAndTenant_Call) Return(_a0 *entities.Comment, _a1 error) *MockCommentRepository_FindByIDAndTenant_Call {
+func (_c *MockCommentRepository_FindByIDAndTenant_Call) Return(_a0 *entitiescomment.Comment, _a1 error) *MockCommentRepository_FindByIDAndTenant_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCommentRepository_FindByIDAndTenant_Call) RunAndReturn(run func(context.Context, string, string) (*entities.Comment, error)) *MockCommentRepository_FindByIDAndTenant_Call {
+func (_c *MockCommentRepository_FindByIDAndTenant_Call) RunAndReturn(run func(context.Context, string, string) (*entitiescomment.Comment, error)) *MockCommentRepository_FindByIDAndTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // FindByIDAndTenantWithDetails provides a mock function with given fields: ctx, commentID, tenantID
-func (_m *MockCommentRepository) FindByIDAndTenantWithDetails(ctx context.Context, commentID string, tenantID string) (*dto.CommentResponse, error) {
+func (_m *MockCommentRepository) FindByIDAndTenantWithDetails(ctx context.Context, commentID string, tenantID string) (*comment.CommentResponse, error) {
 	ret := _m.Called(ctx, commentID, tenantID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindByIDAndTenantWithDetails")
 	}
 
-	var r0 *dto.CommentResponse
+	var r0 *comment.CommentResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) (*dto.CommentResponse, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) (*comment.CommentResponse, error)); ok {
 		return rf(ctx, commentID, tenantID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string) *dto.CommentResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) *comment.CommentResponse); ok {
 		r0 = rf(ctx, commentID, tenantID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*dto.CommentResponse)
+			r0 = ret.Get(0).(*comment.CommentResponse)
 		}
 	}
 
@@ -202,34 +203,34 @@ func (_c *MockCommentRepository_FindByIDAndTenantWithDetails_Call) Run(run func(
 	return _c
 }
 
-func (_c *MockCommentRepository_FindByIDAndTenantWithDetails_Call) Return(_a0 *dto.CommentResponse, _a1 error) *MockCommentRepository_FindByIDAndTenantWithDetails_Call {
+func (_c *MockCommentRepository_FindByIDAndTenantWithDetails_Call) Return(_a0 *comment.CommentResponse, _a1 error) *MockCommentRepository_FindByIDAndTenantWithDetails_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCommentRepository_FindByIDAndTenantWithDetails_Call) RunAndReturn(run func(context.Context, string, string) (*dto.CommentResponse, error)) *MockCommentRepository_FindByIDAndTenantWithDetails_Call {
+func (_c *MockCommentRepository_FindByIDAndTenantWithDetails_Call) RunAndReturn(run func(context.Context, string, string) (*comment.CommentResponse, error)) *MockCommentRepository_FindByIDAndTenantWithDetails_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Update provides a mock function with given fields: ctx, commentID, answer, published
-func (_m *MockCommentRepository) Update(ctx context.Context, commentID string, answer string, published bool) (*entities.Comment, error) {
+func (_m *MockCommentRepository) Update(ctx context.Context, commentID string, answer string, published bool) (*entitiescomment.Comment, error) {
 	ret := _m.Called(ctx, commentID, answer, published)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Update")
 	}
 
-	var r0 *entities.Comment
+	var r0 *entitiescomment.Comment
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, bool) (*entities.Comment, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, bool) (*entitiescomment.Comment, error)); ok {
 		return rf(ctx, commentID, answer, published)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, bool) *entities.Comment); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, bool) *entitiescomment.Comment); ok {
 		r0 = rf(ctx, commentID, answer, published)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.Comment)
+			r0 = ret.Get(0).(*entitiescomment.Comment)
 		}
 	}
 
@@ -263,12 +264,12 @@ func (_c *MockCommentRepository_Update_Call) Run(run func(ctx context.Context, c
 	return _c
 }
 
-func (_c *MockCommentRepository_Update_Call) Return(_a0 *entities.Comment, _a1 error) *MockCommentRepository_Update_Call {
+func (_c *MockCommentRepository_Update_Call) Return(_a0 *entitiescomment.Comment, _a1 error) *MockCommentRepository_Update_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockCommentRepository_Update_Call) RunAndReturn(run func(context.Context, string, string, bool) (*entities.Comment, error)) *MockCommentRepository_Update_Call {
+func (_c *MockCommentRepository_Update_Call) RunAndReturn(run func(context.Context, string, string, bool) (*entitiescomment.Comment, error)) *MockCommentRepository_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }

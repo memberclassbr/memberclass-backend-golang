@@ -26,7 +26,7 @@ tags:
     description: Endpoints para criar e atualizar posts na comunidade (social)
   - name: Students
     description: Endpoints para relatórios de alunos do tenant
-  - name: Catalog
+  - name: Vitrine
     description: |
       Endpoints para recuperar informações do catálogo:
       - Vitrines, cursos, módulos e aulas
@@ -1244,10 +1244,10 @@ paths:
                 error: "Erro interno do servidor"
                 errorCode: "INTERNAL_ERROR"
 
-  /api/v1/catalog:
+  /api/v1/vitrine:
     get:
       tags:
-        - Catalog
+        - Vitrine
       summary: Listar catálogo completo
       description: |
         Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > módulos > aulas.
@@ -1255,7 +1255,7 @@ paths:
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
         
         O tenant é identificado automaticamente pelo token de API.
-      operationId: getCatalog
+      operationId: getVitrines
       parameters:
         - name: mc-api-key
           in: header
@@ -1270,7 +1270,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CatalogResponse'
+                $ref: '#/components/schemas/VitrineResponse'
         '401':
           description: Não autorizado
           content:
@@ -1284,10 +1284,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomErrorResponse'
 
-  /api/v1/catalog/vitrines/{vitrineId}:
+  /api/v1/vitrine/{vitrineId}:
     get:
       tags:
-        - Catalog
+        - Vitrine
       summary: Buscar vitrine por ID
       description: |
         Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, módulos e aulas) através do parâmetro `includeChildren`.
@@ -1337,10 +1337,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomErrorResponse'
 
-  /api/v1/catalog/courses/{courseId}:
+  /api/v1/vitrine/courses/{courseId}:
     get:
       tags:
-        - Catalog
+        - Vitrine
       summary: Buscar curso por ID
       description: |
         Retorna um curso específico pelo ID. Pode incluir ou não os filhos (módulos e aulas) através do parâmetro `includeChildren`.
@@ -1390,10 +1390,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomErrorResponse'
 
-  /api/v1/catalog/modules/{moduleId}:
+  /api/v1/vitrine/modules/{moduleId}:
     get:
       tags:
-        - Catalog
+        - Vitrine
       summary: Buscar módulo por ID
       description: |
         Retorna um módulo específico pelo ID. Pode incluir ou não os filhos (aulas) através do parâmetro `includeChildren`.
@@ -1443,10 +1443,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomErrorResponse'
 
-  /api/v1/catalog/lessons/{lessonId}:
+  /api/v1/vitrine/lessons/{lessonId}:
     get:
       tags:
-        - Catalog
+        - Vitrine
       summary: Buscar aula por ID
       description: |
         Retorna uma aula específica pelo ID. Aulas não possuem filhos.
@@ -2113,7 +2113,7 @@ components:
           description: Indica se há página anterior
           example: false
 
-    CatalogResponse:
+    VitrineResponse:
       type: object
       properties:
         vitrines:

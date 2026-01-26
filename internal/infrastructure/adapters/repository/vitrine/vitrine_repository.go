@@ -1,29 +1,29 @@
-package catalog
+package vitrine
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/catalog"
+	"github.com/memberclass-backend-golang/internal/domain/dto/response/vitrine"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	catalogports "github.com/memberclass-backend-golang/internal/domain/ports/catalog"
+	vitrineports "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
 )
 
-type CatalogRepository struct {
+type VitrineRepository struct {
 	db  *sql.DB
 	log ports.Logger
 }
 
-func NewCatalogRepository(db *sql.DB, log ports.Logger) catalogports.CatalogRepository {
-	return &CatalogRepository{
+func NewVitrineRepository(db *sql.DB, log ports.Logger) vitrineports.VitrineRepository {
+	return &VitrineRepository{
 		db:  db,
 		log: log,
 	}
 }
 
-func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID string) (*catalog.CatalogResponse, error) {
+func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID string) (*vitrine.VitrineResponse, error) {
 	query := `
 		SELECT 
 			v.id,
@@ -44,14 +44,14 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 	}
 	defer rows.Close()
 
-	vitrinesMap := make(map[string]*catalog.VitrineData)
-	var vitrines []*catalog.VitrineData
+	vitrinesMap := make(map[string]*vitrine.VitrineData)
+	var vitrines []*vitrine.VitrineData
 
 	for rows.Next() {
-		var vitrine catalog.VitrineData
+		var vitrineData vitrine.VitrineData
 		var order sql.NullInt32
 
-		err := rows.Scan(&vitrine.ID, &vitrine.Name, &order)
+		err := rows.Scan(&vitrineData.ID, &vitrineData.Name, &order)
 		if err != nil {
 			r.log.Error("Error scanning vitrine: " + err.Error())
 			continue
@@ -59,17 +59,17 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 
 		if order.Valid {
 			orderVal := int(order.Int32)
-			vitrine.Order = &orderVal
+			vitrineData.Order = &orderVal
 		}
 
-		vitrine.Courses = []catalog.CourseData{}
-		vitrinesMap[vitrine.ID] = &vitrine
-		vitrines = append(vitrines, &vitrine)
+		vitrineData.Courses = []vitrine.CourseData{}
+		vitrinesMap[vitrineData.ID] = &vitrineData
+		vitrines = append(vitrines, &vitrineData)
 	}
 
 	if len(vitrines) == 0 {
-		return &catalog.CatalogResponse{
-			Vitrines: []catalog.VitrineData{},
+		return &vitrine.VitrineResponse{
+			Vitrines: []vitrine.VitrineData{},
 			Total:    0,
 		}, nil
 	}
@@ -96,10 +96,10 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 	}
 	defer coursesRows.Close()
 
-	coursesMap := make(map[string]*catalog.CourseData)
+	coursesMap := make(map[string]*vitrine.CourseData)
 
 	for coursesRows.Next() {
-		var course catalog.CourseData
+		var course vitrine.CourseData
 		var order sql.NullInt32
 		var vitrineID string
 
@@ -114,11 +114,11 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 			course.Order = &orderVal
 		}
 
-		course.Modules = []catalog.ModuleData{}
+		course.Modules = []vitrine.ModuleData{}
 		coursesMap[course.ID] = &course
 
-		if vitrine, ok := vitrinesMap[vitrineID]; ok {
-			vitrine.Courses = append(vitrine.Courses, course)
+		if vitrineData, ok := vitrinesMap[vitrineID]; ok {
+			vitrineData.Courses = append(vitrineData.Courses, course)
 		}
 	}
 
@@ -146,10 +146,10 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 	}
 	defer modulesRows.Close()
 
-	modulesMap := make(map[string]*catalog.ModuleData)
+	modulesMap := make(map[string]*vitrine.ModuleData)
 
 	for modulesRows.Next() {
-		var module catalog.ModuleData
+		var module vitrine.ModuleData
 		var order sql.NullInt32
 		var courseID string
 
@@ -164,7 +164,7 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 			module.Order = &orderVal
 		}
 
-		module.Lessons = []catalog.LessonData{}
+		module.Lessons = []vitrine.LessonData{}
 		modulesMap[module.ID] = &module
 
 		for i := range vitrines {
@@ -208,7 +208,7 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 	defer lessonsRows.Close()
 
 	for lessonsRows.Next() {
-		var lesson catalog.LessonData
+		var lesson vitrine.LessonData
 		var slug, lessonType, mediaURL, thumbnail sql.NullString
 		var order sql.NullInt32
 		var moduleID string
@@ -248,18 +248,18 @@ func (r *CatalogRepository) GetCatalogByTenant(ctx context.Context, tenantID str
 		}
 	}
 
-	result := make([]catalog.VitrineData, len(vitrines))
+	result := make([]vitrine.VitrineData, len(vitrines))
 	for i, v := range vitrines {
 		result[i] = *v
 	}
 
-	return &catalog.CatalogResponse{
+	return &vitrine.VitrineResponse{
 		Vitrines: result,
 		Total:    len(result),
 	}, nil
 }
 
-func (r *CatalogRepository) GetVitrineByID(ctx context.Context, vitrineID, tenantID string, includeChildren bool) (*catalog.VitrineDetailResponse, error) {
+func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenantID string, includeChildren bool) (*vitrine.VitrineDetailResponse, error) {
 	query := `
 		SELECT 
 			v.id,
@@ -269,10 +269,10 @@ func (r *CatalogRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 		WHERE v.id = $1 AND v."tenantId" = $2
 	`
 
-	var vitrine catalog.VitrineData
+	var vitrineData vitrine.VitrineData
 	var order sql.NullInt32
 
-	err := r.db.QueryRowContext(ctx, query, vitrineID, tenantID).Scan(&vitrine.ID, &vitrine.Name, &order)
+	err := r.db.QueryRowContext(ctx, query, vitrineID, tenantID).Scan(&vitrineData.ID, &vitrineData.Name, &order)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, &memberclasserrors.MemberClassError{
@@ -289,7 +289,7 @@ func (r *CatalogRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 
 	if order.Valid {
 		orderVal := int(order.Int32)
-		vitrine.Order = &orderVal
+		vitrineData.Order = &orderVal
 	}
 
 	if includeChildren {
@@ -314,7 +314,7 @@ func (r *CatalogRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 		defer coursesRows.Close()
 
 		for coursesRows.Next() {
-			var course catalog.CourseData
+			var course vitrine.CourseData
 			var order sql.NullInt32
 
 			err := coursesRows.Scan(&course.ID, &course.Name, &order)
@@ -346,7 +346,7 @@ func (r *CatalogRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 			}
 
 			for modulesRows.Next() {
-				var module catalog.ModuleData
+				var module vitrine.ModuleData
 				var order sql.NullInt32
 
 				err := modulesRows.Scan(&module.ID, &module.Name, &order)
@@ -383,7 +383,7 @@ func (r *CatalogRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 				}
 
 				for lessonsRows.Next() {
-					var lesson catalog.LessonData
+					var lesson vitrine.LessonData
 					var slug, lessonType, mediaURL, thumbnail sql.NullString
 					var order sql.NullInt32
 
@@ -418,18 +418,18 @@ func (r *CatalogRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 			}
 			modulesRows.Close()
 
-			vitrine.Courses = append(vitrine.Courses, course)
+			vitrineData.Courses = append(vitrineData.Courses, course)
 		}
 	} else {
-		vitrine.Courses = []catalog.CourseData{}
+		vitrineData.Courses = []vitrine.CourseData{}
 	}
 
-	return &catalog.VitrineDetailResponse{
-		Vitrine: vitrine,
+	return &vitrine.VitrineDetailResponse{
+		Vitrine: vitrineData,
 	}, nil
 }
 
-func (r *CatalogRepository) GetCourseByID(ctx context.Context, courseID, tenantID string, includeChildren bool) (*catalog.CourseDetailResponse, error) {
+func (r *VitrineRepository) GetCourseByID(ctx context.Context, courseID, tenantID string, includeChildren bool) (*vitrine.CourseDetailResponse, error) {
 	query := `
 		SELECT 
 			c.id,
@@ -440,7 +440,7 @@ func (r *CatalogRepository) GetCourseByID(ctx context.Context, courseID, tenantI
 		WHERE c.id = $1 AND v."tenantId" = $2
 	`
 
-	var course catalog.CourseData
+	var course vitrine.CourseData
 	var order sql.NullInt32
 
 	err := r.db.QueryRowContext(ctx, query, courseID, tenantID).Scan(&course.ID, &course.Name, &order)
@@ -486,7 +486,7 @@ func (r *CatalogRepository) GetCourseByID(ctx context.Context, courseID, tenantI
 		defer modulesRows.Close()
 
 		for modulesRows.Next() {
-			var module catalog.ModuleData
+			var module vitrine.ModuleData
 			var order sql.NullInt32
 
 			err := modulesRows.Scan(&module.ID, &module.Name, &order)
@@ -521,7 +521,7 @@ func (r *CatalogRepository) GetCourseByID(ctx context.Context, courseID, tenantI
 			}
 
 			for lessonsRows.Next() {
-				var lesson catalog.LessonData
+				var lesson vitrine.LessonData
 				var slug, lessonType, mediaURL, thumbnail sql.NullString
 				var order sql.NullInt32
 
@@ -555,15 +555,15 @@ func (r *CatalogRepository) GetCourseByID(ctx context.Context, courseID, tenantI
 			course.Modules = append(course.Modules, module)
 		}
 	} else {
-		course.Modules = []catalog.ModuleData{}
+		course.Modules = []vitrine.ModuleData{}
 	}
 
-	return &catalog.CourseDetailResponse{
+	return &vitrine.CourseDetailResponse{
 		Course: course,
 	}, nil
 }
 
-func (r *CatalogRepository) GetModuleByID(ctx context.Context, moduleID, tenantID string, includeChildren bool) (*catalog.ModuleDetailResponse, error) {
+func (r *VitrineRepository) GetModuleByID(ctx context.Context, moduleID, tenantID string, includeChildren bool) (*vitrine.ModuleDetailResponse, error) {
 	query := `
 		SELECT 
 			m.id,
@@ -576,7 +576,7 @@ func (r *CatalogRepository) GetModuleByID(ctx context.Context, moduleID, tenantI
 		WHERE m.id = $1 AND v."tenantId" = $2
 	`
 
-	var module catalog.ModuleData
+	var module vitrine.ModuleData
 	var order sql.NullInt32
 
 	err := r.db.QueryRowContext(ctx, query, moduleID, tenantID).Scan(&module.ID, &module.Name, &order)
@@ -625,7 +625,7 @@ func (r *CatalogRepository) GetModuleByID(ctx context.Context, moduleID, tenantI
 		defer lessonsRows.Close()
 
 		for lessonsRows.Next() {
-			var lesson catalog.LessonData
+			var lesson vitrine.LessonData
 			var slug, lessonType, mediaURL, thumbnail sql.NullString
 			var order sql.NullInt32
 
@@ -655,15 +655,15 @@ func (r *CatalogRepository) GetModuleByID(ctx context.Context, moduleID, tenantI
 			module.Lessons = append(module.Lessons, lesson)
 		}
 	} else {
-		module.Lessons = []catalog.LessonData{}
+		module.Lessons = []vitrine.LessonData{}
 	}
 
-	return &catalog.ModuleDetailResponse{
+	return &vitrine.ModuleDetailResponse{
 		Module: module,
 	}, nil
 }
 
-func (r *CatalogRepository) GetLessonByID(ctx context.Context, lessonID, tenantID string) (*catalog.LessonDetailResponse, error) {
+func (r *VitrineRepository) GetLessonByID(ctx context.Context, lessonID, tenantID string) (*vitrine.LessonDetailResponse, error) {
 	query := `
 		SELECT 
 			l.id,
@@ -681,7 +681,7 @@ func (r *CatalogRepository) GetLessonByID(ctx context.Context, lessonID, tenantI
 		WHERE l.id = $1 AND v."tenantId" = $2
 	`
 
-	var lesson catalog.LessonData
+	var lesson vitrine.LessonData
 	var slug, lessonType, mediaURL, thumbnail sql.NullString
 	var order sql.NullInt32
 
@@ -717,7 +717,7 @@ func (r *CatalogRepository) GetLessonByID(ctx context.Context, lessonID, tenantI
 		lesson.Order = &orderVal
 	}
 
-	return &catalog.LessonDetailResponse{
+	return &vitrine.LessonDetailResponse{
 		Lesson: lesson,
 	}, nil
 }

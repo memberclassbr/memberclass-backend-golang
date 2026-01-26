@@ -1,29 +1,29 @@
-package catalog
+package vitrine
 
-type CatalogResponse struct {
+type VitrineResponse struct {
 	Vitrines []VitrineData `json:"vitrines"`
 	Total    int           `json:"total"`
 }
 
 type VitrineData struct {
-	ID      string        `json:"id"`
-	Name    string        `json:"name"`
-	Order   *int          `json:"order,omitempty"`
-	Courses []CourseData  `json:"courses,omitempty"`
+	ID      string       `json:"id"`
+	Name    string       `json:"name"`
+	Order   *int         `json:"order,omitempty"`
+	Courses []CourseData `json:"courses,omitempty"`
 }
 
 type CourseData struct {
-	ID       string       `json:"id"`
-	Name     string       `json:"name"`
-	Order    *int         `json:"order,omitempty"`
-	Modules  []ModuleData `json:"modules,omitempty"`
+	ID      string       `json:"id"`
+	Name    string       `json:"name"`
+	Order   *int         `json:"order,omitempty"`
+	Modules []ModuleData `json:"modules,omitempty"`
 }
 
 type ModuleData struct {
-	ID       string       `json:"id"`
-	Name     string       `json:"name"`
-	Order    *int         `json:"order,omitempty"`
-	Lessons  []LessonData `json:"lessons,omitempty"`
+	ID      string       `json:"id"`
+	Name    string       `json:"name"`
+	Order   *int         `json:"order,omitempty"`
+	Lessons []LessonData `json:"lessons,omitempty"`
 }
 
 type LessonData struct {

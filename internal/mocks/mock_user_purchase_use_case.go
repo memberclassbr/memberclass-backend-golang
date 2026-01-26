@@ -5,8 +5,8 @@ package mocks
 import (
 	context "context"
 
-	request "github.com/memberclass-backend-golang/internal/domain/dto/request/purchase"
-	response "github.com/memberclass-backend-golang/internal/domain/dto/response/purchases"
+	purchase "github.com/memberclass-backend-golang/internal/domain/dto/request/purchase"
+	purchases "github.com/memberclass-backend-golang/internal/domain/dto/response/purchases"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -24,27 +24,27 @@ func (_m *MockUserPurchaseUseCase) EXPECT() *MockUserPurchaseUseCase_Expecter {
 }
 
 // GetUserPurchases provides a mock function with given fields: ctx, req, tenantID
-func (_m *MockUserPurchaseUseCase) GetUserPurchases(ctx context.Context, req request.GetUserPurchasesRequest, tenantID string) (*response.UserPurchasesResponse, error) {
+func (_m *MockUserPurchaseUseCase) GetUserPurchases(ctx context.Context, req purchase.GetUserPurchasesRequest, tenantID string) (*purchases.UserPurchasesResponse, error) {
 	ret := _m.Called(ctx, req, tenantID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUserPurchases")
 	}
 
-	var r0 *response.UserPurchasesResponse
+	var r0 *purchases.UserPurchasesResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, request.GetUserPurchasesRequest, string) (*response.UserPurchasesResponse, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, purchase.GetUserPurchasesRequest, string) (*purchases.UserPurchasesResponse, error)); ok {
 		return rf(ctx, req, tenantID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, request.GetUserPurchasesRequest, string) *response.UserPurchasesResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, purchase.GetUserPurchasesRequest, string) *purchases.UserPurchasesResponse); ok {
 		r0 = rf(ctx, req, tenantID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*response.UserPurchasesResponse)
+			r0 = ret.Get(0).(*purchases.UserPurchasesResponse)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, request.GetUserPurchasesRequest, string) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, purchase.GetUserPurchasesRequest, string) error); ok {
 		r1 = rf(ctx, req, tenantID)
 	} else {
 		r1 = ret.Error(1)
@@ -60,25 +60,25 @@ type MockUserPurchaseUseCase_GetUserPurchases_Call struct {
 
 // GetUserPurchases is a helper method to define mock.On call
 //   - ctx context.Context
-//   - req request.GetUserPurchasesRequest
+//   - req purchase.GetUserPurchasesRequest
 //   - tenantID string
 func (_e *MockUserPurchaseUseCase_Expecter) GetUserPurchases(ctx interface{}, req interface{}, tenantID interface{}) *MockUserPurchaseUseCase_GetUserPurchases_Call {
 	return &MockUserPurchaseUseCase_GetUserPurchases_Call{Call: _e.mock.On("GetUserPurchases", ctx, req, tenantID)}
 }
 
-func (_c *MockUserPurchaseUseCase_GetUserPurchases_Call) Run(run func(ctx context.Context, req request.GetUserPurchasesRequest, tenantID string)) *MockUserPurchaseUseCase_GetUserPurchases_Call {
+func (_c *MockUserPurchaseUseCase_GetUserPurchases_Call) Run(run func(ctx context.Context, req purchase.GetUserPurchasesRequest, tenantID string)) *MockUserPurchaseUseCase_GetUserPurchases_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(request.GetUserPurchasesRequest), args[2].(string))
+		run(args[0].(context.Context), args[1].(purchase.GetUserPurchasesRequest), args[2].(string))
 	})
 	return _c
 }
 
-func (_c *MockUserPurchaseUseCase_GetUserPurchases_Call) Return(_a0 *response.UserPurchasesResponse, _a1 error) *MockUserPurchaseUseCase_GetUserPurchases_Call {
+func (_c *MockUserPurchaseUseCase_GetUserPurchases_Call) Return(_a0 *purchases.UserPurchasesResponse, _a1 error) *MockUserPurchaseUseCase_GetUserPurchases_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockUserPurchaseUseCase_GetUserPurchases_Call) RunAndReturn(run func(context.Context, request.GetUserPurchasesRequest, string) (*response.UserPurchasesResponse, error)) *MockUserPurchaseUseCase_GetUserPurchases_Call {
+func (_c *MockUserPurchaseUseCase_GetUserPurchases_Call) RunAndReturn(run func(context.Context, purchase.GetUserPurchasesRequest, string) (*purchases.UserPurchasesResponse, error)) *MockUserPurchaseUseCase_GetUserPurchases_Call {
 	_c.Call.Return(run)
 	return _c
 }

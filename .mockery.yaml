@@ -6,7 +6,6 @@ dir: "internal/mocks"
 resolve-type-alias: false
 disable-version-string: true
 issue-845-fix: true
-replace: true
 packages:
   github.com/memberclass-backend-golang/internal/domain/ports:
     interfaces:
@@ -26,10 +25,10 @@ packages:
     interfaces:
       BunnyService:
       UploadVideoBunnyCdnUseCase:
-  github.com/memberclass-backend-golang/internal/domain/ports/catalog:
+  github.com/memberclass-backend-golang/internal/domain/ports/vitrine:
     interfaces:
-      CatalogRepository:
-      CatalogUseCase:
+      VitrineRepository:
+      VitrineUseCase:
   github.com/memberclass-backend-golang/internal/domain/ports/comment:
     interfaces:
       CommentRepository:

@@ -1,4 +1,4 @@
-package catalog
+package vitrine
 
 import (
 	"encoding/json"
@@ -10,22 +10,22 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	catalogports "github.com/memberclass-backend-golang/internal/domain/ports/catalog"
+	vitrineports "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
 )
 
-type CatalogHandler struct {
-	useCase catalogports.CatalogUseCase
+type VitrineHandler struct {
+	useCase vitrineports.VitrineUseCase
 	logger  ports.Logger
 }
 
-func NewCatalogHandler(useCase catalogports.CatalogUseCase, logger ports.Logger) *CatalogHandler {
-	return &CatalogHandler{
+func NewVitrineHandler(useCase vitrineports.VitrineUseCase, logger ports.Logger) *VitrineHandler {
+	return &VitrineHandler{
 		useCase: useCase,
 		logger:  logger,
 	}
 }
 
-func (h *CatalogHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
+func (h *VitrineHandler) GetVitrines(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -37,7 +37,7 @@ func (h *CatalogHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.useCase.GetCatalog(r.Context(), tenant.ID)
+	response, err := h.useCase.GetVitrines(r.Context(), tenant.ID)
 	if err != nil {
 		h.handleUseCaseError(w, err)
 		return
@@ -46,7 +46,7 @@ func (h *CatalogHandler) GetCatalog(w http.ResponseWriter, r *http.Request) {
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
-func (h *CatalogHandler) GetVitrine(w http.ResponseWriter, r *http.Request) {
+func (h *VitrineHandler) GetVitrine(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -75,7 +75,7 @@ func (h *CatalogHandler) GetVitrine(w http.ResponseWriter, r *http.Request) {
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
-func (h *CatalogHandler) GetCourse(w http.ResponseWriter, r *http.Request) {
+func (h *VitrineHandler) GetCourse(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -104,7 +104,7 @@ func (h *CatalogHandler) GetCourse(w http.ResponseWriter, r *http.Request) {
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
-func (h *CatalogHandler) GetModule(w http.ResponseWriter, r *http.Request) {
+func (h *VitrineHandler) GetModule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -133,7 +133,7 @@ func (h *CatalogHandler) GetModule(w http.ResponseWriter, r *http.Request) {
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
-func (h *CatalogHandler) GetLesson(w http.ResponseWriter, r *http.Request) {
+func (h *VitrineHandler) GetLesson(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -160,7 +160,7 @@ func (h *CatalogHandler) GetLesson(w http.ResponseWriter, r *http.Request) {
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
-func (h *CatalogHandler) parseIncludeChildren(r *http.Request) bool {
+func (h *VitrineHandler) parseIncludeChildren(r *http.Request) bool {
 	includeChildrenStr := r.URL.Query().Get("includeChildren")
 	if includeChildrenStr == "" {
 		return false
@@ -174,7 +174,7 @@ func (h *CatalogHandler) parseIncludeChildren(r *http.Request) bool {
 	return includeChildren
 }
 
-func (h *CatalogHandler) handleUseCaseError(w http.ResponseWriter, err error) {
+func (h *VitrineHandler) handleUseCaseError(w http.ResponseWriter, err error) {
 	memberClassErr, ok := err.(*memberclasserrors.MemberClassError)
 	if !ok {
 		var asErr *memberclasserrors.MemberClassError
@@ -205,7 +205,7 @@ func (h *CatalogHandler) handleUseCaseError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (h *CatalogHandler) sendCustomErrorResponse(w http.ResponseWriter, statusCode int, errorMessage, errorCode string) {
+func (h *VitrineHandler) sendCustomErrorResponse(w http.ResponseWriter, statusCode int, errorMessage, errorCode string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
@@ -218,7 +218,7 @@ func (h *CatalogHandler) sendCustomErrorResponse(w http.ResponseWriter, statusCo
 	json.NewEncoder(w).Encode(response)
 }
 
-func (h *CatalogHandler) sendErrorResponse(w http.ResponseWriter, code int, message string) {
+func (h *VitrineHandler) sendErrorResponse(w http.ResponseWriter, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
@@ -230,7 +230,7 @@ func (h *CatalogHandler) sendErrorResponse(w http.ResponseWriter, code int, mess
 	json.NewEncoder(w).Encode(response)
 }
 
-func (h *CatalogHandler) sendJSONResponse(w http.ResponseWriter, code int, data interface{}) {
+func (h *VitrineHandler) sendJSONResponse(w http.ResponseWriter, code int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(data)
