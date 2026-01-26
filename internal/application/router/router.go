@@ -13,6 +13,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
+	catalog2 "github.com/memberclass-backend-golang/internal/application/handlers/http/catalog"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 )
@@ -34,6 +35,7 @@ type Router struct {
 	ssoHandler                *sso.SSOHandler
 	aiLessonHandler           *ai.AILessonHandler
 	aiTenantHandler           *ai.AITenantHandler
+	catalogHandler            *catalog2.CatalogHandler
 	rateLimitMiddleware       *rate_limit.RateLimitMiddleware
 	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware
 	rateLimitIPMiddleware     *rate_limit.RateLimitIPMiddleware
@@ -57,6 +59,7 @@ func NewRouter(
 	ssoHandler *sso.SSOHandler,
 	aiLessonHandler *ai.AILessonHandler,
 	aiTenantHandler *ai.AITenantHandler,
+	catalogHandler *catalog2.CatalogHandler,
 	rateLimitMiddleware *rate_limit.RateLimitMiddleware,
 	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware,
 	rateLimitIPMiddleware *rate_limit.RateLimitIPMiddleware,
@@ -87,6 +90,7 @@ func NewRouter(
 		ssoHandler:                ssoHandler,
 		aiLessonHandler:           aiLessonHandler,
 		aiTenantHandler:           aiTenantHandler,
+		catalogHandler:            catalogHandler,
 		rateLimitMiddleware:       rateLimitMiddleware,
 		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
 		rateLimitIPMiddleware:     rateLimitIPMiddleware,
@@ -188,6 +192,33 @@ func (r *Router) SetupRoutes() {
 				r.authExternalMiddleware.Authenticate,
 				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Get("/report", r.studentReportHandler.GetStudentReport)
+		})
+
+		router.Route("/catalog", func(router chi.Router) {
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/", r.catalogHandler.GetCatalog)
+
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/vitrines/{vitrineId}", r.catalogHandler.GetVitrine)
+
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/courses/{courseId}", r.catalogHandler.GetCourse)
+
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/modules/{moduleId}", r.catalogHandler.GetModule)
+
+			router.With(
+				r.authExternalMiddleware.Authenticate,
+				r.rateLimitTenantMiddleware.LimitByTenant,
+			).Get("/lessons/{lessonId}", r.catalogHandler.GetLesson)
 		})
 
 	})

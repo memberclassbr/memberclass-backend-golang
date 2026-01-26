@@ -12,6 +12,7 @@ import (
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	ai3 "github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
+	catalog4 "github.com/memberclass-backend-golang/internal/application/handlers/http/catalog"
 	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
@@ -26,6 +27,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/ai"
+	catalog2 "github.com/memberclass-backend-golang/internal/domain/ports/catalog"
 	comment2 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
 	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
@@ -33,6 +35,7 @@ import (
 	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
+	catalog3 "github.com/memberclass-backend-golang/internal/domain/usecases/catalog"
 	comment3 "github.com/memberclass-backend-golang/internal/domain/usecases/comment"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
 	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
@@ -44,6 +47,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
+	catalog_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/catalog"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
@@ -75,6 +79,7 @@ func main() {
 			user_activity.NewUserActivityRepository,
 			student_report.NewStudentReportRepository,
 			sso_repository.NewSSORepository,
+			catalog_repository.NewCatalogRepository,
 
 			rate_limiter.NewRateLimiterUpload,
 			rate_limiter.NewRateLimiterTenant,
@@ -105,6 +110,9 @@ func main() {
 			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
 				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
 			},
+			func(catalogRepo catalog2.CatalogRepository) catalog2.CatalogUseCase {
+				return catalog3.NewCatalogUseCase(catalogRepo)
+			},
 
 			rate_limit.NewRateLimitMiddleware,
 			rate_limit.NewRateLimitTenantMiddleware,
@@ -127,6 +135,7 @@ func main() {
 			sso2.NewSSOHandler,
 			ai3.NewAILessonHandler,
 			ai3.NewAITenantHandler,
+			catalog4.NewCatalogHandler,
 
 			router.NewRouter,
 			jobs.NewScheduler,
