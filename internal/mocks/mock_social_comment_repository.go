@@ -3,10 +3,11 @@
 package mocks
 
 import (
+	comments "github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
+	comment "github.com/memberclass-backend-golang/internal/domain/ports/comment"
+
 	context "context"
 
-	request "github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
-	ports "github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -24,7 +25,7 @@ func (_m *MockSocialCommentRepository) EXPECT() *MockSocialCommentRepository_Exp
 }
 
 // Create provides a mock function with given fields: ctx, req, tenantID
-func (_m *MockSocialCommentRepository) Create(ctx context.Context, req request.CreateSocialCommentRequest, tenantID string) (string, error) {
+func (_m *MockSocialCommentRepository) Create(ctx context.Context, req comments.CreateSocialCommentRequest, tenantID string) (string, error) {
 	ret := _m.Called(ctx, req, tenantID)
 
 	if len(ret) == 0 {
@@ -33,16 +34,16 @@ func (_m *MockSocialCommentRepository) Create(ctx context.Context, req request.C
 
 	var r0 string
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, request.CreateSocialCommentRequest, string) (string, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, comments.CreateSocialCommentRequest, string) (string, error)); ok {
 		return rf(ctx, req, tenantID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, request.CreateSocialCommentRequest, string) string); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, comments.CreateSocialCommentRequest, string) string); ok {
 		r0 = rf(ctx, req, tenantID)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, request.CreateSocialCommentRequest, string) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, comments.CreateSocialCommentRequest, string) error); ok {
 		r1 = rf(ctx, req, tenantID)
 	} else {
 		r1 = ret.Error(1)
@@ -58,15 +59,15 @@ type MockSocialCommentRepository_Create_Call struct {
 
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
-//   - req request.CreateSocialCommentRequest
+//   - req comments.CreateSocialCommentRequest
 //   - tenantID string
 func (_e *MockSocialCommentRepository_Expecter) Create(ctx interface{}, req interface{}, tenantID interface{}) *MockSocialCommentRepository_Create_Call {
 	return &MockSocialCommentRepository_Create_Call{Call: _e.mock.On("Create", ctx, req, tenantID)}
 }
 
-func (_c *MockSocialCommentRepository_Create_Call) Run(run func(ctx context.Context, req request.CreateSocialCommentRequest, tenantID string)) *MockSocialCommentRepository_Create_Call {
+func (_c *MockSocialCommentRepository_Create_Call) Run(run func(ctx context.Context, req comments.CreateSocialCommentRequest, tenantID string)) *MockSocialCommentRepository_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(request.CreateSocialCommentRequest), args[2].(string))
+		run(args[0].(context.Context), args[1].(comments.CreateSocialCommentRequest), args[2].(string))
 	})
 	return _c
 }
@@ -76,29 +77,29 @@ func (_c *MockSocialCommentRepository_Create_Call) Return(_a0 string, _a1 error)
 	return _c
 }
 
-func (_c *MockSocialCommentRepository_Create_Call) RunAndReturn(run func(context.Context, request.CreateSocialCommentRequest, string) (string, error)) *MockSocialCommentRepository_Create_Call {
+func (_c *MockSocialCommentRepository_Create_Call) RunAndReturn(run func(context.Context, comments.CreateSocialCommentRequest, string) (string, error)) *MockSocialCommentRepository_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // FindByID provides a mock function with given fields: ctx, postID
-func (_m *MockSocialCommentRepository) FindByID(ctx context.Context, postID string) (*ports.PostInfo, error) {
+func (_m *MockSocialCommentRepository) FindByID(ctx context.Context, postID string) (*comment.PostInfo, error) {
 	ret := _m.Called(ctx, postID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for FindByID")
 	}
 
-	var r0 *ports.PostInfo
+	var r0 *comment.PostInfo
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*ports.PostInfo, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*comment.PostInfo, error)); ok {
 		return rf(ctx, postID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *ports.PostInfo); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *comment.PostInfo); ok {
 		r0 = rf(ctx, postID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*ports.PostInfo)
+			r0 = ret.Get(0).(*comment.PostInfo)
 		}
 	}
 
@@ -130,18 +131,18 @@ func (_c *MockSocialCommentRepository_FindByID_Call) Run(run func(ctx context.Co
 	return _c
 }
 
-func (_c *MockSocialCommentRepository_FindByID_Call) Return(_a0 *ports.PostInfo, _a1 error) *MockSocialCommentRepository_FindByID_Call {
+func (_c *MockSocialCommentRepository_FindByID_Call) Return(_a0 *comment.PostInfo, _a1 error) *MockSocialCommentRepository_FindByID_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockSocialCommentRepository_FindByID_Call) RunAndReturn(run func(context.Context, string) (*ports.PostInfo, error)) *MockSocialCommentRepository_FindByID_Call {
+func (_c *MockSocialCommentRepository_FindByID_Call) RunAndReturn(run func(context.Context, string) (*comment.PostInfo, error)) *MockSocialCommentRepository_FindByID_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Update provides a mock function with given fields: ctx, req, tenantID
-func (_m *MockSocialCommentRepository) Update(ctx context.Context, req request.CreateSocialCommentRequest, tenantID string) error {
+func (_m *MockSocialCommentRepository) Update(ctx context.Context, req comments.CreateSocialCommentRequest, tenantID string) error {
 	ret := _m.Called(ctx, req, tenantID)
 
 	if len(ret) == 0 {
@@ -149,7 +150,7 @@ func (_m *MockSocialCommentRepository) Update(ctx context.Context, req request.C
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, request.CreateSocialCommentRequest, string) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, comments.CreateSocialCommentRequest, string) error); ok {
 		r0 = rf(ctx, req, tenantID)
 	} else {
 		r0 = ret.Error(0)
@@ -165,15 +166,15 @@ type MockSocialCommentRepository_Update_Call struct {
 
 // Update is a helper method to define mock.On call
 //   - ctx context.Context
-//   - req request.CreateSocialCommentRequest
+//   - req comments.CreateSocialCommentRequest
 //   - tenantID string
 func (_e *MockSocialCommentRepository_Expecter) Update(ctx interface{}, req interface{}, tenantID interface{}) *MockSocialCommentRepository_Update_Call {
 	return &MockSocialCommentRepository_Update_Call{Call: _e.mock.On("Update", ctx, req, tenantID)}
 }
 
-func (_c *MockSocialCommentRepository_Update_Call) Run(run func(ctx context.Context, req request.CreateSocialCommentRequest, tenantID string)) *MockSocialCommentRepository_Update_Call {
+func (_c *MockSocialCommentRepository_Update_Call) Run(run func(ctx context.Context, req comments.CreateSocialCommentRequest, tenantID string)) *MockSocialCommentRepository_Update_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(request.CreateSocialCommentRequest), args[2].(string))
+		run(args[0].(context.Context), args[1].(comments.CreateSocialCommentRequest), args[2].(string))
 	})
 	return _c
 }
@@ -183,7 +184,7 @@ func (_c *MockSocialCommentRepository_Update_Call) Return(_a0 error) *MockSocial
 	return _c
 }
 
-func (_c *MockSocialCommentRepository_Update_Call) RunAndReturn(run func(context.Context, request.CreateSocialCommentRequest, string) error) *MockSocialCommentRepository_Update_Call {
+func (_c *MockSocialCommentRepository_Update_Call) RunAndReturn(run func(context.Context, comments.CreateSocialCommentRequest, string) error) *MockSocialCommentRepository_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }

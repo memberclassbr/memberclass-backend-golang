@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "memberclass-backend-golang",
 		"name": "MemberClass Backend API",
-		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários\n- Compras e reembolsos dos usuários",
+		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários\n- Compras e reembolsos dos usuários\n- Catálogo (vitrines, cursos, módulos e aulas)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -54,6 +54,21 @@
 		{
 			"key": "ssoToken",
 			"value": "your-sso-token",
+			"type": "string"
+		},
+		{
+			"key": "vitrineId",
+			"value": "your-vitrine-id",
+			"type": "string"
+		},
+		{
+			"key": "courseId",
+			"value": "your-course-id",
+			"type": "string"
+		},
+		{
+			"key": "moduleId",
+			"value": "your-module-id",
 			"type": "string"
 		}
 	],
@@ -3332,6 +3347,540 @@
 								}
 							],
 							"body": "{\n    \"ok\": false,\n    \"error\": \"token expirado\",\n    \"errorCode\": \"INVALID_TOKEN\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Vitrine",
+			"description": "Endpoints para recuperar informações do catálogo: vitrines, cursos, módulos e aulas",
+			"item": [
+				{
+					"name": "Get Vitrines",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "Token de API para autenticação"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vitrine",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"vitrine"
+							]
+						},
+						"description": "Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > módulos > aulas. O tenant é identificado automaticamente pelo token de API."
+					},
+					"response": [
+						{
+							"name": "Get Vitrines - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"vitrines\": [\n        {\n            \"id\": \"vitrine-123\",\n            \"name\": \"Vitrine Principal\",\n            \"order\": 1,\n            \"courses\": [\n                {\n                    \"id\": \"course-123\",\n                    \"name\": \"Curso de JavaScript\",\n                    \"order\": 1,\n                    \"modules\": [\n                        {\n                            \"id\": \"module-123\",\n                            \"name\": \"Módulo 1 - Fundamentos\",\n                            \"order\": 1,\n                            \"lessons\": [\n                                {\n                                    \"id\": \"lesson-123\",\n                                    \"name\": \"Aula 1 - Introdução\",\n                                    \"slug\": \"aula-1-introducao\",\n                                    \"type\": \"video\",\n                                    \"mediaUrl\": \"https://example.com/video.mp4\",\n                                    \"thumbnail\": \"https://example.com/thumb.jpg\",\n                                    \"order\": 1\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        }\n    ],\n    \"total\": 1\n}"
+						},
+						{
+							"name": "Get Vitrines - Unauthorized",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Token de API inválido\",\n    \"errorCode\": \"INVALID_API_KEY\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Vitrine by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "Token de API para autenticação"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vitrine/{{vitrineId}}?includeChildren=true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"vitrine",
+								"vitrines",
+								"{{vitrineId}}"
+							],
+							"query": [
+								{
+									"key": "includeChildren",
+									"value": "true",
+									"description": "Se true, inclui cursos, módulos e aulas na resposta"
+								}
+							]
+						},
+						"description": "Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, módulos e aulas) através do parâmetro includeChildren."
+					},
+					"response": [
+						{
+							"name": "Get Vitrine - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/vitrine-123?includeChildren=true",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"vitrines",
+										"vitrine-123"
+									],
+									"query": [
+										{
+											"key": "includeChildren",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"vitrine\": {\n        \"id\": \"vitrine-123\",\n        \"name\": \"Vitrine Principal\",\n        \"order\": 1,\n        \"courses\": [\n            {\n                \"id\": \"course-123\",\n                \"name\": \"Curso de JavaScript\",\n                \"order\": 1,\n                \"modules\": [\n                    {\n                        \"id\": \"module-123\",\n                        \"name\": \"Módulo 1 - Fundamentos\",\n                        \"order\": 1,\n                        \"lessons\": [\n                            {\n                                \"id\": \"lesson-123\",\n                                \"name\": \"Aula 1 - Introdução\",\n                                \"slug\": \"aula-1-introducao\",\n                                \"type\": \"video\",\n                                \"mediaUrl\": \"https://example.com/video.mp4\",\n                                \"thumbnail\": \"https://example.com/thumb.jpg\",\n                                \"order\": 1\n                            }\n                        ]\n                    }\n                ]\n            }\n        ]\n    }\n}"
+						},
+						{
+							"name": "Get Vitrine - Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/invalid-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"vitrines",
+										"invalid-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Vitrine não encontrada\",\n    \"errorCode\": \"NOT_FOUND\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Course by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "Token de API para autenticação"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vitrine/courses/{{courseId}}?includeChildren=true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"vitrine",
+								"courses",
+								"{{courseId}}"
+							],
+							"query": [
+								{
+									"key": "includeChildren",
+									"value": "true",
+									"description": "Se true, inclui módulos e aulas na resposta"
+								}
+							]
+						},
+						"description": "Retorna um curso específico pelo ID. Pode incluir ou não os filhos (módulos e aulas) através do parâmetro includeChildren."
+					},
+					"response": [
+						{
+							"name": "Get Course - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/courses/course-123?includeChildren=true",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"courses",
+										"course-123"
+									],
+									"query": [
+										{
+											"key": "includeChildren",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"course\": {\n        \"id\": \"course-123\",\n        \"name\": \"Curso de JavaScript\",\n        \"order\": 1,\n        \"modules\": [\n            {\n                \"id\": \"module-123\",\n                \"name\": \"Módulo 1 - Fundamentos\",\n                \"order\": 1,\n                \"lessons\": [\n                    {\n                        \"id\": \"lesson-123\",\n                        \"name\": \"Aula 1 - Introdução\",\n                        \"slug\": \"aula-1-introducao\",\n                        \"type\": \"video\",\n                        \"mediaUrl\": \"https://example.com/video.mp4\",\n                        \"thumbnail\": \"https://example.com/thumb.jpg\",\n                        \"order\": 1\n                    }\n                ]\n            }\n        ]\n    }\n}"
+						},
+						{
+							"name": "Get Course - Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/courses/invalid-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"courses",
+										"invalid-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Curso não encontrado\",\n    \"errorCode\": \"NOT_FOUND\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Module by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "Token de API para autenticação"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vitrine/modules/{{moduleId}}?includeChildren=true",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"vitrine",
+								"modules",
+								"{{moduleId}}"
+							],
+							"query": [
+								{
+									"key": "includeChildren",
+									"value": "true",
+									"description": "Se true, inclui aulas na resposta"
+								}
+							]
+						},
+						"description": "Retorna um módulo específico pelo ID. Pode incluir ou não os filhos (aulas) através do parâmetro includeChildren."
+					},
+					"response": [
+						{
+							"name": "Get Module - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/modules/module-123?includeChildren=true",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"modules",
+										"module-123"
+									],
+									"query": [
+										{
+											"key": "includeChildren",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"module\": {\n        \"id\": \"module-123\",\n        \"name\": \"Módulo 1 - Fundamentos\",\n        \"order\": 1,\n        \"lessons\": [\n            {\n                \"id\": \"lesson-123\",\n                \"name\": \"Aula 1 - Introdução\",\n                \"slug\": \"aula-1-introducao\",\n                \"type\": \"video\",\n                \"mediaUrl\": \"https://example.com/video.mp4\",\n                \"thumbnail\": \"https://example.com/thumb.jpg\",\n                \"order\": 1\n            }\n        ]\n    }\n}"
+						},
+						{
+							"name": "Get Module - Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/modules/invalid-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"modules",
+										"invalid-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Módulo não encontrado\",\n    \"errorCode\": \"NOT_FOUND\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Lesson by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"type": "text",
+								"description": "Token de API para autenticação"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/vitrine/lessons/{{lessonId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"vitrine",
+								"lessons",
+								"{{lessonId}}"
+							]
+						},
+						"description": "Retorna uma aula específica pelo ID. Aulas não possuem filhos."
+					},
+					"response": [
+						{
+							"name": "Get Lesson - Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/lessons/lesson-123",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"lessons",
+										"lesson-123"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"lesson\": {\n        \"id\": \"lesson-123\",\n        \"name\": \"Aula 1 - Introdução\",\n        \"slug\": \"aula-1-introducao\",\n        \"type\": \"video\",\n        \"mediaUrl\": \"https://example.com/video.mp4\",\n        \"thumbnail\": \"https://example.com/thumb.jpg\",\n        \"order\": 1\n    }\n}"
+						},
+						{
+							"name": "Get Lesson - Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "valid-api-key"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/vitrine/lessons/invalid-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"vitrine",
+										"lessons",
+										"invalid-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"ok\": false,\n    \"error\": \"Aula não encontrada\",\n    \"errorCode\": \"NOT_FOUND\"\n}"
 						}
 					]
 				}

@@ -16,6 +16,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
+	vitrine2 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/mocks"
@@ -39,6 +40,7 @@ func createTestRouter(t *testing.T) *Router {
 	mockSSOHandler := &sso.SSOHandler{}
 	mockAILessonHandler := &ai.AILessonHandler{}
 	mockAITenantHandler := &ai.AITenantHandler{}
+	mockVitrineHandler := &vitrine2.VitrineHandler{}
 	mockLogger := &mocks.MockLogger{}
 	mockRateLimiter := &mocks.MockRateLimiterUpload{}
 	mockRateLimiterTenant := &mocks.MockRateLimiterTenant{}
@@ -57,7 +59,7 @@ func createTestRouter(t *testing.T) *Router {
 	authMiddleware := auth2.NewAuthMiddleware(mockLogger, mockSessionValidator)
 	authExternalMiddleware := auth2.NewAuthExternalMiddleware(mockApiTokenUseCase)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivityHandler, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummaryHandler, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, mockVitrineHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
@@ -88,6 +90,13 @@ func TestRouter_SetupRoutes(t *testing.T) {
 		{"POST", "/api/lessons/pdf-process", 404},               // Will be 404 because we don't have actual handler implementation
 		{"POST", "/api/lessons/process-all-pdfs", 404},          // Will be 404 because we don't have actual handler implementation
 		{"POST", "/api/lessons/lesson-123/pdf-regenerate", 404}, // Will be 404 because we don't have actual handler implementation
+
+		// Vitrine routes
+		{"GET", "/api/v1/vitrine", 404},
+		{"GET", "/api/v1/vitrine/vitrine-123", 404},
+		{"GET", "/api/v1/vitrine/courses/course-123", 404},
+		{"GET", "/api/v1/vitrine/modules/module-123", 404},
+		{"GET", "/api/v1/vitrine/lessons/lesson-123", 404},
 
 		// Non-existent routes
 		{"GET", "/api/lessons", 404},
@@ -130,20 +139,22 @@ func TestRouter_RouteStructure(t *testing.T) {
 	router := createTestRouter(t)
 	router.SetupRoutes()
 
-	// Test that the route structure is correct by checking if specific routes exist
-	// We'll use chi's Walk function to inspect the routes
 	var routes []string
 	chi.Walk(router.Router, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
 		routes = append(routes, method+" "+route)
 		return nil
 	})
 
-	// Check that expected routes are present
 	expectedRoutes := []string{
 		"POST /api/v1/videos/upload",
 		"POST /api/lessons/pdf-process",
 		"POST /api/lessons/process-all-pdfs",
 		"POST /api/lessons/{lessonId}/pdf-regenerate",
+		"GET /api/v1/vitrine/",
+		"GET /api/v1/vitrine/{vitrineId}",
+		"GET /api/v1/vitrine/courses/{courseId}",
+		"GET /api/v1/vitrine/modules/{moduleId}",
+		"GET /api/v1/vitrine/lessons/{lessonId}",
 	}
 
 	for _, expectedRoute := range expectedRoutes {
@@ -154,7 +165,10 @@ func TestRouter_RouteStructure(t *testing.T) {
 				break
 			}
 		}
-		assert.True(t, found, "Expected route %s not found in registered routes", expectedRoute)
+		if !found {
+			t.Logf("Available routes: %v", routes)
+		}
+		assert.True(t, found, "Expected route %s not found in registered routes. Available routes: %v", expectedRoute, routes)
 	}
 }
 

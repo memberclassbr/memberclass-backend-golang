@@ -26,6 +26,12 @@ tags:
     description: Endpoints para criar e atualizar posts na comunidade (social)
   - name: Students
     description: Endpoints para relatórios de alunos do tenant
+  - name: Vitrine
+    description: |
+      Endpoints para recuperar informações do catálogo:
+      - Vitrines, cursos, módulos e aulas
+      - Listagem completa com hierarquia
+      - Busca individual por ID
 
 paths:
   /api/v1/comments:
@@ -1238,6 +1244,250 @@ paths:
                 error: "Erro interno do servidor"
                 errorCode: "INTERNAL_ERROR"
 
+  /api/v1/vitrine:
+    get:
+      tags:
+        - Vitrine
+      summary: Listar catálogo completo
+      description: |
+        Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > módulos > aulas.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        
+        O tenant é identificado automaticamente pelo token de API.
+      operationId: getVitrines
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+      responses:
+        '200':
+          description: Catálogo retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VitrineResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
+  /api/v1/vitrine/{vitrineId}:
+    get:
+      tags:
+        - Vitrine
+      summary: Buscar vitrine por ID
+      description: |
+        Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, módulos e aulas) através do parâmetro `includeChildren`.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      operationId: getVitrine
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: vitrineId
+          in: path
+          required: true
+          description: ID da vitrine
+          schema:
+            type: string
+          example: "vitrine-123"
+        - name: includeChildren
+          in: query
+          required: false
+          description: Se `true`, inclui cursos, módulos e aulas na resposta
+          schema:
+            type: boolean
+            default: false
+          example: true
+      responses:
+        '200':
+          description: Vitrine retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VitrineDetailResponse'
+        '404':
+          description: Vitrine não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
+  /api/v1/vitrine/courses/{courseId}:
+    get:
+      tags:
+        - Vitrine
+      summary: Buscar curso por ID
+      description: |
+        Retorna um curso específico pelo ID. Pode incluir ou não os filhos (módulos e aulas) através do parâmetro `includeChildren`.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      operationId: getCourse
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: courseId
+          in: path
+          required: true
+          description: ID do curso
+          schema:
+            type: string
+          example: "course-123"
+        - name: includeChildren
+          in: query
+          required: false
+          description: Se `true`, inclui módulos e aulas na resposta
+          schema:
+            type: boolean
+            default: false
+          example: true
+      responses:
+        '200':
+          description: Curso retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseDetailResponse'
+        '404':
+          description: Curso não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
+  /api/v1/vitrine/modules/{moduleId}:
+    get:
+      tags:
+        - Vitrine
+      summary: Buscar módulo por ID
+      description: |
+        Retorna um módulo específico pelo ID. Pode incluir ou não os filhos (aulas) através do parâmetro `includeChildren`.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      operationId: getModule
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: moduleId
+          in: path
+          required: true
+          description: ID do módulo
+          schema:
+            type: string
+          example: "module-123"
+        - name: includeChildren
+          in: query
+          required: false
+          description: Se `true`, inclui aulas na resposta
+          schema:
+            type: boolean
+            default: false
+          example: true
+      responses:
+        '200':
+          description: Módulo retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleDetailResponse'
+        '404':
+          description: Módulo não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
+  /api/v1/vitrine/lessons/{lessonId}:
+    get:
+      tags:
+        - Vitrine
+      summary: Buscar aula por ID
+      description: |
+        Retorna uma aula específica pelo ID. Aulas não possuem filhos.
+        
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      operationId: getLesson
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API para autenticação
+          schema:
+            type: string
+          example: "your-api-token"
+        - name: lessonId
+          in: path
+          required: true
+          description: ID da aula
+          schema:
+            type: string
+          example: "lesson-123"
+      responses:
+        '200':
+          description: Aula retornada com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LessonDetailResponse'
+        '404':
+          description: Aula não encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
 components:
   schemas:
     ErrorResponse:
@@ -1863,4 +2113,143 @@ components:
           description: Indica se há página anterior
           example: false
 
+    VitrineResponse:
+      type: object
+      properties:
+        vitrines:
+          type: array
+          items:
+            $ref: '#/components/schemas/VitrineData'
+          description: Lista de vitrines com sua hierarquia completa
+        total:
+          type: integer
+          description: Total de vitrines
+          example: 5
+
+    VitrineData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID da vitrine
+          example: "vitrine-123"
+        name:
+          type: string
+          description: Nome da vitrine
+          example: "Vitrine Principal"
+        order:
+          type: integer
+          nullable: true
+          description: Ordem de exibição
+          example: 1
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourseData'
+          description: Lista de cursos (apenas quando includeChildren=true)
+
+    CourseData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID do curso
+          example: "course-123"
+        name:
+          type: string
+          description: Nome do curso
+          example: "Curso de JavaScript"
+        order:
+          type: integer
+          nullable: true
+          description: Ordem de exibição
+          example: 1
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleData'
+          description: Lista de módulos (apenas quando includeChildren=true)
+
+    ModuleData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID do módulo
+          example: "module-123"
+        name:
+          type: string
+          description: Nome do módulo
+          example: "Módulo 1 - Fundamentos"
+        order:
+          type: integer
+          nullable: true
+          description: Ordem de exibição
+          example: 1
+        lessons:
+          type: array
+          items:
+            $ref: '#/components/schemas/LessonData'
+          description: Lista de aulas (apenas quando includeChildren=true)
+
+    LessonData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID da aula
+          example: "lesson-123"
+        name:
+          type: string
+          description: Nome da aula
+          example: "Aula 1 - Introdução"
+        slug:
+          type: string
+          nullable: true
+          description: Slug da aula
+          example: "aula-1-introducao"
+        type:
+          type: string
+          nullable: true
+          description: Tipo da aula
+          example: "video"
+        mediaUrl:
+          type: string
+          nullable: true
+          description: URL da mídia
+          example: "https://example.com/video.mp4"
+        thumbnail:
+          type: string
+          nullable: true
+          description: URL da thumbnail
+          example: "https://example.com/thumb.jpg"
+        order:
+          type: integer
+          nullable: true
+          description: Ordem de exibição
+          example: 1
+
+    VitrineDetailResponse:
+      type: object
+      properties:
+        vitrine:
+          $ref: '#/components/schemas/VitrineData'
+
+    CourseDetailResponse:
+      type: object
+      properties:
+        course:
+          $ref: '#/components/schemas/CourseData'
+
+    ModuleDetailResponse:
+      type: object
+      properties:
+        module:
+          $ref: '#/components/schemas/ModuleData'
+
+    LessonDetailResponse:
+      type: object
+      properties:
+        lesson:
+          $ref: '#/components/schemas/LessonData'
 

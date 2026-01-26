@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	entities "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
+	tenant "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -80,23 +80,23 @@ func (_c *MockApiTokenUseCase_GenerateToken_Call) RunAndReturn(run func(context.
 }
 
 // ValidateToken provides a mock function with given fields: ctx, token
-func (_m *MockApiTokenUseCase) ValidateToken(ctx context.Context, token string) (*entities.Tenant, error) {
+func (_m *MockApiTokenUseCase) ValidateToken(ctx context.Context, token string) (*tenant.Tenant, error) {
 	ret := _m.Called(ctx, token)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ValidateToken")
 	}
 
-	var r0 *entities.Tenant
+	var r0 *tenant.Tenant
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*entities.Tenant, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*tenant.Tenant, error)); ok {
 		return rf(ctx, token)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *entities.Tenant); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string) *tenant.Tenant); ok {
 		r0 = rf(ctx, token)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*entities.Tenant)
+			r0 = ret.Get(0).(*tenant.Tenant)
 		}
 	}
 
@@ -128,12 +128,12 @@ func (_c *MockApiTokenUseCase_ValidateToken_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockApiTokenUseCase_ValidateToken_Call) Return(_a0 *entities.Tenant, _a1 error) *MockApiTokenUseCase_ValidateToken_Call {
+func (_c *MockApiTokenUseCase_ValidateToken_Call) Return(_a0 *tenant.Tenant, _a1 error) *MockApiTokenUseCase_ValidateToken_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockApiTokenUseCase_ValidateToken_Call) RunAndReturn(run func(context.Context, string) (*entities.Tenant, error)) *MockApiTokenUseCase_ValidateToken_Call {
+func (_c *MockApiTokenUseCase_ValidateToken_Call) RunAndReturn(run func(context.Context, string) (*tenant.Tenant, error)) *MockApiTokenUseCase_ValidateToken_Call {
 	_c.Call.Return(run)
 	return _c
 }

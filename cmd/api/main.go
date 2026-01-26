@@ -19,6 +19,7 @@ import (
 	user4 "github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	purchase2 "github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
+	vitrine4 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	"github.com/memberclass-backend-golang/internal/application/jobs/transcription"
 	auth3 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
@@ -30,6 +31,7 @@ import (
 	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
 	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
+	vitrine2 "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
@@ -38,6 +40,7 @@ import (
 	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
+	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
@@ -52,6 +55,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 	user_activity "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user_activity"
+	vitrine_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/vitrine"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
 	"go.uber.org/fx"
 )
@@ -75,6 +79,7 @@ func main() {
 			user_activity.NewUserActivityRepository,
 			student_report.NewStudentReportRepository,
 			sso_repository.NewSSORepository,
+			vitrine_repository.NewVitrineRepository,
 
 			rate_limiter.NewRateLimiterUpload,
 			rate_limiter.NewRateLimiterTenant,
@@ -105,6 +110,9 @@ func main() {
 			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
 				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
 			},
+			func(vitrineRepo vitrine2.VitrineRepository) vitrine2.VitrineUseCase {
+				return vitrine3.NewVitrineUseCase(vitrineRepo)
+			},
 
 			rate_limit.NewRateLimitMiddleware,
 			rate_limit.NewRateLimitTenantMiddleware,
@@ -127,6 +135,7 @@ func main() {
 			sso2.NewSSOHandler,
 			ai3.NewAILessonHandler,
 			ai3.NewAITenantHandler,
+			vitrine4.NewVitrineHandler,
 
 			router.NewRouter,
 			jobs.NewScheduler,

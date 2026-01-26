@@ -5,8 +5,9 @@ package mocks
 import (
 	context "context"
 
-	response "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 	mock "github.com/stretchr/testify/mock"
+
+	student "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 
 	time "time"
 )
@@ -25,24 +26,24 @@ func (_m *MockStudentReportRepository) EXPECT() *MockStudentReportRepository_Exp
 }
 
 // GetStudentsReport provides a mock function with given fields: ctx, tenantID, startDate, endDate, page, limit
-func (_m *MockStudentReportRepository) GetStudentsReport(ctx context.Context, tenantID string, startDate *time.Time, endDate *time.Time, page int, limit int) ([]response.StudentReport, int64, error) {
+func (_m *MockStudentReportRepository) GetStudentsReport(ctx context.Context, tenantID string, startDate *time.Time, endDate *time.Time, page int, limit int) ([]student.StudentReport, int64, error) {
 	ret := _m.Called(ctx, tenantID, startDate, endDate, page, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetStudentsReport")
 	}
 
-	var r0 []response.StudentReport
+	var r0 []student.StudentReport
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) ([]response.StudentReport, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) ([]student.StudentReport, int64, error)); ok {
 		return rf(ctx, tenantID, startDate, endDate, page, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) []response.StudentReport); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) []student.StudentReport); ok {
 		r0 = rf(ctx, tenantID, startDate, endDate, page, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]response.StudentReport)
+			r0 = ret.Get(0).([]student.StudentReport)
 		}
 	}
 
@@ -84,12 +85,12 @@ func (_c *MockStudentReportRepository_GetStudentsReport_Call) Run(run func(ctx c
 	return _c
 }
 
-func (_c *MockStudentReportRepository_GetStudentsReport_Call) Return(_a0 []response.StudentReport, _a1 int64, _a2 error) *MockStudentReportRepository_GetStudentsReport_Call {
+func (_c *MockStudentReportRepository_GetStudentsReport_Call) Return(_a0 []student.StudentReport, _a1 int64, _a2 error) *MockStudentReportRepository_GetStudentsReport_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockStudentReportRepository_GetStudentsReport_Call) RunAndReturn(run func(context.Context, string, *time.Time, *time.Time, int, int) ([]response.StudentReport, int64, error)) *MockStudentReportRepository_GetStudentsReport_Call {
+func (_c *MockStudentReportRepository_GetStudentsReport_Call) RunAndReturn(run func(context.Context, string, *time.Time, *time.Time, int, int) ([]student.StudentReport, int64, error)) *MockStudentReportRepository_GetStudentsReport_Call {
 	_c.Call.Return(run)
 	return _c
 }
