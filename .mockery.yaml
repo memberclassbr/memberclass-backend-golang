@@ -6,39 +6,74 @@ dir: "internal/mocks"
 resolve-type-alias: false
 disable-version-string: true
 issue-845-fix: true
+replace: true
 packages:
   github.com/memberclass-backend-golang/internal/domain/ports:
     interfaces:
       Logger:
       Cache:
-      RateLimiterUpload:
+      Storage:
+      Job:
+  github.com/memberclass-backend-golang/internal/domain/ports/ai:
+    interfaces:
+      AILessonUseCase:
+      AITenantUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/auth:
+    interfaces:
+      AuthUseCase:
+      ApiTokenUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/bunny:
+    interfaces:
       BunnyService:
       UploadVideoBunnyCdnUseCase:
-      TenantGetTenantBunnyCredentialsUseCase:
-      TenantRepository:
-      PdfProcessorUseCase:
-      LessonRepository:
-      PdfProcessService:
-      Storage:
+  github.com/memberclass-backend-golang/internal/domain/ports/catalog:
+    interfaces:
+      CatalogRepository:
+      CatalogUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/comment:
+    interfaces:
       CommentRepository:
       CommentUseCase:
-      ApiTokenUseCase:
+      SocialCommentRepository:
+      SocialCommentUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/lesson:
+    interfaces:
+      LessonRepository:
+      LessonsCompletedUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor:
+    interfaces:
+      PdfProcessorUseCase:
+      PdfProcessService:
+  github.com/memberclass-backend-golang/internal/domain/ports/rate_limit:
+    interfaces:
+      RateLimiterUpload:
+      RateLimiterTenant:
+      RateLimiterIP:
+  github.com/memberclass-backend-golang/internal/domain/ports/social:
+    interfaces:
+      PostSocialRepository:
+      PostSocialUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/sso:
+    interfaces:
+      SSORepository:
+      SSOUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/student:
+    interfaces:
+      StudentReportRepository:
+      StudentReportUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/tenant:
+    interfaces:
+      TenantRepository:
+      TenantGetTenantBunnyCredentialsUseCase:
+  github.com/memberclass-backend-golang/internal/domain/ports/topic:
+    interfaces:
+      TopicRepository:
+  github.com/memberclass-backend-golang/internal/domain/ports/user:
+    interfaces:
+      UserRepository:
       UserActivityRepository:
       UserActivityUseCase:
       UserPurchaseUseCase:
       UserInformationsUseCase:
-      SocialCommentUseCase:
-      PostSocialUseCase:
       ActivitySummaryUseCase:
-      LessonsCompletedUseCase:
-      UserRepository:
-      SocialCommentRepository:
-      PostSocialRepository:
-      TopicRepository:
-      StudentReportRepository:
-      StudentReportUseCase:
-      RateLimiterTenant:
-      RateLimiterIP:
-      AuthUseCase:
-      AILessonUseCase:
-      AITenantUseCase:
+      SessionValidatorUseCase:
