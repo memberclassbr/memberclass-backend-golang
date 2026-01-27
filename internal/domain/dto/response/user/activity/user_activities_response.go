@@ -1,20 +1,13 @@
 package activity
 
+import "github.com/memberclass-backend-golang/internal/domain/dto"
+
 type AccessData struct {
 	Data string `json:"data"`
 }
 
-type Pagination struct {
-	Page        int  `json:"page"`
-	Limit       int  `json:"limit"`
-	TotalCount  int  `json:"totalCount"`
-	TotalPages  int  `json:"totalPages"`
-	HasNextPage bool `json:"hasNextPage"`
-	HasPrevPage bool `json:"hasPrevPage"`
-}
-
 type ActivityResponse struct {
-	Email      string       `json:"email"`
-	Access     []AccessData `json:"access"`
-	Pagination Pagination   `json:"pagination"`
+	Email      string             `json:"email"`
+	Access     []AccessData       `json:"access"`
+	Pagination dto.PaginationMeta `json:"pagination"`
 }

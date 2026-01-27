@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/user"
 	user2 "github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	user3 "github.com/memberclass-backend-golang/internal/domain/entities/user"
@@ -69,7 +70,7 @@ func TestUserActivityUseCase_GetUserActivities_Success(t *testing.T) {
 	assert.Equal(t, 2, len(result.Access))
 	assert.Equal(t, 1, result.Pagination.Page)
 	assert.Equal(t, 10, result.Pagination.Limit)
-	assert.Equal(t, 2, result.Pagination.TotalCount)
+	assert.Equal(t, int64(2), result.Pagination.TotalCount)
 	assert.Equal(t, 1, result.Pagination.TotalPages)
 	assert.False(t, result.Pagination.HasNextPage)
 	assert.False(t, result.Pagination.HasPrevPage)
@@ -107,7 +108,7 @@ func TestUserActivityUseCase_GetUserActivities_CacheHit(t *testing.T) {
 		Access: []user2.AccessData{
 			{Data: "2025-12-10T10:00:00Z"},
 		},
-		Pagination: user2.Pagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,
@@ -336,7 +337,7 @@ func TestUserActivityUseCase_GetUserActivities_EmptyResult(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, email, result.Email)
 	assert.Equal(t, 0, len(result.Access))
-	assert.Equal(t, 0, result.Pagination.TotalCount)
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 	assert.Equal(t, 0, result.Pagination.TotalPages)
 
 	mockUserRepo.AssertExpectations(t)
@@ -384,7 +385,7 @@ func TestUserActivityUseCase_GetUserActivities_Pagination(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, 2, result.Pagination.Page)
 	assert.Equal(t, 10, result.Pagination.Limit)
-	assert.Equal(t, 25, result.Pagination.TotalCount)
+	assert.Equal(t, int64(25), result.Pagination.TotalCount)
 	assert.Equal(t, 3, result.Pagination.TotalPages)
 	assert.True(t, result.Pagination.HasNextPage)
 	assert.True(t, result.Pagination.HasPrevPage)

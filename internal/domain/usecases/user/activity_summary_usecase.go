@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/user"
 	user2 "github.com/memberclass-backend-golang/internal/domain/dto/response/user"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -80,10 +81,10 @@ func (uc *ActivitySummaryUseCase) GetActivitySummary(ctx context.Context, req us
 		totalPages++
 	}
 
-	pagination := user2.ActivitySummaryPagination{
+	pagination := dto.PaginationMeta{
 		Page:        req.Page,
 		Limit:       req.Limit,
-		TotalCount:  int(totalCount),
+		TotalCount:  totalCount,
 		TotalPages:  totalPages,
 		HasNextPage: req.Page < totalPages,
 		HasPrevPage: req.Page > 1,

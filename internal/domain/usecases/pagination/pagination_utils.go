@@ -16,10 +16,10 @@ func NewPaginationUtils() *PaginationUtils {
 
 func (p *PaginationUtils) ParsePaginationFromQuery(queryParams map[string]string) *dto.PaginationRequest {
 	req := &dto.PaginationRequest{
-		Page:     1,
-		PageSize: 10,
-		SortBy:   "createdAt",
-		SortDir:  "desc",
+		Page:    1,
+		Limit:   10,
+		SortBy:  "createdAt",
+		SortDir: "desc",
 	}
 
 	if pageStr, exists := queryParams["page"]; exists {
@@ -28,9 +28,9 @@ func (p *PaginationUtils) ParsePaginationFromQuery(queryParams map[string]string
 		}
 	}
 
-	if pageSizeStr, exists := queryParams["pageSize"]; exists {
-		if pageSize, err := strconv.Atoi(pageSizeStr); err == nil && pageSize > 0 && pageSize <= 100 {
-			req.PageSize = pageSize
+	if limitStr, exists := queryParams["limit"]; exists {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit <= 100 {
+			req.Limit = limit
 		}
 	}
 
@@ -49,8 +49,18 @@ func (p *PaginationUtils) ParsePaginationFromQuery(queryParams map[string]string
 }
 
 func (p *PaginationUtils) BuildSQLPagination(baseQuery string, req *dto.PaginationRequest) string {
+	return p.BuildSafeSQLPagination(baseQuery, req, nil)
+}
 
-	orderBy := fmt.Sprintf("ORDER BY %s %s", req.GetSortBy(), strings.ToUpper(req.GetSortDir()))
+func (p *PaginationUtils) BuildSafeSQLPagination(baseQuery string, req *dto.PaginationRequest, allowedSortFields []string) string {
+	sortBy := req.GetSafeSortBy(allowedSortFields)
+	sortDir := strings.ToUpper(req.GetSortDir())
+	
+	if sortDir != "ASC" && sortDir != "DESC" {
+		sortDir = "DESC"
+	}
+
+	orderBy := fmt.Sprintf("ORDER BY %s %s", sortBy, sortDir)
 
 	limit := req.GetLimit()
 	offset := req.GetOffset()
@@ -78,20 +88,26 @@ func (p *PaginationUtils) BuildCountQuery(baseQuery string) string {
 }
 
 func (p *PaginationUtils) ValidatePaginationRequest(req *dto.PaginationRequest) {
+	p.ValidatePaginationRequestWithFields(req, nil)
+}
+
+func (p *PaginationUtils) ValidatePaginationRequestWithFields(req *dto.PaginationRequest, allowedSortFields []string) {
 	if req.Page <= 0 {
 		req.Page = 1
 	}
 
-	if req.PageSize <= 0 {
-		req.PageSize = 10
+	if req.Limit <= 0 {
+		req.Limit = 10
 	}
 
-	if req.PageSize > 100 {
-		req.PageSize = 100
+	if req.Limit > 100 {
+		req.Limit = 100
 	}
 
 	if req.SortBy == "" {
 		req.SortBy = "createdAt"
+	} else {
+		req.SortBy = p.ValidateSortBy(req.SortBy, allowedSortFields)
 	}
 
 	if req.SortDir == "" {
@@ -102,4 +118,36 @@ func (p *PaginationUtils) ValidatePaginationRequest(req *dto.PaginationRequest) 
 	if req.SortDir != "asc" && req.SortDir != "desc" {
 		req.SortDir = "desc"
 	}
+}
+
+func (p *PaginationUtils) ValidateSortBy(sortBy string, allowedFields []string) string {
+	if sortBy == "" {
+		return "createdAt"
+	}
+
+	if len(allowedFields) == 0 {
+		allowedFields = dto.DefaultAllowedSortFields
+	}
+
+	for _, field := range allowedFields {
+		if sortBy == field {
+			return sortBy
+		}
+	}
+
+	return "createdAt"
+}
+
+func (p *PaginationUtils) IsSortFieldAllowed(sortBy string, allowedFields []string) bool {
+	if len(allowedFields) == 0 {
+		allowedFields = dto.DefaultAllowedSortFields
+	}
+
+	for _, field := range allowedFields {
+		if sortBy == field {
+			return true
+		}
+	}
+
+	return false
 }

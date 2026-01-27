@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/lesson"
 	lesson2 "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
-	useractivitydto "github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	lesson3 "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 	userports "github.com/memberclass-backend-golang/internal/domain/ports/user"
@@ -78,10 +78,10 @@ func (uc *LessonsCompletedUseCase) GetLessonsCompleted(ctx context.Context, req 
 		totalPages++
 	}
 
-	pagination := useractivitydto.Pagination{
+	pagination := dto.PaginationMeta{
 		Page:        req.Page,
 		Limit:       req.Limit,
-		TotalCount:  int(total),
+		TotalCount:  total,
 		TotalPages:  totalPages,
 		HasNextPage: req.Page < totalPages,
 		HasPrevPage: req.Page > 1,

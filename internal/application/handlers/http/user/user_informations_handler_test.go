@@ -52,13 +52,13 @@ func TestUserInformationsHandler_GetUserInformations_Success(t *testing.T) {
 
 	responseData := &user.UserInformationsResponse{
 		Users: users,
-		Pagination: user.UserInformationsPagination{
-			Page:            1,
-			TotalPages:      1,
-			TotalItems:      1,
-			ItemsPerPage:    10,
-			HasNextPage:     false,
-			HasPreviousPage: false,
+		Pagination: dto.PaginationMeta{
+			Page:        1,
+			Limit:       10,
+			TotalCount:  1,
+			TotalPages:  1,
+			HasNextPage: false,
+			HasPrevPage: false,
 		},
 	}
 
@@ -107,13 +107,13 @@ func TestUserInformationsHandler_GetUserInformations_WithEmail(t *testing.T) {
 
 	responseData := &user.UserInformationsResponse{
 		Users: users,
-		Pagination: user.UserInformationsPagination{
-			Page:            1,
-			TotalPages:      1,
-			TotalItems:      1,
-			ItemsPerPage:    10,
-			HasNextPage:     false,
-			HasPreviousPage: false,
+		Pagination: dto.PaginationMeta{
+			Page:        1,
+			Limit:       10,
+			TotalCount:  1,
+			TotalPages:  1,
+			HasNextPage: false,
+			HasPrevPage: false,
 		},
 	}
 
@@ -365,13 +365,13 @@ func TestUserInformationsHandler_GetUserInformations_EmptyResults(t *testing.T) 
 
 	emptyResponse := &user.UserInformationsResponse{
 		Users: []user.UserInformation{},
-		Pagination: user.UserInformationsPagination{
-			Page:            1,
-			TotalPages:      0,
-			TotalItems:      0,
-			ItemsPerPage:    10,
-			HasNextPage:     false,
-			HasPreviousPage: false,
+		Pagination: dto.PaginationMeta{
+			Page:        1,
+			Limit:       10,
+			TotalCount:  0,
+			TotalPages:  0,
+			HasNextPage: false,
+			HasPrevPage: false,
 		},
 	}
 
@@ -391,7 +391,7 @@ func TestUserInformationsHandler_GetUserInformations_EmptyResults(t *testing.T) 
 	err := json.Unmarshal(w.Body.Bytes(), &result)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(result.Users))
-	assert.Equal(t, 0, result.Pagination.TotalItems)
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 
 	mockUseCase.AssertExpectations(t)
 }

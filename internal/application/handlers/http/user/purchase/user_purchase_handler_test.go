@@ -11,7 +11,6 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	purchasesdto "github.com/memberclass-backend-golang/internal/domain/dto/response/purchases"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	tenantentities "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	user2 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
@@ -58,7 +57,7 @@ func TestUserPurchaseHandler_GetUserPurchases_Success(t *testing.T) {
 
 	purchaseResponse := &purchasesdto.UserPurchasesResponse{
 		Purchases: purchases,
-		Pagination: activity.Pagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  2,
@@ -354,7 +353,7 @@ func TestUserPurchaseHandler_GetUserPurchases_EmptyResults(t *testing.T) {
 
 	emptyResponse := &purchasesdto.UserPurchasesResponse{
 		Purchases: []purchasesdto.UserPurchaseData{},
-		Pagination: activity.Pagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  0,
@@ -380,7 +379,7 @@ func TestUserPurchaseHandler_GetUserPurchases_EmptyResults(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &result)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(result.Purchases))
-	assert.Equal(t, 0, result.Pagination.TotalCount)
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 
 	mockUseCase.AssertExpectations(t)
 }
@@ -406,7 +405,7 @@ func TestUserPurchaseHandler_GetUserPurchases_WithTypeFilter(t *testing.T) {
 
 	purchaseResponse := &purchasesdto.UserPurchasesResponse{
 		Purchases: purchases,
-		Pagination: activity.Pagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,

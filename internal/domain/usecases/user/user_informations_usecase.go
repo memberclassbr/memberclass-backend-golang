@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/user"
 	user2 "github.com/memberclass-backend-golang/internal/domain/dto/response/user"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -73,13 +74,13 @@ func (uc *UserInformationsUseCase) GetUserInformations(ctx context.Context, req 
 		totalPages++
 	}
 
-	pagination := user2.UserInformationsPagination{
-		Page:            req.Page,
-		TotalPages:      totalPages,
-		TotalItems:      int(total),
-		ItemsPerPage:    req.Limit,
-		HasNextPage:     req.Page < totalPages,
-		HasPreviousPage: req.Page > 1,
+	pagination := dto.PaginationMeta{
+		Page:        req.Page,
+		Limit:       req.Limit,
+		TotalCount:  total,
+		TotalPages:  totalPages,
+		HasNextPage: req.Page < totalPages,
+		HasPrevPage: req.Page > 1,
 	}
 
 	responseData := &user2.UserInformationsResponse{

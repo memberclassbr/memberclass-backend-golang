@@ -11,7 +11,6 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
@@ -51,7 +50,7 @@ func TestLessonsCompletedHandler_GetLessonsCompleted_Success(t *testing.T) {
 					CompletedAt: "2025-12-10T14:30:00.000Z",
 				},
 			},
-			Pagination: activity.Pagination{
+			Pagination: dto.PaginationMeta{
 				Page:        1,
 				Limit:       10,
 				TotalCount:  1,
@@ -314,7 +313,7 @@ func TestLessonsCompletedHandler_GetLessonsCompleted_WithDateRange(t *testing.T)
 		OK: true,
 		Data: lesson.LessonsCompletedData{
 			CompletedLessons: []lesson.CompletedLesson{},
-			Pagination: activity.Pagination{
+			Pagination: dto.PaginationMeta{
 				Page:        1,
 				Limit:       10,
 				TotalCount:  0,

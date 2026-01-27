@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/domain/constants"
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/comment"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
@@ -83,7 +84,7 @@ func TestCommentHandler_GetComments_Success(t *testing.T) {
 		Comments: []comment.CommentResponse{
 			*comments[0],
 		},
-		Pagination: comment.CommentsPaginationMeta{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,
@@ -542,7 +543,7 @@ func TestCommentHandler_GetComments_WithFilters(t *testing.T) {
 		Comments: []comment.CommentResponse{
 			*comments[0],
 		},
-		Pagination: comment.CommentsPaginationMeta{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,

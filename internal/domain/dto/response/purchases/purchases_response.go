@@ -1,7 +1,7 @@
 package purchases
 
 import (
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 )
 
 type UserPurchaseData struct {
@@ -12,6 +12,6 @@ type UserPurchaseData struct {
 }
 
 type UserPurchasesResponse struct {
-	Purchases  []UserPurchaseData  `json:"purchases"`
-	Pagination activity.Pagination `json:"pagination"`
+	Purchases  []UserPurchaseData `json:"purchases"`
+	Pagination dto.PaginationMeta `json:"pagination"`
 }

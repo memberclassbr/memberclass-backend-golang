@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/user"
 	user2 "github.com/memberclass-backend-golang/internal/domain/dto/response/user"
 	"github.com/memberclass-backend-golang/internal/mocks"
@@ -46,7 +47,7 @@ func TestActivitySummaryUseCase_GetActivitySummary_Success_WithCache(t *testing.
 				UltimoAcesso: &lastAccess,
 			},
 		},
-		Pagination: user2.ActivitySummaryPagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,
@@ -106,7 +107,7 @@ func TestActivitySummaryUseCase_GetActivitySummary_Success_WithActivity(t *testi
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, 1, len(result.Users))
-	assert.Equal(t, 1, result.Pagination.TotalCount)
+	assert.Equal(t, int64(1), result.Pagination.TotalCount)
 
 	mockCache.AssertExpectations(t)
 	mockActivityRepo.AssertExpectations(t)
@@ -320,7 +321,7 @@ func TestActivitySummaryUseCase_GetActivitySummary_Pagination(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, 2, len(result.Users))
 	assert.Equal(t, 2, result.Pagination.Page)
-	assert.Equal(t, 25, result.Pagination.TotalCount)
+	assert.Equal(t, int64(25), result.Pagination.TotalCount)
 	assert.Equal(t, 3, result.Pagination.TotalPages)
 	assert.True(t, result.Pagination.HasNextPage)
 	assert.True(t, result.Pagination.HasPrevPage)

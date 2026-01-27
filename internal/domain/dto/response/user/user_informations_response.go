@@ -1,5 +1,7 @@
 package user
 
+import "github.com/memberclass-backend-golang/internal/domain/dto"
+
 type DeliveryInfo struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
@@ -14,16 +16,7 @@ type UserInformation struct {
 	LastAccess *string        `json:"lastAccess"`
 }
 
-type UserInformationsPagination struct {
-	Page            int  `json:"page"`
-	TotalPages      int  `json:"totalPages"`
-	TotalItems      int  `json:"totalItems"`
-	ItemsPerPage    int  `json:"itemsPerPage"`
-	HasNextPage     bool `json:"hasNextPage"`
-	HasPreviousPage bool `json:"hasPreviousPage"`
-}
-
 type UserInformationsResponse struct {
-	Users      []UserInformation          `json:"users"`
-	Pagination UserInformationsPagination `json:"pagination"`
+	Users      []UserInformation `json:"users"`
+	Pagination dto.PaginationMeta `json:"pagination"`
 }

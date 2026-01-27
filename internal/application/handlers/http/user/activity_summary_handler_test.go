@@ -50,7 +50,7 @@ func TestActivitySummaryHandler_GetActivitySummary_Success(t *testing.T) {
 				UltimoAcesso: nil,
 			},
 		},
-		Pagination: user.ActivitySummaryPagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  2,
@@ -188,7 +188,7 @@ func TestActivitySummaryHandler_GetActivitySummary_WithNoAccess(t *testing.T) {
 				UltimoAcesso: nil,
 			},
 		},
-		Pagination: user.ActivitySummaryPagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,

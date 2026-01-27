@@ -1,27 +1,38 @@
 package dto
 
+import "math"
 
 type PaginationRequest struct {
-	Page     int    `json:"page" form:"page" validate:"min=1"`
-	PageSize int    `json:"pageSize" form:"pageSize" validate:"min=1,max=100"`
-	SortBy   string `json:"sortBy" form:"sortBy"`
-	SortDir  string `json:"sortDir" form:"sortDir" validate:"oneof=asc desc"`
+	Page    int    `json:"page" form:"page" validate:"min=1"`
+	Limit   int    `json:"limit" form:"limit" validate:"min=1,max=100"`
+	SortBy  string `json:"sortBy" form:"sortBy"`
+	SortDir string `json:"sortDir" form:"sortDir" validate:"oneof=asc desc"`
 }
 
 
 type PaginationResponse[T any] struct {
-	Data       []T  `json:"data"`
+	Data       []T            `json:"data"`
 	Pagination PaginationMeta `json:"pagination"`
 }
 
 
 type PaginationMeta struct {
-	Page       int  `json:"page"`
-	PageSize   int  `json:"pageSize"`
-	Total      int64 `json:"total"`
-	TotalPages int  `json:"totalPages"`
-	HasNext    bool `json:"hasNext"`
-	HasPrev    bool `json:"hasPrev"`
+	Page        int   `json:"page"`
+	Limit       int   `json:"limit"`
+	TotalCount  int64 `json:"totalCount"`
+	TotalPages  int   `json:"totalPages"`
+	HasNextPage bool  `json:"hasNextPage"`
+	HasPrevPage bool  `json:"hasPrevPage"`
+}
+
+
+var DefaultAllowedSortFields = []string{
+	"createdAt",
+	"updatedAt",
+	"id",
+	"name",
+	"email",
+	"date",
 }
 
 
@@ -29,18 +40,18 @@ func (p *PaginationRequest) GetOffset() int {
 	if p.Page <= 0 {
 		p.Page = 1
 	}
-	return (p.Page - 1) * p.PageSize
+	return (p.Page - 1) * p.Limit
 }
 
 
 func (p *PaginationRequest) GetLimit() int {
-	if p.PageSize <= 0 {
-		p.PageSize = 10
+	if p.Limit <= 0 {
+		p.Limit = 10
 	}
-	if p.PageSize > 100 {
-		p.PageSize = 100
+	if p.Limit > 100 {
+		p.Limit = 100
 	}
-	return p.PageSize
+	return p.Limit
 }
 
 
@@ -52,6 +63,25 @@ func (p *PaginationRequest) GetSortBy() string {
 }
 
 
+func (p *PaginationRequest) GetSafeSortBy(allowedFields []string) string {
+	if p.SortBy == "" {
+		return "created_at"
+	}
+	
+	if len(allowedFields) == 0 {
+		allowedFields = DefaultAllowedSortFields
+	}
+	
+	for _, field := range allowedFields {
+		if p.SortBy == field {
+			return p.SortBy
+		}
+	}
+	
+	return "created_at"
+}
+
+
 func (p *PaginationRequest) GetSortDir() string {
 	if p.SortDir == "" {
 		return "desc"
@@ -60,19 +90,28 @@ func (p *PaginationRequest) GetSortDir() string {
 }
 
 
-func NewPaginationResponse[T any](data []T, total int64, req *PaginationRequest) *PaginationResponse[T] {
-	pageSize := req.GetLimit()
-	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+func NewPaginationMeta(total int64, req *PaginationRequest) PaginationMeta {
+	limit := req.GetLimit()
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	
+	return PaginationMeta{
+		Page:        page,
+		Limit:       limit,
+		TotalCount:  total,
+		TotalPages:  totalPages,
+		HasNextPage: page < totalPages,
+		HasPrevPage: page > 1,
+	}
+}
+
+
+func NewPaginationResponse[T any](data []T, total int64, req *PaginationRequest) *PaginationResponse[T] {
 	return &PaginationResponse[T]{
-		Data: data,
-		Pagination: PaginationMeta{
-			Page:       req.Page,
-			PageSize:   pageSize,
-			Total:      total,
-			TotalPages: totalPages,
-			HasNext:    req.Page < totalPages,
-			HasPrev:    req.Page > 1,
-		},
+		Data:       data,
+		Pagination: NewPaginationMeta(total, req),
 	}
 }
