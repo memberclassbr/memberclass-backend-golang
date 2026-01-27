@@ -1587,9 +1587,9 @@ components:
             $ref: '#/components/schemas/CommentResponse'
           description: Lista de comentários
         pagination:
-          $ref: '#/components/schemas/CommentsPaginationMeta'
+          $ref: '#/components/schemas/PaginationMeta'
 
-    CommentsPaginationMeta:
+    PaginationMeta:
       type: object
       properties:
         page:
@@ -1603,7 +1603,7 @@ components:
         totalCount:
           type: integer
           format: int64
-          description: Total de comentários
+          description: Total de registros
           example: 25
         totalPages:
           type: integer
@@ -1614,34 +1614,6 @@ components:
           description: Indica se há próxima página
           example: true
         hasPrevPage:
-          type: boolean
-          description: Indica se há página anterior
-          example: false
-
-    PaginationMeta:
-      type: object
-      properties:
-        page:
-          type: integer
-          description: Número da página atual
-          example: 1
-        pageSize:
-          type: integer
-          description: Tamanho da página
-          example: 10
-        total:
-          type: integer
-          description: Total de registros
-          example: 25
-        totalPages:
-          type: integer
-          description: Total de páginas
-          example: 3
-        hasNext:
-          type: boolean
-          description: Indica se há próxima página
-          example: true
-        hasPrev:
           type: boolean
           description: Indica se há página anterior
           example: false
@@ -1653,34 +1625,6 @@ components:
           type: string
           description: Dados da atividade de acesso
           example: "2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'"
-
-    ActivityPagination:
-      type: object
-      properties:
-        page:
-          type: integer
-          description: Número da página atual
-          example: 1
-        limit:
-          type: integer
-          description: Limite de itens por página
-          example: 10
-        totalCount:
-          type: integer
-          description: Total de registros
-          example: 25
-        totalPages:
-          type: integer
-          description: Total de páginas
-          example: 3
-        hasNextPage:
-          type: boolean
-          description: Indica se há próxima página
-          example: true
-        hasPrevPage:
-          type: boolean
-          description: Indica se há página anterior
-          example: false
 
     ActivityResponse:
       type: object
@@ -1696,7 +1640,7 @@ components:
             $ref: '#/components/schemas/AccessData'
           description: Lista de atividades de acesso
         pagination:
-          $ref: '#/components/schemas/ActivityPagination'
+          $ref: '#/components/schemas/PaginationMeta'
 
     UserPurchaseData:
       type: object
@@ -1732,7 +1676,7 @@ components:
             $ref: '#/components/schemas/UserPurchaseData'
           description: Lista de compras e reembolsos
         pagination:
-          $ref: '#/components/schemas/ActivityPagination'
+          $ref: '#/components/schemas/PaginationMeta'
 
     CustomErrorResponse:
       type: object
@@ -1759,7 +1703,7 @@ components:
             $ref: '#/components/schemas/UserInformation'
           description: Lista de usuários
         pagination:
-          $ref: '#/components/schemas/UserInformationsPagination'
+          $ref: '#/components/schemas/PaginationMeta'
 
     UserInformation:
       type: object
@@ -1805,34 +1749,6 @@ components:
           format: date-time
           description: Data de acesso à entrega
           example: "2024-01-15T10:30:00Z"
-
-    UserInformationsPagination:
-      type: object
-      properties:
-        page:
-          type: integer
-          description: Página atual
-          example: 1
-        limit:
-          type: integer
-          description: Itens por página
-          example: 10
-        totalCount:
-          type: integer
-          description: Total de itens
-          example: 50
-        totalPages:
-          type: integer
-          description: Total de páginas
-          example: 5
-        hasNextPage:
-          type: boolean
-          description: Indica se há próxima página
-          example: true
-        hasPrevPage:
-          type: boolean
-          description: Indica se há página anterior
-          example: false
 
     CreateSocialCommentRequest:
       type: object
@@ -1903,34 +1819,6 @@ components:
           description: Data do último acesso no período
           example: "2025-12-10T14:30:00.000Z"
 
-    ActivitySummaryPagination:
-      type: object
-      properties:
-        page:
-          type: integer
-          description: Página atual
-          example: 1
-        limit:
-          type: integer
-          description: Itens por página
-          example: 10
-        totalCount:
-          type: integer
-          description: Total de itens
-          example: 150
-        totalPages:
-          type: integer
-          description: Total de páginas
-          example: 15
-        hasNextPage:
-          type: boolean
-          description: Indica se há próxima página
-          example: true
-        hasPrevPage:
-          type: boolean
-          description: Indica se há página anterior
-          example: false
-
     ActivitySummaryResponse:
       type: object
       properties:
@@ -1940,7 +1828,7 @@ components:
             $ref: '#/components/schemas/UserActivitySummary'
           description: Lista de usuários com suas atividades
         pagination:
-          $ref: '#/components/schemas/ActivitySummaryPagination'
+          $ref: '#/components/schemas/PaginationMeta'
 
     CompletedLesson:
       type: object
@@ -1968,32 +1856,7 @@ components:
             $ref: '#/components/schemas/CompletedLesson'
           description: Lista de aulas completadas
         pagination:
-          type: object
-          properties:
-            page:
-              type: integer
-              description: Página atual
-              example: 1
-            limit:
-              type: integer
-              description: Itens por página
-              example: 10
-            totalCount:
-              type: integer
-              description: Total de itens
-              example: 25
-            totalPages:
-              type: integer
-              description: Total de páginas
-              example: 3
-            hasNextPage:
-              type: boolean
-              description: Indica se há próxima página
-              example: true
-            hasPrevPage:
-              type: boolean
-              description: Indica se há página anterior
-              example: false
+          $ref: '#/components/schemas/PaginationMeta'
 
     LessonsCompletedResponse:
       type: object
@@ -2010,7 +1873,7 @@ components:
             $ref: '#/components/schemas/LessonCompletedData'
           description: Lista de aulas completadas
         pagination:
-          $ref: '#/components/schemas/ActivityPagination'
+          $ref: '#/components/schemas/PaginationMeta'
 
     StudentReportResponse:
       type: object
@@ -2021,7 +1884,7 @@ components:
             $ref: '#/components/schemas/StudentReport'
           description: Lista de alunos do tenant
         pagination:
-          $ref: '#/components/schemas/StudentReportPagination'
+          $ref: '#/components/schemas/PaginationMeta'
 
     StudentReport:
       type: object
@@ -2084,34 +1947,6 @@ components:
           format: date-time
           description: Data e hora em que a aula foi assistida
           example: "2024-01-18T14:00:00.000Z"
-
-    StudentReportPagination:
-      type: object
-      properties:
-        page:
-          type: integer
-          description: Número da página atual
-          example: 1
-        limit:
-          type: integer
-          description: Itens por página
-          example: 10
-        totalCount:
-          type: integer
-          description: Total de registros
-          example: 150
-        totalPages:
-          type: integer
-          description: Total de páginas
-          example: 15
-        hasNextPage:
-          type: boolean
-          description: Indica se há próxima página
-          example: true
-        hasPrevPage:
-          type: boolean
-          description: Indica se há página anterior
-          example: false
 
     VitrineResponse:
       type: object

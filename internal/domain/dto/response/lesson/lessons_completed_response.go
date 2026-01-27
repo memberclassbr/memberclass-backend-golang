@@ -1,7 +1,7 @@
 package lesson
 
 import (
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 )
 
 type CompletedLesson struct {
@@ -11,8 +11,8 @@ type CompletedLesson struct {
 }
 
 type LessonsCompletedData struct {
-	CompletedLessons []CompletedLesson   `json:"completedLessons"`
-	Pagination       activity.Pagination `json:"pagination"`
+	CompletedLessons []CompletedLesson  `json:"completedLessons"`
+	Pagination       dto.PaginationMeta `json:"pagination"`
 }
 
 type LessonsCompletedResponse struct {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/user"
 	user2 "github.com/memberclass-backend-golang/internal/domain/dto/response/user"
 	user3 "github.com/memberclass-backend-golang/internal/domain/entities/user"
@@ -57,7 +58,7 @@ func TestUserInformationsUseCase_GetUserInformations_Success_WithCache(t *testin
 
 	cachedResponse := user2.UserInformationsResponse{
 		Users: users,
-		Pagination: user2.UserInformationsPagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,
@@ -123,7 +124,7 @@ func TestUserInformationsUseCase_GetUserInformations_Success_WithoutEmail(t *tes
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, 1, len(result.Users))
-	assert.Equal(t, 1, result.Pagination.TotalCount)
+	assert.Equal(t, int64(1), result.Pagination.TotalCount)
 
 	mockCache.AssertExpectations(t)
 	mockUserRepo.AssertExpectations(t)
@@ -327,7 +328,7 @@ func TestUserInformationsUseCase_GetUserInformations_Pagination(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, 2, len(result.Users))
 	assert.Equal(t, 2, result.Pagination.Page)
-	assert.Equal(t, 25, result.Pagination.TotalCount)
+	assert.Equal(t, int64(25), result.Pagination.TotalCount)
 	assert.Equal(t, 3, result.Pagination.TotalPages)
 	assert.True(t, result.Pagination.HasNextPage)
 	assert.True(t, result.Pagination.HasPrevPage)

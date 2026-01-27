@@ -9,6 +9,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/student"
 	student2 "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -52,10 +53,10 @@ func (uc *StudentReportUseCase) GetStudentReport(ctx context.Context, req studen
 
 	totalPages := int(math.Ceil(float64(totalCount) / float64(req.Limit)))
 
-	pagination := student2.StudentReportPagination{
+	pagination := dto.PaginationMeta{
 		Page:        req.Page,
 		Limit:       req.Limit,
-		TotalCount:  int(totalCount),
+		TotalCount:  totalCount,
 		TotalPages:  totalPages,
 		HasNextPage: req.Page < totalPages,
 		HasPrevPage: req.Page > 1,

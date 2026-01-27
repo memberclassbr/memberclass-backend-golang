@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/constants"
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/student"
 	student2 "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
@@ -59,7 +60,7 @@ func TestStudentReportHandler_GetStudentReport_Success(t *testing.T) {
 
 	reportResponse := &student2.StudentReportResponse{
 		Alunos: students,
-		Pagination: student2.StudentReportPagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,
@@ -290,7 +291,7 @@ func TestStudentReportHandler_GetStudentReport_EmptyResult(t *testing.T) {
 
 	reportResponse := &student2.StudentReportResponse{
 		Alunos: []student2.StudentReport{},
-		Pagination: student2.StudentReportPagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  0,
@@ -321,7 +322,7 @@ func TestStudentReportHandler_GetStudentReport_EmptyResult(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &result)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(result.Alunos))
-	assert.Equal(t, 0, result.Pagination.TotalCount)
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 
 	mockUseCase.AssertExpectations(t)
 }
@@ -345,7 +346,7 @@ func TestStudentReportHandler_GetStudentReport_WithDateFilters(t *testing.T) {
 				Email:              "aluno@example.com",
 			},
 		},
-		Pagination: student2.StudentReportPagination{
+		Pagination: dto.PaginationMeta{
 			Page:       1,
 			Limit:      10,
 			TotalCount: 1,

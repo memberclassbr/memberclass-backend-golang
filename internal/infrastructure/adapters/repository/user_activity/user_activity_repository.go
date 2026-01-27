@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/user"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
@@ -119,7 +120,7 @@ func (r *UserActivityRepository) GetActivitySummaryByEmail(ctx context.Context, 
 	// The new GetUsersWithActivity/GetUsersWithoutActivity should be used instead
 	return &user.ActivitySummaryResponse{
 		Users:      []user.UserActivitySummary{},
-		Pagination: user.ActivitySummaryPagination{},
+		Pagination: dto.PaginationMeta{},
 	}, nil
 }
 

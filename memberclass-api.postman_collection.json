@@ -865,7 +865,7 @@
 									}
 								],
 								"url": {
-									"raw": "{{baseUrl}}/api/v1/comments?page=1&pageSize=10&sortBy=updatedAt&sortDir=desc",
+									"raw": "{{baseUrl}}/api/v1/comments?page=1&limit=10&sortBy=updatedAt&sortDir=desc",
 									"host": [
 										"{{baseUrl}}"
 									],
@@ -880,7 +880,7 @@
 											"value": "1"
 										},
 										{
-											"key": "pageSize",
+											"key": "limit",
 											"value": "10"
 										},
 										{

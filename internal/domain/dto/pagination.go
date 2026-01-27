@@ -2,10 +2,10 @@ package dto
 
 
 type PaginationRequest struct {
-	Page     int    `json:"page" form:"page" validate:"min=1"`
-	PageSize int    `json:"pageSize" form:"pageSize" validate:"min=1,max=100"`
-	SortBy   string `json:"sortBy" form:"sortBy"`
-	SortDir  string `json:"sortDir" form:"sortDir" validate:"oneof=asc desc"`
+	Page    int    `json:"page" form:"page" validate:"min=1"`
+	Limit   int    `json:"limit" form:"limit" validate:"min=1,max=100"`
+	SortBy  string `json:"sortBy" form:"sortBy"`
+	SortDir string `json:"sortDir" form:"sortDir" validate:"oneof=asc desc"`
 }
 
 
@@ -29,18 +29,18 @@ func (p *PaginationRequest) GetOffset() int {
 	if p.Page <= 0 {
 		p.Page = 1
 	}
-	return (p.Page - 1) * p.PageSize
+	return (p.Page - 1) * p.Limit
 }
 
 
 func (p *PaginationRequest) GetLimit() int {
-	if p.PageSize <= 0 {
-		p.PageSize = 10
+	if p.Limit <= 0 {
+		p.Limit = 10
 	}
-	if p.PageSize > 100 {
-		p.PageSize = 100
+	if p.Limit > 100 {
+		p.Limit = 100
 	}
-	return p.PageSize
+	return p.Limit
 }
 
 

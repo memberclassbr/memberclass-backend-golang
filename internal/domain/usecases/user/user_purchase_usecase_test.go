@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/purchase"
 	purchasesdto "github.com/memberclass-backend-golang/internal/domain/dto/response/purchases"
-	useractivitydto "github.com/memberclass-backend-golang/internal/domain/dto/response/user/activity"
 	userentities "github.com/memberclass-backend-golang/internal/domain/entities/user"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/mocks"
@@ -80,7 +80,7 @@ func TestUserPurchaseUseCase_GetUserPurchases_Success(t *testing.T) {
 	assert.Equal(t, "purchase", result.Purchases[0].Type)
 	assert.Equal(t, 1, result.Pagination.Page)
 	assert.Equal(t, 10, result.Pagination.Limit)
-	assert.Equal(t, 2, result.Pagination.TotalCount)
+	assert.Equal(t, int64(2), result.Pagination.TotalCount)
 	assert.Equal(t, 1, result.Pagination.TotalPages)
 	assert.False(t, result.Pagination.HasNextPage)
 	assert.False(t, result.Pagination.HasPrevPage)
@@ -121,7 +121,7 @@ func TestUserPurchaseUseCase_GetUserPurchases_CacheHit(t *testing.T) {
 				UpdatedAt: "2024-01-15T10:30:00.000Z",
 			},
 		},
-		Pagination: useractivitydto.Pagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  1,
@@ -306,7 +306,7 @@ func TestUserPurchaseUseCase_GetUserPurchases_EmptyResults(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, 0, len(result.Purchases))
-	assert.Equal(t, 0, result.Pagination.TotalCount)
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 	assert.Equal(t, 0, result.Pagination.TotalPages)
 
 	mockUserRepo.AssertExpectations(t)
@@ -407,7 +407,7 @@ func TestUserPurchaseUseCase_GetUserPurchases_Pagination(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, 2, result.Pagination.Page)
 	assert.Equal(t, 10, result.Pagination.Limit)
-	assert.Equal(t, 25, result.Pagination.TotalCount)
+	assert.Equal(t, int64(25), result.Pagination.TotalCount)
 	assert.Equal(t, 3, result.Pagination.TotalPages)
 	assert.True(t, result.Pagination.HasNextPage)
 	assert.True(t, result.Pagination.HasPrevPage)

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/student"
 	student2 "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 	"github.com/memberclass-backend-golang/internal/mocks"
@@ -46,7 +47,7 @@ func TestStudentReportUseCase_GetStudentReport_Success_WithCache(t *testing.T) {
 				Cpf:                "12345678900",
 			},
 		},
-		Pagination: student2.StudentReportPagination{
+		Pagination: dto.PaginationMeta{
 			Page:       1,
 			Limit:      10,
 			TotalCount: 1,
@@ -111,7 +112,7 @@ func TestStudentReportUseCase_GetStudentReport_Success_WithoutCache(t *testing.T
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, 1, len(result.Alunos))
-	assert.Equal(t, 1, result.Pagination.TotalCount)
+	assert.Equal(t, int64(1), result.Pagination.TotalCount)
 	assert.Equal(t, 1, result.Pagination.TotalPages)
 
 	mockCache.AssertExpectations(t)
@@ -240,7 +241,7 @@ func TestStudentReportUseCase_GetStudentReport_Pagination(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, 2, len(result.Alunos))
 	assert.Equal(t, 2, result.Pagination.Page)
-	assert.Equal(t, 25, result.Pagination.TotalCount)
+	assert.Equal(t, int64(25), result.Pagination.TotalCount)
 	assert.Equal(t, 3, result.Pagination.TotalPages)
 	assert.True(t, result.Pagination.HasNextPage)
 	assert.True(t, result.Pagination.HasPrevPage)
@@ -274,7 +275,7 @@ func TestStudentReportUseCase_GetStudentReport_EmptyResult(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, 0, len(result.Alunos))
-	assert.Equal(t, 0, result.Pagination.TotalCount)
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 
 	mockCache.AssertExpectations(t)
 	mockRepo.AssertExpectations(t)

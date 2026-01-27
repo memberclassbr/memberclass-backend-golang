@@ -16,10 +16,10 @@ func NewPaginationUtils() *PaginationUtils {
 
 func (p *PaginationUtils) ParsePaginationFromQuery(queryParams map[string]string) *dto.PaginationRequest {
 	req := &dto.PaginationRequest{
-		Page:     1,
-		PageSize: 10,
-		SortBy:   "createdAt",
-		SortDir:  "desc",
+		Page:    1,
+		Limit:   10,
+		SortBy:  "createdAt",
+		SortDir: "desc",
 	}
 
 	if pageStr, exists := queryParams["page"]; exists {
@@ -28,9 +28,9 @@ func (p *PaginationUtils) ParsePaginationFromQuery(queryParams map[string]string
 		}
 	}
 
-	if pageSizeStr, exists := queryParams["pageSize"]; exists {
-		if pageSize, err := strconv.Atoi(pageSizeStr); err == nil && pageSize > 0 && pageSize <= 100 {
-			req.PageSize = pageSize
+	if limitStr, exists := queryParams["limit"]; exists {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit <= 100 {
+			req.Limit = limit
 		}
 	}
 
@@ -82,12 +82,12 @@ func (p *PaginationUtils) ValidatePaginationRequest(req *dto.PaginationRequest) 
 		req.Page = 1
 	}
 
-	if req.PageSize <= 0 {
-		req.PageSize = 10
+	if req.Limit <= 0 {
+		req.Limit = 10
 	}
 
-	if req.PageSize > 100 {
-		req.PageSize = 100
+	if req.Limit > 100 {
+		req.Limit = 100
 	}
 
 	if req.SortBy == "" {

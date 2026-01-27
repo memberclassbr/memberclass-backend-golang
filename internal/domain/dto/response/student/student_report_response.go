@@ -1,5 +1,7 @@
 package student
 
+import "github.com/memberclass-backend-golang/internal/domain/dto"
+
 type LessonWatched struct {
 	AulaID        string `json:"aula_id"`
 	Titulo        string `json:"titulo"`
@@ -17,16 +19,7 @@ type StudentReport struct {
 	AulasAssistidas           []LessonWatched `json:"aulas_assistidas"`
 }
 
-type StudentReportPagination struct {
-	Page        int  `json:"page"`
-	Limit       int  `json:"limit"`
-	TotalCount  int  `json:"totalCount"`
-	TotalPages  int  `json:"totalPages"`
-	HasNextPage bool `json:"hasNextPage"`
-	HasPrevPage bool `json:"hasPrevPage"`
-}
-
 type StudentReportResponse struct {
-	Alunos     []StudentReport         `json:"alunos"`
-	Pagination StudentReportPagination `json:"pagination"`
+	Alunos     []StudentReport    `json:"alunos"`
+	Pagination dto.PaginationMeta `json:"pagination"`
 }

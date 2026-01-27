@@ -49,7 +49,7 @@ func TestUserActivityHandler_GetUserActivities_Success(t *testing.T) {
 	activityResponse := &user2.ActivityResponse{
 		Email:  email,
 		Access: activities,
-		Pagination: user2.Pagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  2,
@@ -352,7 +352,7 @@ func TestUserActivityHandler_GetUserActivities_EmptyActivities(t *testing.T) {
 	activityResponse := &user2.ActivityResponse{
 		Email:  email,
 		Access: []user2.AccessData{},
-		Pagination: user2.Pagination{
+		Pagination: dto.PaginationMeta{
 			Page:        1,
 			Limit:       10,
 			TotalCount:  0,
@@ -385,7 +385,7 @@ func TestUserActivityHandler_GetUserActivities_EmptyActivities(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, email, result.Email)
 	assert.Equal(t, 0, len(result.Access))
-	assert.Equal(t, 0, result.Pagination.TotalCount)
+	assert.Equal(t, int64(0), result.Pagination.TotalCount)
 
 	mockUseCase.AssertExpectations(t)
 }
