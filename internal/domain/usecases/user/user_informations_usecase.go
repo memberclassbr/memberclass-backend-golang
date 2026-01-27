@@ -74,12 +74,12 @@ func (uc *UserInformationsUseCase) GetUserInformations(ctx context.Context, req 
 	}
 
 	pagination := user2.UserInformationsPagination{
-		Page:            req.Page,
-		TotalPages:      totalPages,
-		TotalItems:      int(total),
-		ItemsPerPage:    req.Limit,
-		HasNextPage:     req.Page < totalPages,
-		HasPreviousPage: req.Page > 1,
+		Page:        req.Page,
+		Limit:       req.Limit,
+		TotalCount:  int(total),
+		TotalPages:  totalPages,
+		HasNextPage: req.Page < totalPages,
+		HasPrevPage: req.Page > 1,
 	}
 
 	responseData := &user2.UserInformationsResponse{

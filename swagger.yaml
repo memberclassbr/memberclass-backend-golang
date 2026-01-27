@@ -260,11 +260,11 @@ paths:
                     lastAccess: null
                 pagination:
                   page: 1
+                  limit: 10
+                  totalCount: 50
                   totalPages: 5
-                  totalItems: 50
-                  itemsPerPage: 10
                   hasNextPage: true
-                  hasPreviousPage: false
+                  hasPrevPage: false
         '400':
           description: Parâmetros inválidos
           content:
@@ -1813,23 +1813,23 @@ components:
           type: integer
           description: Página atual
           example: 1
+        limit:
+          type: integer
+          description: Itens por página
+          example: 10
+        totalCount:
+          type: integer
+          description: Total de itens
+          example: 50
         totalPages:
           type: integer
           description: Total de páginas
           example: 5
-        totalItems:
-          type: integer
-          description: Total de itens
-          example: 50
-        itemsPerPage:
-          type: integer
-          description: Itens por página
-          example: 10
         hasNextPage:
           type: boolean
           description: Indica se há próxima página
           example: true
-        hasPreviousPage:
+        hasPrevPage:
           type: boolean
           description: Indica se há página anterior
           example: false

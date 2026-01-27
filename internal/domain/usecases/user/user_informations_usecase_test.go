@@ -58,12 +58,12 @@ func TestUserInformationsUseCase_GetUserInformations_Success_WithCache(t *testin
 	cachedResponse := user2.UserInformationsResponse{
 		Users: users,
 		Pagination: user2.UserInformationsPagination{
-			Page:            1,
-			TotalPages:      1,
-			TotalItems:      1,
-			ItemsPerPage:    10,
-			HasNextPage:     false,
-			HasPreviousPage: false,
+			Page:        1,
+			Limit:       10,
+			TotalCount:  1,
+			TotalPages:  1,
+			HasNextPage: false,
+			HasPrevPage: false,
 		},
 	}
 
@@ -123,7 +123,7 @@ func TestUserInformationsUseCase_GetUserInformations_Success_WithoutEmail(t *tes
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, 1, len(result.Users))
-	assert.Equal(t, 1, result.Pagination.TotalItems)
+	assert.Equal(t, 1, result.Pagination.TotalCount)
 
 	mockCache.AssertExpectations(t)
 	mockUserRepo.AssertExpectations(t)
@@ -327,10 +327,10 @@ func TestUserInformationsUseCase_GetUserInformations_Pagination(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.Equal(t, 2, len(result.Users))
 	assert.Equal(t, 2, result.Pagination.Page)
-	assert.Equal(t, 25, result.Pagination.TotalItems)
+	assert.Equal(t, 25, result.Pagination.TotalCount)
 	assert.Equal(t, 3, result.Pagination.TotalPages)
 	assert.True(t, result.Pagination.HasNextPage)
-	assert.True(t, result.Pagination.HasPreviousPage)
+	assert.True(t, result.Pagination.HasPrevPage)
 
 	mockCache.AssertExpectations(t)
 	mockUserRepo.AssertExpectations(t)

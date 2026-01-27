@@ -15,12 +15,12 @@ type UserInformation struct {
 }
 
 type UserInformationsPagination struct {
-	Page            int  `json:"page"`
-	TotalPages      int  `json:"totalPages"`
-	TotalItems      int  `json:"totalItems"`
-	ItemsPerPage    int  `json:"itemsPerPage"`
-	HasNextPage     bool `json:"hasNextPage"`
-	HasPreviousPage bool `json:"hasPreviousPage"`
+	Page        int  `json:"page"`
+	Limit       int  `json:"limit"`
+	TotalCount  int  `json:"totalCount"`
+	TotalPages  int  `json:"totalPages"`
+	HasNextPage bool `json:"hasNextPage"`
+	HasPrevPage bool `json:"hasPrevPage"`
 }
 
 type UserInformationsResponse struct {

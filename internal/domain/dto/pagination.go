@@ -16,12 +16,12 @@ type PaginationResponse[T any] struct {
 
 
 type PaginationMeta struct {
-	Page       int  `json:"page"`
-	PageSize   int  `json:"pageSize"`
-	Total      int64 `json:"total"`
-	TotalPages int  `json:"totalPages"`
-	HasNext    bool `json:"hasNext"`
-	HasPrev    bool `json:"hasPrev"`
+	Page        int   `json:"page"`
+	Limit       int   `json:"limit"`
+	TotalCount  int64 `json:"totalCount"`
+	TotalPages  int   `json:"totalPages"`
+	HasNextPage bool  `json:"hasNextPage"`
+	HasPrevPage bool  `json:"hasPrevPage"`
 }
 
 
@@ -61,18 +61,18 @@ func (p *PaginationRequest) GetSortDir() string {
 
 
 func NewPaginationResponse[T any](data []T, total int64, req *PaginationRequest) *PaginationResponse[T] {
-	pageSize := req.GetLimit()
-	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+	limit := req.GetLimit()
+	totalPages := int((total + int64(limit) - 1) / int64(limit))
 	
 	return &PaginationResponse[T]{
 		Data: data,
 		Pagination: PaginationMeta{
-			Page:       req.Page,
-			PageSize:   pageSize,
-			Total:      total,
-			TotalPages: totalPages,
-			HasNext:    req.Page < totalPages,
-			HasPrev:    req.Page > 1,
+			Page:        req.Page,
+			Limit:       limit,
+			TotalCount:  total,
+			TotalPages:  totalPages,
+			HasNextPage: req.Page < totalPages,
+			HasPrevPage: req.Page > 1,
 		},
 	}
 }
