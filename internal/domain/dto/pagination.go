@@ -1,5 +1,6 @@
 package dto
 
+import "math"
 
 type PaginationRequest struct {
 	Page    int    `json:"page" form:"page" validate:"min=1"`
@@ -10,7 +11,7 @@ type PaginationRequest struct {
 
 
 type PaginationResponse[T any] struct {
-	Data       []T  `json:"data"`
+	Data       []T            `json:"data"`
 	Pagination PaginationMeta `json:"pagination"`
 }
 
@@ -22,6 +23,16 @@ type PaginationMeta struct {
 	TotalPages  int   `json:"totalPages"`
 	HasNextPage bool  `json:"hasNextPage"`
 	HasPrevPage bool  `json:"hasPrevPage"`
+}
+
+
+var DefaultAllowedSortFields = []string{
+	"createdAt",
+	"updatedAt",
+	"id",
+	"name",
+	"email",
+	"date",
 }
 
 
@@ -52,6 +63,25 @@ func (p *PaginationRequest) GetSortBy() string {
 }
 
 
+func (p *PaginationRequest) GetSafeSortBy(allowedFields []string) string {
+	if p.SortBy == "" {
+		return "created_at"
+	}
+	
+	if len(allowedFields) == 0 {
+		allowedFields = DefaultAllowedSortFields
+	}
+	
+	for _, field := range allowedFields {
+		if p.SortBy == field {
+			return p.SortBy
+		}
+	}
+	
+	return "created_at"
+}
+
+
 func (p *PaginationRequest) GetSortDir() string {
 	if p.SortDir == "" {
 		return "desc"
@@ -60,19 +90,28 @@ func (p *PaginationRequest) GetSortDir() string {
 }
 
 
-func NewPaginationResponse[T any](data []T, total int64, req *PaginationRequest) *PaginationResponse[T] {
+func NewPaginationMeta(total int64, req *PaginationRequest) PaginationMeta {
 	limit := req.GetLimit()
-	totalPages := int((total + int64(limit) - 1) / int64(limit))
+	page := req.Page
+	if page <= 0 {
+		page = 1
+	}
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 	
+	return PaginationMeta{
+		Page:        page,
+		Limit:       limit,
+		TotalCount:  total,
+		TotalPages:  totalPages,
+		HasNextPage: page < totalPages,
+		HasPrevPage: page > 1,
+	}
+}
+
+
+func NewPaginationResponse[T any](data []T, total int64, req *PaginationRequest) *PaginationResponse[T] {
 	return &PaginationResponse[T]{
-		Data: data,
-		Pagination: PaginationMeta{
-			Page:        req.Page,
-			Limit:       limit,
-			TotalCount:  total,
-			TotalPages:  totalPages,
-			HasNextPage: req.Page < totalPages,
-			HasPrevPage: req.Page > 1,
-		},
+		Data:       data,
+		Pagination: NewPaginationMeta(total, req),
 	}
 }

@@ -1,7 +1,6 @@
 package comment
 
 import (
-	"math"
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
@@ -26,22 +25,14 @@ type CommentsPaginationResponse struct {
 }
 
 func NewCommentsPaginationResponse(data []*CommentResponse, total int64, page, limit int) *CommentsPaginationResponse {
-	totalPages := int(math.Ceil(float64(total) / float64(limit)))
-
 	comments := make([]CommentResponse, len(data))
 	for i, c := range data {
 		comments[i] = *c
 	}
 
+	paginationReq := &dto.PaginationRequest{Page: page, Limit: limit}
 	return &CommentsPaginationResponse{
-		Comments: comments,
-		Pagination: dto.PaginationMeta{
-			Page:        page,
-			Limit:       limit,
-			TotalCount:  total,
-			TotalPages:  totalPages,
-			HasNextPage: page < totalPages,
-			HasPrevPage: page > 1,
-		},
+		Comments:   comments,
+		Pagination: dto.NewPaginationMeta(total, paginationReq),
 	}
 }
