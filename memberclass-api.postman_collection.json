@@ -3466,7 +3466,6 @@
 								"api",
 								"v1",
 								"vitrine",
-								"vitrines",
 								"{{vitrineId}}"
 							],
 							"query": [
@@ -3499,7 +3498,6 @@
 										"api",
 										"v1",
 										"vitrine",
-										"vitrines",
 										"vitrine-123"
 									],
 									"query": [
@@ -3540,7 +3538,6 @@
 										"api",
 										"v1",
 										"vitrine",
-										"vitrines",
 										"invalid-id"
 									]
 								}

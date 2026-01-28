@@ -1,9 +1,11 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http"
+	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
@@ -30,7 +32,7 @@ type Router struct {
 	activitySummaryHandler    *user.ActivitySummaryHandler
 	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
 	studentReportHandler      *student.StudentReportHandler
-	swaggerHandler            *http.SwaggerHandler
+	swaggerHandler            *internalhttp.SwaggerHandler
 	authHandler               *auth.AuthHandler
 	ssoHandler                *sso.SSOHandler
 	aiLessonHandler           *ai.AILessonHandler
@@ -54,7 +56,7 @@ func NewRouter(
 	activitySummaryHandler *user.ActivitySummaryHandler,
 	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
 	studentReportHandler *student.StudentReportHandler,
-	swaggerHandler *http.SwaggerHandler,
+	swaggerHandler *internalhttp.SwaggerHandler,
 	authHandler *auth.AuthHandler,
 	ssoHandler *sso.SSOHandler,
 	aiLessonHandler *ai.AILessonHandler,
@@ -100,6 +102,9 @@ func NewRouter(
 }
 
 func (r *Router) SetupRoutes() {
+	r.Get("/docs", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/docs/", http.StatusMovedPermanently)
+	})
 	r.Route("/docs", func(router chi.Router) {
 		router.Get("/", r.swaggerHandler.ServeSwaggerUI)
 		router.Get("/swagger.yaml", r.swaggerHandler.ServeSwaggerYAML)
