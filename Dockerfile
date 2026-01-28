@@ -27,6 +27,7 @@ WORKDIR /home/appuser
 
 # Copy binary from builder
 COPY --from=builder /app/main .
+COPY --from=builder /app/swagger.yaml .
 
 # Change ownership
 RUN chown -R appuser:appuser /home/appuser
