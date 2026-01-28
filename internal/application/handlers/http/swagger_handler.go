@@ -22,19 +22,31 @@ func (h *SwaggerHandler) ServeSwaggerYAML(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	content, err := os.ReadFile(h.swaggerPath)
-	if err != nil {
-		workDir, _ := os.Getwd()
-		fullPath := filepath.Join(workDir, h.swaggerPath)
-		content, err = os.ReadFile(fullPath)
-		if err != nil {
-			http.Error(w, "Swagger file not found", http.StatusNotFound)
-			return
+	paths := []string{
+		h.swaggerPath,
+		filepath.Join(".", h.swaggerPath),
+	}
+
+	workDir, _ := os.Getwd()
+	paths = append(paths, filepath.Join(workDir, h.swaggerPath))
+
+	var content []byte
+	var err error
+	for _, path := range paths {
+		content, err = os.ReadFile(path)
+		if err == nil {
+			break
 		}
+	}
+
+	if err != nil {
+		http.Error(w, "Swagger file not found: "+h.swaggerPath, http.StatusNotFound)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/x-yaml")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(content)
 }
 
@@ -43,6 +55,16 @@ func (h *SwaggerHandler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
+		scheme = forwardedProto
+	}
+
+	swaggerURL := scheme + "://" + r.Host + "/docs/swagger.yaml"
 
 	html := `<!DOCTYPE html>
 <html lang="en">
@@ -65,7 +87,7 @@ func (h *SwaggerHandler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) 
     <script>
         window.onload = function() {
             SwaggerUIBundle({
-                url: "/docs/swagger.yaml",
+                url: "` + swaggerURL + `",
                 dom_id: '#swagger-ui',
                 deepLinking: true,
                 presets: [
