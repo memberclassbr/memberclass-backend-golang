@@ -462,7 +462,7 @@ make test             # Run tests
 make test-coverage    # Tests with coverage
 make docker-build     # Build Docker image
 make docker-run       # Run with Docker Compose
-make dev-setup        # Setup development environment
+make dev-setup        # Setup development environment.
 ```
 
 ## 📝 License
