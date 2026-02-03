@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"net/url"
 	"time"
@@ -107,11 +106,15 @@ func (u *SSOUseCase) ValidateSSOToken(ctx context.Context, token, ip string) (*r
 }
 
 func (u *SSOUseCase) generateRandomToken(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
+	for i := range bytes {
+		bytes[i] = charset[bytes[i]%byte(len(charset))]
+	}
+	return string(bytes), nil
 }
 
 func (u *SSOUseCase) generateSHA256Hash(input string) string {
