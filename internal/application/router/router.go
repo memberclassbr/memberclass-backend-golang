@@ -124,7 +124,8 @@ func (r *Router) SetupRoutes() {
 				r.rateLimitTenantMiddleware.LimitByTenant,
 			).Post("/generate-token", r.ssoHandler.GenerateSSOToken)
 
-			router.Post("/validate-token", r.ssoHandler.ValidateSSOToken)
+			router.With(
+				r.authExternalMiddleware.Authenticate).Post("/validate-token", r.ssoHandler.ValidateSSOToken)
 		})
 
 		router.Route("/ai", func(router chi.Router) {
