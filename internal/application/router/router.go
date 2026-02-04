@@ -199,6 +199,15 @@ func (r *Router) SetupRoutes() {
 			).Get("/report", r.studentReportHandler.GetStudentReport)
 		})
 
+		router.Route("/admin", func(router chi.Router) {
+			router.Route("/reports", func(router chi.Router) {
+				router.With(
+					r.authExternalMiddleware.Authenticate,
+					r.rateLimitTenantMiddleware.LimitByTenant,
+				).Get("/students-ranking", r.studentReportHandler.GetStudentsRanking)
+			})
+		})
+
 		router.Route("/vitrine", func(router chi.Router) {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
