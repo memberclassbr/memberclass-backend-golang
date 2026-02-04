@@ -9,4 +9,5 @@ import (
 
 type StudentReportUseCase interface {
 	GetStudentReport(ctx context.Context, req student.GetStudentReportRequest, tenantID string) (*student2.StudentReportResponse, error)
+	GetStudentsRanking(ctx context.Context, req student.GetStudentsRankingRequest, tenantID string) (*student2.StudentsRankingResponse, bool, error)
 }

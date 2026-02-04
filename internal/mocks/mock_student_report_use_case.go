@@ -85,6 +85,73 @@ func (_c *MockStudentReportUseCase_GetStudentReport_Call) RunAndReturn(run func(
 	return _c
 }
 
+// GetStudentsRanking provides a mock function with given fields: ctx, req, tenantID
+func (_m *MockStudentReportUseCase) GetStudentsRanking(ctx context.Context, req student.GetStudentsRankingRequest, tenantID string) (*responsestudent.StudentsRankingResponse, bool, error) {
+	ret := _m.Called(ctx, req, tenantID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetStudentsRanking")
+	}
+
+	var r0 *responsestudent.StudentsRankingResponse
+	var r1 bool
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, student.GetStudentsRankingRequest, string) (*responsestudent.StudentsRankingResponse, bool, error)); ok {
+		return rf(ctx, req, tenantID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, student.GetStudentsRankingRequest, string) *responsestudent.StudentsRankingResponse); ok {
+		r0 = rf(ctx, req, tenantID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*responsestudent.StudentsRankingResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, student.GetStudentsRankingRequest, string) bool); ok {
+		r1 = rf(ctx, req, tenantID)
+	} else {
+		r1 = ret.Get(1).(bool)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, student.GetStudentsRankingRequest, string) error); ok {
+		r2 = rf(ctx, req, tenantID)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockStudentReportUseCase_GetStudentsRanking_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetStudentsRanking'
+type MockStudentReportUseCase_GetStudentsRanking_Call struct {
+	*mock.Call
+}
+
+// GetStudentsRanking is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req student.GetStudentsRankingRequest
+//   - tenantID string
+func (_e *MockStudentReportUseCase_Expecter) GetStudentsRanking(ctx interface{}, req interface{}, tenantID interface{}) *MockStudentReportUseCase_GetStudentsRanking_Call {
+	return &MockStudentReportUseCase_GetStudentsRanking_Call{Call: _e.mock.On("GetStudentsRanking", ctx, req, tenantID)}
+}
+
+func (_c *MockStudentReportUseCase_GetStudentsRanking_Call) Run(run func(ctx context.Context, req student.GetStudentsRankingRequest, tenantID string)) *MockStudentReportUseCase_GetStudentsRanking_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(student.GetStudentsRankingRequest), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockStudentReportUseCase_GetStudentsRanking_Call) Return(_a0 *responsestudent.StudentsRankingResponse, _a1 bool, _a2 error) *MockStudentReportUseCase_GetStudentsRanking_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockStudentReportUseCase_GetStudentsRanking_Call) RunAndReturn(run func(context.Context, student.GetStudentsRankingRequest, string) (*responsestudent.StudentsRankingResponse, bool, error)) *MockStudentReportUseCase_GetStudentsRanking_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockStudentReportUseCase creates a new instance of MockStudentReportUseCase. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockStudentReportUseCase(t interface {

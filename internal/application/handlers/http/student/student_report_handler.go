@@ -78,6 +78,51 @@ func (h *StudentReportHandler) GetStudentReport(w http.ResponseWriter, r *http.R
 	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
+func (h *StudentReportHandler) GetStudentsRanking(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	parsedReq, err := student.ParseStudentsRankingRequest(r.URL.Query())
+	if err != nil {
+		errorCode := "INVALID_REQUEST"
+		if err.Error() == "limit deve ser um número" || err.Error() == "page deve ser um número" {
+			errorCode = "INVALID_PAGINATION"
+		}
+		if err.Error() == "formato de data inválido para startDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)" || err.Error() == "formato de data inválido para endDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)" {
+			errorCode = "INVALID_DATE_FORMAT"
+		}
+		h.sendCustomErrorResponse(w, http.StatusBadRequest, err.Error(), errorCode)
+		return
+	}
+
+	if err := parsedReq.Validate(); err != nil {
+		h.sendCustomErrorResponse(w, http.StatusBadRequest, err.Error(), "INVALID_REQUEST")
+		return
+	}
+
+	tenant := constants.GetTenantFromContext(r.Context())
+	if tenant == nil {
+		h.sendCustomErrorResponse(w, http.StatusUnauthorized, "API key inválida", "INVALID_API_KEY")
+		return
+	}
+
+	parsedReq.TenantID = tenant.ID
+	response, fromCache, err := h.useCase.GetStudentsRanking(r.Context(), *parsedReq, tenant.ID)
+	if err != nil {
+		h.handleUseCaseError(w, err)
+		return
+	}
+
+	if fromCache {
+		w.Header().Set("X-Cache", "HIT")
+	} else {
+		w.Header().Set("X-Cache", "MISS")
+	}
+	h.sendJSONResponse(w, http.StatusOK, response)
+}
+
 func (h *StudentReportHandler) handleUseCaseError(w http.ResponseWriter, err error) {
 	var memberClassErr *memberclasserrors.MemberClassError
 	if errors.As(err, &memberClassErr) {

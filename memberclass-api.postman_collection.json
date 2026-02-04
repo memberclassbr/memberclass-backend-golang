@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "memberclass-backend-golang",
 		"name": "MemberClass Backend API",
-		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários\n- Compras e reembolsos dos usuários\n- Catálogo (vitrines, cursos, módulos e aulas)",
+		"description": "Coleção de APIs do backend MemberClass em Golang.\n\nInclui endpoints para:\n- Upload de vídeos para Bunny CDN\n- Processamento de PDFs de aulas\n- Gerenciamento de páginas de PDF\n- Gerenciamento de comentários\n- Atividades de acesso dos usuários\n- Compras e reembolsos dos usuários\n- Relatório e ranking de alunos\n- Catálogo (vitrines, cursos, módulos e aulas)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -2722,6 +2722,126 @@
 								}
 							],
 							"body": "{\n    \"ok\": false,\n    \"error\": \"startDate não pode ser maior que endDate\",\n    \"errorCode\": \"INVALID_DATE_RANGE\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Admin",
+			"description": "Endpoints de administração e relatórios",
+			"item": [
+				{
+					"name": "Get Students Ranking",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "mc-api-key",
+								"value": "{{apiKey}}",
+								"description": "API key do tenant (obrigatório)"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/admin/reports/students-ranking?period=month&metric=all&limit=50&page=1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"admin",
+								"reports",
+								"students-ranking"
+							],
+							"query": [
+								{
+									"key": "period",
+									"value": "month",
+									"description": "Período: week (7 dias), month (30 dias), custom"
+								},
+								{
+									"key": "startDate",
+									"value": "",
+									"description": "Data inicial (obrigatório se period=custom, ISO 8601)"
+								},
+								{
+									"key": "endDate",
+									"value": "",
+									"description": "Data final (obrigatório se period=custom, ISO 8601)"
+								},
+								{
+									"key": "metric",
+									"value": "all",
+									"description": "Métrica de ordenação: all, logins, lessons, comments, ratings"
+								},
+								{
+									"key": "limit",
+									"value": "50",
+									"description": "Quantidade de alunos (padrão: 50, máx: 100)"
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Página (padrão: 1)"
+								}
+							]
+						},
+						"description": "Retorna ranking de alunos (role member) do tenant por métricas de engajamento no período.\n\nMétricas: logins (UserEvent type=login), aulas assistidas (Read), comentários (Comment), avaliações (Read.rating).\n\nAutenticação: header mc-api-key. O tenant é identificado pela API key.\n\nCache: TTL 12 horas.\n\nPeríodos: week = últimos 7 dias, month = últimos 30 dias, custom = startDate/endDate obrigatórios."
+					},
+					"response": [
+						{
+							"name": "Get Students Ranking - Sucesso",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "mc-api-key",
+										"value": "{{apiKey}}"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/admin/reports/students-ranking?period=month&metric=all&limit=50&page=1",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"admin",
+										"reports",
+										"students-ranking"
+									],
+									"query": [
+										{
+											"key": "period",
+											"value": "month"
+										},
+										{
+											"key": "metric",
+											"value": "all"
+										},
+										{
+											"key": "limit",
+											"value": "50"
+										},
+										{
+											"key": "page",
+											"value": "1"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"period\": {\n        \"start\": \"2025-01-03T00:00:00Z\",\n        \"end\": \"2025-02-02T23:59:59Z\"\n    },\n    \"totalStudents\": 100,\n    \"rankings\": [\n        {\n            \"position\": 1,\n            \"student\": {\n                \"id\": \"user-123\",\n                \"name\": \"João Silva\",\n                \"picture\": \"https://example.com/photo.jpg\",\n                \"email\": \"joao@example.com\"\n            },\n            \"metrics\": {\n                \"logins\": 25,\n                \"lessonsWatched\": 15,\n                \"comments\": 8,\n                \"ratings\": 12,\n                \"avgRating\": 4.5\n            }\n        }\n    ]\n}"
 						}
 					]
 				}
