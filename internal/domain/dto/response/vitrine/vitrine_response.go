@@ -6,13 +6,22 @@ type VitrineResponse struct {
 }
 
 type VitrineData struct {
-	ID      string       `json:"id"`
-	Name    string       `json:"name"`
-	Order   *int         `json:"order,omitempty"`
-	Courses []CourseData `json:"courses,omitempty"`
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	Published bool         `json:"published"`
+	Order     *int         `json:"order,omitempty"`
+	Courses   []CourseData `json:"courses,omitempty"`
 }
 
 type CourseData struct {
+	ID        string        `json:"id"`
+	Name      string        `json:"name"`
+	Published bool          `json:"published"`
+	Order     *int          `json:"order,omitempty"`
+	Sections  []SectionData `json:"sections,omitempty"`
+}
+
+type SectionData struct {
 	ID      string       `json:"id"`
 	Name    string       `json:"name"`
 	Order   *int         `json:"order,omitempty"`
@@ -20,15 +29,17 @@ type CourseData struct {
 }
 
 type ModuleData struct {
-	ID      string       `json:"id"`
-	Name    string       `json:"name"`
-	Order   *int         `json:"order,omitempty"`
-	Lessons []LessonData `json:"lessons,omitempty"`
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	Published bool         `json:"published"`
+	Order     *int         `json:"order,omitempty"`
+	Lessons   []LessonData `json:"lessons,omitempty"`
 }
 
 type LessonData struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`
+	Published bool    `json:"published"`
 	Slug      *string `json:"slug,omitempty"`
 	Type      *string `json:"type,omitempty"`
 	MediaURL  *string `json:"mediaUrl,omitempty"`
@@ -42,6 +53,10 @@ type VitrineDetailResponse struct {
 
 type CourseDetailResponse struct {
 	Course CourseData `json:"course"`
+}
+
+type SectionDetailResponse struct {
+	Section SectionData `json:"section"`
 }
 
 type ModuleDetailResponse struct {

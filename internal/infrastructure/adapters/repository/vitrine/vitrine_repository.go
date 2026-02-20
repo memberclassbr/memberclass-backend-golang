@@ -25,9 +25,10 @@ func NewVitrineRepository(db *sql.DB, log ports.Logger) vitrineports.VitrineRepo
 
 func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID string) (*vitrine.VitrineResponse, error) {
 	query := `
-		SELECT 
+		SELECT
 			v.id,
 			v.name,
+			v.published,
 			v."order"
 		FROM "Vitrine" v
 		WHERE v."tenantId" = $1
@@ -51,7 +52,7 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 		var vitrineData vitrine.VitrineData
 		var order sql.NullInt32
 
-		err := rows.Scan(&vitrineData.ID, &vitrineData.Name, &order)
+		err := rows.Scan(&vitrineData.ID, &vitrineData.Name, &vitrineData.Published, &order)
 		if err != nil {
 			r.log.Error("Error scanning vitrine: " + err.Error())
 			continue
@@ -75,9 +76,10 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 	}
 
 	coursesQuery := `
-		SELECT 
+		SELECT
 			c.id,
 			c.name,
+			c.published,
 			c."order",
 			c."vitrineId"
 		FROM "Course" c
@@ -96,14 +98,18 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 	}
 	defer coursesRows.Close()
 
-	coursesMap := make(map[string]*vitrine.CourseData)
+	type courseRef struct {
+		vitrineIdx int
+		courseIdx   int
+	}
+	coursesMap := make(map[string]courseRef)
 
 	for coursesRows.Next() {
 		var course vitrine.CourseData
 		var order sql.NullInt32
 		var vitrineID string
 
-		err := coursesRows.Scan(&course.ID, &course.Name, &order, &vitrineID)
+		err := coursesRows.Scan(&course.ID, &course.Name, &course.Published, &order, &vitrineID)
 		if err != nil {
 			r.log.Error("Error scanning course: " + err.Error())
 			continue
@@ -114,20 +120,87 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 			course.Order = &orderVal
 		}
 
-		course.Modules = []vitrine.ModuleData{}
-		coursesMap[course.ID] = &course
+		course.Sections = []vitrine.SectionData{}
 
-		if vitrineData, ok := vitrinesMap[vitrineID]; ok {
-			vitrineData.Courses = append(vitrineData.Courses, course)
+		for i := range vitrines {
+			if vitrines[i].ID == vitrineID {
+				vitrines[i].Courses = append(vitrines[i].Courses, course)
+				coursesMap[course.ID] = courseRef{
+					vitrineIdx: i,
+					courseIdx:   len(vitrines[i].Courses) - 1,
+				}
+				break
+			}
+		}
+	}
+
+	sectionsQuery := `
+		SELECT
+			s.id,
+			s.name,
+			s."order",
+			s."courseId"
+		FROM "Section" s
+		JOIN "Course" c ON s."courseId" = c.id
+		JOIN "Vitrine" v ON c."vitrineId" = v.id
+		WHERE v."tenantId" = $1
+		ORDER BY COALESCE(s."order", 0) ASC
+	`
+
+	sectionsRows, err := r.db.QueryContext(ctx, sectionsQuery, tenantID)
+	if err != nil {
+		r.log.Error("Error querying sections: " + err.Error())
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "erro ao buscar seções",
+		}
+	}
+	defer sectionsRows.Close()
+
+	type sectionRef struct {
+		vitrineIdx int
+		courseIdx   int
+		sectionIdx int
+	}
+	sectionsMap := make(map[string]sectionRef)
+
+	for sectionsRows.Next() {
+		var section vitrine.SectionData
+		var order sql.NullInt32
+		var courseID string
+
+		err := sectionsRows.Scan(&section.ID, &section.Name, &order, &courseID)
+		if err != nil {
+			r.log.Error("Error scanning section: " + err.Error())
+			continue
+		}
+
+		if order.Valid {
+			orderVal := int(order.Int32)
+			section.Order = &orderVal
+		}
+
+		section.Modules = []vitrine.ModuleData{}
+
+		if ref, ok := coursesMap[courseID]; ok {
+			vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections = append(
+				vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections, section,
+			)
+			sectionsMap[section.ID] = sectionRef{
+				vitrineIdx: ref.vitrineIdx,
+				courseIdx:   ref.courseIdx,
+				sectionIdx: len(vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections) - 1,
+			}
 		}
 	}
 
 	modulesQuery := `
-		SELECT 
+		SELECT
 			m.id,
 			m.name,
+			m.published,
 			m."order",
-			s."courseId"
+			m."sectionId"
 		FROM "Module" m
 		JOIN "Section" s ON m."sectionId" = s.id
 		JOIN "Course" c ON s."courseId" = c.id
@@ -146,14 +219,20 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 	}
 	defer modulesRows.Close()
 
-	modulesMap := make(map[string]*vitrine.ModuleData)
+	type moduleRef struct {
+		vitrineIdx int
+		courseIdx   int
+		sectionIdx int
+		moduleIdx  int
+	}
+	modulesMap := make(map[string]moduleRef)
 
 	for modulesRows.Next() {
 		var module vitrine.ModuleData
 		var order sql.NullInt32
-		var courseID string
+		var sectionID string
 
-		err := modulesRows.Scan(&module.ID, &module.Name, &order, &courseID)
+		err := modulesRows.Scan(&module.ID, &module.Name, &module.Published, &order, &sectionID)
 		if err != nil {
 			r.log.Error("Error scanning module: " + err.Error())
 			continue
@@ -165,22 +244,25 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 		}
 
 		module.Lessons = []vitrine.LessonData{}
-		modulesMap[module.ID] = &module
 
-		for i := range vitrines {
-			for j := range vitrines[i].Courses {
-				if vitrines[i].Courses[j].ID == courseID {
-					vitrines[i].Courses[j].Modules = append(vitrines[i].Courses[j].Modules, module)
-					break
-				}
+		if ref, ok := sectionsMap[sectionID]; ok {
+			vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections[ref.sectionIdx].Modules = append(
+				vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections[ref.sectionIdx].Modules, module,
+			)
+			modulesMap[module.ID] = moduleRef{
+				vitrineIdx: ref.vitrineIdx,
+				courseIdx:   ref.courseIdx,
+				sectionIdx: ref.sectionIdx,
+				moduleIdx:  len(vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections[ref.sectionIdx].Modules) - 1,
 			}
 		}
 	}
 
 	lessonsQuery := `
-		SELECT 
+		SELECT
 			l.id,
 			l.name,
+			l.published,
 			l.slug,
 			l.type,
 			l."mediaUrl",
@@ -213,7 +295,7 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 		var order sql.NullInt32
 		var moduleID string
 
-		err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &slug, &lessonType, &mediaURL, &thumbnail, &order, &moduleID)
+		err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &lesson.Published, &slug, &lessonType, &mediaURL, &thumbnail, &order, &moduleID)
 		if err != nil {
 			r.log.Error("Error scanning lesson: " + err.Error())
 			continue
@@ -236,15 +318,10 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 			lesson.Order = &orderVal
 		}
 
-		for i := range vitrines {
-			for j := range vitrines[i].Courses {
-				for k := range vitrines[i].Courses[j].Modules {
-					if vitrines[i].Courses[j].Modules[k].ID == moduleID {
-						vitrines[i].Courses[j].Modules[k].Lessons = append(vitrines[i].Courses[j].Modules[k].Lessons, lesson)
-						break
-					}
-				}
-			}
+		if ref, ok := modulesMap[moduleID]; ok {
+			vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections[ref.sectionIdx].Modules[ref.moduleIdx].Lessons = append(
+				vitrines[ref.vitrineIdx].Courses[ref.courseIdx].Sections[ref.sectionIdx].Modules[ref.moduleIdx].Lessons, lesson,
+			)
 		}
 	}
 
@@ -261,9 +338,10 @@ func (r *VitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID st
 
 func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenantID string, includeChildren bool) (*vitrine.VitrineDetailResponse, error) {
 	query := `
-		SELECT 
+		SELECT
 			v.id,
 			v.name,
+			v.published,
 			v."order"
 		FROM "Vitrine" v
 		WHERE v.id = $1 AND v."tenantId" = $2
@@ -272,7 +350,7 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 	var vitrineData vitrine.VitrineData
 	var order sql.NullInt32
 
-	err := r.db.QueryRowContext(ctx, query, vitrineID, tenantID).Scan(&vitrineData.ID, &vitrineData.Name, &order)
+	err := r.db.QueryRowContext(ctx, query, vitrineID, tenantID).Scan(&vitrineData.ID, &vitrineData.Name, &vitrineData.Published, &order)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, &memberclasserrors.MemberClassError{
@@ -294,9 +372,10 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 
 	if includeChildren {
 		coursesQuery := `
-			SELECT 
+			SELECT
 				c.id,
 				c.name,
+				c.published,
 				c."order"
 			FROM "Course" c
 			WHERE c."vitrineId" = $1
@@ -317,7 +396,7 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 			var course vitrine.CourseData
 			var order sql.NullInt32
 
-			err := coursesRows.Scan(&course.ID, &course.Name, &order)
+			err := coursesRows.Scan(&course.ID, &course.Name, &course.Published, &order)
 			if err != nil {
 				r.log.Error("Error scanning course: " + err.Error())
 				continue
@@ -328,18 +407,224 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 				course.Order = &orderVal
 			}
 
+			sectionsQuery := `
+				SELECT
+					s.id,
+					s.name,
+					s."order"
+				FROM "Section" s
+				WHERE s."courseId" = $1
+				ORDER BY COALESCE(s."order", 0) ASC
+			`
+
+			sectionsRows, err := r.db.QueryContext(ctx, sectionsQuery, course.ID)
+			if err != nil {
+				r.log.Error("Error querying sections: " + err.Error())
+				continue
+			}
+
+			for sectionsRows.Next() {
+				var section vitrine.SectionData
+				var order sql.NullInt32
+
+				err := sectionsRows.Scan(&section.ID, &section.Name, &order)
+				if err != nil {
+					r.log.Error("Error scanning section: " + err.Error())
+					continue
+				}
+
+				if order.Valid {
+					orderVal := int(order.Int32)
+					section.Order = &orderVal
+				}
+
+				modulesQuery := `
+					SELECT
+						m.id,
+						m.name,
+						m.published,
+						m."order"
+					FROM "Module" m
+					WHERE m."sectionId" = $1
+					ORDER BY COALESCE(m."order", 0) ASC
+				`
+
+				modulesRows, err := r.db.QueryContext(ctx, modulesQuery, section.ID)
+				if err != nil {
+					r.log.Error("Error querying modules: " + err.Error())
+					continue
+				}
+
+				for modulesRows.Next() {
+					var module vitrine.ModuleData
+					var order sql.NullInt32
+
+					err := modulesRows.Scan(&module.ID, &module.Name, &module.Published, &order)
+					if err != nil {
+						r.log.Error("Error scanning module: " + err.Error())
+						continue
+					}
+
+					if order.Valid {
+						orderVal := int(order.Int32)
+						module.Order = &orderVal
+					}
+
+					lessonsQuery := `
+						SELECT
+							l.id,
+							l.name,
+							l.published,
+							l.slug,
+							l.type,
+							l."mediaUrl",
+							l.thumbnail,
+							l."order"
+						FROM "Lesson" l
+						WHERE l."moduleId" = $1 AND l.published = true
+						ORDER BY COALESCE(l."order", 0) ASC
+					`
+
+					lessonsRows, err := r.db.QueryContext(ctx, lessonsQuery, module.ID)
+					if err != nil {
+						r.log.Error("Error querying lessons: " + err.Error())
+						continue
+					}
+
+					for lessonsRows.Next() {
+						var lesson vitrine.LessonData
+						var slug, lessonType, mediaURL, thumbnail sql.NullString
+						var order sql.NullInt32
+
+						err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &lesson.Published, &slug, &lessonType, &mediaURL, &thumbnail, &order)
+						if err != nil {
+							r.log.Error("Error scanning lesson: " + err.Error())
+							continue
+						}
+
+						if slug.Valid {
+							lesson.Slug = &slug.String
+						}
+						if lessonType.Valid {
+							lesson.Type = &lessonType.String
+						}
+						if mediaURL.Valid {
+							lesson.MediaURL = &mediaURL.String
+						}
+						if thumbnail.Valid {
+							lesson.Thumbnail = &thumbnail.String
+						}
+						if order.Valid {
+							orderVal := int(order.Int32)
+							lesson.Order = &orderVal
+						}
+
+						module.Lessons = append(module.Lessons, lesson)
+					}
+					lessonsRows.Close()
+
+					section.Modules = append(section.Modules, module)
+				}
+				modulesRows.Close()
+
+				course.Sections = append(course.Sections, section)
+			}
+			sectionsRows.Close()
+
+			vitrineData.Courses = append(vitrineData.Courses, course)
+		}
+	} else {
+		vitrineData.Courses = []vitrine.CourseData{}
+	}
+
+	return &vitrine.VitrineDetailResponse{
+		Vitrine: vitrineData,
+	}, nil
+}
+
+func (r *VitrineRepository) GetCourseByID(ctx context.Context, courseID, tenantID string, includeChildren bool) (*vitrine.CourseDetailResponse, error) {
+	query := `
+		SELECT
+			c.id,
+			c.name,
+			c.published,
+			c."order"
+		FROM "Course" c
+		JOIN "Vitrine" v ON c."vitrineId" = v.id
+		WHERE c.id = $1 AND v."tenantId" = $2
+	`
+
+	var course vitrine.CourseData
+	var order sql.NullInt32
+
+	err := r.db.QueryRowContext(ctx, query, courseID, tenantID).Scan(&course.ID, &course.Name, &course.Published, &order)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, &memberclasserrors.MemberClassError{
+				Code:    404,
+				Message: "Curso não encontrado",
+			}
+		}
+		r.log.Error("Error querying course: " + err.Error())
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "erro ao buscar curso",
+		}
+	}
+
+	if order.Valid {
+		orderVal := int(order.Int32)
+		course.Order = &orderVal
+	}
+
+	if includeChildren {
+		sectionsQuery := `
+			SELECT
+				s.id,
+				s.name,
+				s."order"
+			FROM "Section" s
+			WHERE s."courseId" = $1
+			ORDER BY COALESCE(s."order", 0) ASC
+		`
+
+		sectionsRows, err := r.db.QueryContext(ctx, sectionsQuery, courseID)
+		if err != nil {
+			r.log.Error("Error querying sections: " + err.Error())
+			return nil, &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "erro ao buscar seções",
+			}
+		}
+		defer sectionsRows.Close()
+
+		for sectionsRows.Next() {
+			var section vitrine.SectionData
+			var order sql.NullInt32
+
+			err := sectionsRows.Scan(&section.ID, &section.Name, &order)
+			if err != nil {
+				r.log.Error("Error scanning section: " + err.Error())
+				continue
+			}
+
+			if order.Valid {
+				orderVal := int(order.Int32)
+				section.Order = &orderVal
+			}
+
 			modulesQuery := `
-				SELECT 
+				SELECT
 					m.id,
 					m.name,
+					m.published,
 					m."order"
 				FROM "Module" m
-				JOIN "Section" s ON m."sectionId" = s.id
-				WHERE s."courseId" = $1
+				WHERE m."sectionId" = $1
 				ORDER BY COALESCE(m."order", 0) ASC
 			`
 
-			modulesRows, err := r.db.QueryContext(ctx, modulesQuery, course.ID)
+			modulesRows, err := r.db.QueryContext(ctx, modulesQuery, section.ID)
 			if err != nil {
 				r.log.Error("Error querying modules: " + err.Error())
 				continue
@@ -349,10 +634,9 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 				var module vitrine.ModuleData
 				var order sql.NullInt32
 
-				err := modulesRows.Scan(&module.ID, &module.Name, &order)
+				err := modulesRows.Scan(&module.ID, &module.Name, &module.Published, &order)
 				if err != nil {
 					r.log.Error("Error scanning module: " + err.Error())
-					modulesRows.Close()
 					continue
 				}
 
@@ -362,9 +646,10 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 				}
 
 				lessonsQuery := `
-					SELECT 
+					SELECT
 						l.id,
 						l.name,
+						l.published,
 						l.slug,
 						l.type,
 						l."mediaUrl",
@@ -378,7 +663,6 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 				lessonsRows, err := r.db.QueryContext(ctx, lessonsQuery, module.ID)
 				if err != nil {
 					r.log.Error("Error querying lessons: " + err.Error())
-					modulesRows.Close()
 					continue
 				}
 
@@ -387,7 +671,7 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 					var slug, lessonType, mediaURL, thumbnail sql.NullString
 					var order sql.NullInt32
 
-					err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &slug, &lessonType, &mediaURL, &thumbnail, &order)
+					err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &lesson.Published, &slug, &lessonType, &mediaURL, &thumbnail, &order)
 					if err != nil {
 						r.log.Error("Error scanning lesson: " + err.Error())
 						continue
@@ -414,148 +698,14 @@ func (r *VitrineRepository) GetVitrineByID(ctx context.Context, vitrineID, tenan
 				}
 				lessonsRows.Close()
 
-				course.Modules = append(course.Modules, module)
+				section.Modules = append(section.Modules, module)
 			}
 			modulesRows.Close()
 
-			vitrineData.Courses = append(vitrineData.Courses, course)
+			course.Sections = append(course.Sections, section)
 		}
 	} else {
-		vitrineData.Courses = []vitrine.CourseData{}
-	}
-
-	return &vitrine.VitrineDetailResponse{
-		Vitrine: vitrineData,
-	}, nil
-}
-
-func (r *VitrineRepository) GetCourseByID(ctx context.Context, courseID, tenantID string, includeChildren bool) (*vitrine.CourseDetailResponse, error) {
-	query := `
-		SELECT 
-			c.id,
-			c.name,
-			c."order"
-		FROM "Course" c
-		JOIN "Vitrine" v ON c."vitrineId" = v.id
-		WHERE c.id = $1 AND v."tenantId" = $2
-	`
-
-	var course vitrine.CourseData
-	var order sql.NullInt32
-
-	err := r.db.QueryRowContext(ctx, query, courseID, tenantID).Scan(&course.ID, &course.Name, &order)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, &memberclasserrors.MemberClassError{
-				Code:    404,
-				Message: "Curso não encontrado",
-			}
-		}
-		r.log.Error("Error querying course: " + err.Error())
-		return nil, &memberclasserrors.MemberClassError{
-			Code:    500,
-			Message: "erro ao buscar curso",
-		}
-	}
-
-	if order.Valid {
-		orderVal := int(order.Int32)
-		course.Order = &orderVal
-	}
-
-	if includeChildren {
-		modulesQuery := `
-			SELECT 
-				m.id,
-				m.name,
-				m."order"
-			FROM "Module" m
-			JOIN "Section" s ON m."sectionId" = s.id
-			WHERE s."courseId" = $1
-			ORDER BY COALESCE(m."order", 0) ASC
-		`
-
-		modulesRows, err := r.db.QueryContext(ctx, modulesQuery, courseID)
-		if err != nil {
-			r.log.Error("Error querying modules: " + err.Error())
-			return nil, &memberclasserrors.MemberClassError{
-				Code:    500,
-				Message: "erro ao buscar módulos",
-			}
-		}
-		defer modulesRows.Close()
-
-		for modulesRows.Next() {
-			var module vitrine.ModuleData
-			var order sql.NullInt32
-
-			err := modulesRows.Scan(&module.ID, &module.Name, &order)
-			if err != nil {
-				r.log.Error("Error scanning module: " + err.Error())
-				continue
-			}
-
-			if order.Valid {
-				orderVal := int(order.Int32)
-				module.Order = &orderVal
-			}
-
-			lessonsQuery := `
-				SELECT 
-					l.id,
-					l.name,
-					l.slug,
-					l.type,
-					l."mediaUrl",
-					l.thumbnail,
-					l."order"
-				FROM "Lesson" l
-				WHERE l."moduleId" = $1 AND l.published = true
-				ORDER BY COALESCE(l."order", 0) ASC
-			`
-
-			lessonsRows, err := r.db.QueryContext(ctx, lessonsQuery, module.ID)
-			if err != nil {
-				r.log.Error("Error querying lessons: " + err.Error())
-				continue
-			}
-
-			for lessonsRows.Next() {
-				var lesson vitrine.LessonData
-				var slug, lessonType, mediaURL, thumbnail sql.NullString
-				var order sql.NullInt32
-
-				err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &slug, &lessonType, &mediaURL, &thumbnail, &order)
-				if err != nil {
-					r.log.Error("Error scanning lesson: " + err.Error())
-					continue
-				}
-
-				if slug.Valid {
-					lesson.Slug = &slug.String
-				}
-				if lessonType.Valid {
-					lesson.Type = &lessonType.String
-				}
-				if mediaURL.Valid {
-					lesson.MediaURL = &mediaURL.String
-				}
-				if thumbnail.Valid {
-					lesson.Thumbnail = &thumbnail.String
-				}
-				if order.Valid {
-					orderVal := int(order.Int32)
-					lesson.Order = &orderVal
-				}
-
-				module.Lessons = append(module.Lessons, lesson)
-			}
-			lessonsRows.Close()
-
-			course.Modules = append(course.Modules, module)
-		}
-	} else {
-		course.Modules = []vitrine.ModuleData{}
+		course.Sections = []vitrine.SectionData{}
 	}
 
 	return &vitrine.CourseDetailResponse{
@@ -565,9 +715,10 @@ func (r *VitrineRepository) GetCourseByID(ctx context.Context, courseID, tenantI
 
 func (r *VitrineRepository) GetModuleByID(ctx context.Context, moduleID, tenantID string, includeChildren bool) (*vitrine.ModuleDetailResponse, error) {
 	query := `
-		SELECT 
+		SELECT
 			m.id,
 			m.name,
+			m.published,
 			m."order"
 		FROM "Module" m
 		JOIN "Section" s ON m."sectionId" = s.id
@@ -579,7 +730,7 @@ func (r *VitrineRepository) GetModuleByID(ctx context.Context, moduleID, tenantI
 	var module vitrine.ModuleData
 	var order sql.NullInt32
 
-	err := r.db.QueryRowContext(ctx, query, moduleID, tenantID).Scan(&module.ID, &module.Name, &order)
+	err := r.db.QueryRowContext(ctx, query, moduleID, tenantID).Scan(&module.ID, &module.Name, &module.Published, &order)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, &memberclasserrors.MemberClassError{
@@ -601,9 +752,10 @@ func (r *VitrineRepository) GetModuleByID(ctx context.Context, moduleID, tenantI
 
 	if includeChildren {
 		lessonsQuery := `
-			SELECT 
+			SELECT
 				l.id,
 				l.name,
+				l.published,
 				l.slug,
 				l.type,
 				l."mediaUrl",
@@ -629,7 +781,7 @@ func (r *VitrineRepository) GetModuleByID(ctx context.Context, moduleID, tenantI
 			var slug, lessonType, mediaURL, thumbnail sql.NullString
 			var order sql.NullInt32
 
-			err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &slug, &lessonType, &mediaURL, &thumbnail, &order)
+			err := lessonsRows.Scan(&lesson.ID, &lesson.Name, &lesson.Published, &slug, &lessonType, &mediaURL, &thumbnail, &order)
 			if err != nil {
 				r.log.Error("Error scanning lesson: " + err.Error())
 				continue
@@ -665,9 +817,10 @@ func (r *VitrineRepository) GetModuleByID(ctx context.Context, moduleID, tenantI
 
 func (r *VitrineRepository) GetLessonByID(ctx context.Context, lessonID, tenantID string) (*vitrine.LessonDetailResponse, error) {
 	query := `
-		SELECT 
+		SELECT
 			l.id,
 			l.name,
+			l.published,
 			l.slug,
 			l.type,
 			l."mediaUrl",
@@ -685,7 +838,7 @@ func (r *VitrineRepository) GetLessonByID(ctx context.Context, lessonID, tenantI
 	var slug, lessonType, mediaURL, thumbnail sql.NullString
 	var order sql.NullInt32
 
-	err := r.db.QueryRowContext(ctx, query, lessonID, tenantID).Scan(&lesson.ID, &lesson.Name, &slug, &lessonType, &mediaURL, &thumbnail, &order)
+	err := r.db.QueryRowContext(ctx, query, lessonID, tenantID).Scan(&lesson.ID, &lesson.Name, &lesson.Published, &slug, &lessonType, &mediaURL, &thumbnail, &order)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, &memberclasserrors.MemberClassError{

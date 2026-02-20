@@ -29,7 +29,7 @@ tags:
   - name: Vitrine
     description: |
       Endpoints para recuperar informações do catálogo:
-      - Vitrines, cursos, módulos e aulas
+      - Vitrines, cursos, seções, módulos e aulas
       - Listagem completa com hierarquia
       - Busca individual por ID
 
@@ -1250,7 +1250,7 @@ paths:
         - Vitrine
       summary: Listar catálogo completo
       description: |
-        Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > módulos > aulas.
+        Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > seções > módulos > aulas.
         
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
         
@@ -1290,7 +1290,7 @@ paths:
         - Vitrine
       summary: Buscar vitrine por ID
       description: |
-        Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, módulos e aulas) através do parâmetro `includeChildren`.
+        Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, seções, módulos e aulas) através do parâmetro `includeChildren`.
         
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
       operationId: getVitrine
@@ -1312,7 +1312,7 @@ paths:
         - name: includeChildren
           in: query
           required: false
-          description: Se `true`, inclui cursos, módulos e aulas na resposta
+          description: Se `true`, inclui cursos, seções, módulos e aulas na resposta
           schema:
             type: boolean
             default: false
@@ -1343,7 +1343,7 @@ paths:
         - Vitrine
       summary: Buscar curso por ID
       description: |
-        Retorna um curso específico pelo ID. Pode incluir ou não os filhos (módulos e aulas) através do parâmetro `includeChildren`.
+        Retorna um curso específico pelo ID. Pode incluir ou não os filhos (seções, módulos e aulas) através do parâmetro `includeChildren`.
         
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
       operationId: getCourse
@@ -1365,7 +1365,7 @@ paths:
         - name: includeChildren
           in: query
           required: false
-          description: Se `true`, inclui módulos e aulas na resposta
+          description: Se `true`, inclui seções, módulos e aulas na resposta
           schema:
             type: boolean
             default: false
@@ -1972,6 +1972,10 @@ components:
           type: string
           description: Nome da vitrine
           example: "Vitrine Principal"
+        published:
+          type: boolean
+          description: Indica se a vitrine está publicada
+          example: true
         order:
           type: integer
           nullable: true
@@ -1994,6 +1998,32 @@ components:
           type: string
           description: Nome do curso
           example: "Curso de JavaScript"
+        published:
+          type: boolean
+          description: Indica se o curso está publicado
+          example: true
+        order:
+          type: integer
+          nullable: true
+          description: Ordem de exibição
+          example: 1
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionData'
+          description: Lista de seções (apenas quando includeChildren=true)
+
+    SectionData:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID da seção
+          example: "section-123"
+        name:
+          type: string
+          description: Nome da seção
+          example: "Seção 1 - Introdução"
         order:
           type: integer
           nullable: true
@@ -2016,6 +2046,10 @@ components:
           type: string
           description: Nome do módulo
           example: "Módulo 1 - Fundamentos"
+        published:
+          type: boolean
+          description: Indica se o módulo está publicado
+          example: true
         order:
           type: integer
           nullable: true
@@ -2038,6 +2072,10 @@ components:
           type: string
           description: Nome da aula
           example: "Aula 1 - Introdução"
+        published:
+          type: boolean
+          description: Indica se a aula está publicada
+          example: true
         slug:
           type: string
           nullable: true
@@ -2081,6 +2119,12 @@ components:
       properties:
         module:
           $ref: '#/components/schemas/ModuleData'
+
+    SectionDetailResponse:
+      type: object
+      properties:
+        section:
+          $ref: '#/components/schemas/SectionData'
 
     LessonDetailResponse:
       type: object
