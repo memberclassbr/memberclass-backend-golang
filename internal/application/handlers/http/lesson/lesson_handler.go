@@ -39,7 +39,8 @@ func (h *LessonHandler) ProcessLesson(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get("x-internal-api-key")
 	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
 	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
+		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+		return
 	}
 
 	var req dto.ProcessLessonRequest
@@ -105,7 +106,8 @@ func (h *LessonHandler) ProcessAllPendingLessons(w http.ResponseWriter, r *http.
 	apiKey := r.Header.Get("x-internal-api-key")
 	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
 	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
+		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+		return
 	}
 
 	var req dto.ProcessAllRequest
@@ -158,7 +160,8 @@ func (h *LessonHandler) RegeneratePDF(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get("x-internal-api-key")
 	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
 	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
+		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+		return
 	}
 
 	// Extract lesson ID from Chi URL parameter
@@ -189,7 +192,8 @@ func (h *LessonHandler) GetLessonsPage(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get("x-internal-api-key")
 	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
 	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Não autorizado: token é obrigatório")
+		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+		return
 	}
 
 	lessonID := chi.URLParam(r, "lessonId")
