@@ -80,6 +80,176 @@ func (uc *StudentReportUseCase) GetStudentReport(ctx context.Context, req studen
 	return responseData, nil
 }
 
+func (uc *StudentReportUseCase) GetStudentsRanking(ctx context.Context, req student.GetStudentsRankingRequest, tenantID string) (*student2.StudentsRankingResponse, bool, error) {
+	if err := req.Validate(); err != nil {
+		return nil, false, err
+	}
+
+	start, end := uc.rankingPeriodBounds(req)
+	cacheKey := uc.buildRankingCacheKey(tenantID, req, start, end)
+
+	cachedData, err := uc.cache.Get(ctx, cacheKey)
+	if err == nil && cachedData != "" {
+		var cached student2.StudentsRankingResponse
+		if err := json.Unmarshal([]byte(cachedData), &cached); err == nil {
+			limit := req.Limit
+			if limit <= 0 {
+				limit = 50
+			}
+			if limit > 100 {
+				limit = 100
+			}
+			endIdx := (req.Page-1)*limit + limit
+			if len(cached.Rankings) >= endIdx || len(cached.Rankings) == int(cached.TotalStudents) {
+				uc.logger.Debug(fmt.Sprintf("Cache hit for key: %s", cacheKey))
+				return uc.paginateRankingResponse(&cached, req), true, nil
+			}
+		}
+	}
+
+	reqAll := req
+	reqAll.Page = 1
+	reqAll.Limit = 0
+	rows, total, err := uc.studentReportRepo.GetStudentsRanking(ctx, reqAll, start, end)
+	if err != nil {
+		return nil, false, err
+	}
+
+	rankings := make([]student2.StudentRankingEntry, 0, len(rows))
+	for i, row := range rows {
+		rankings = append(rankings, student2.StudentRankingEntry{
+			Position: i + 1,
+			Student: student2.StudentRankingInfo{
+				ID:      row.UserID,
+				Name:    row.Name,
+				Picture: row.Picture,
+				Email:   row.Email,
+			},
+			Metrics: student2.StudentRankingMetrics{
+				Logins:         row.Logins,
+				LessonsWatched: row.LessonsWatched,
+				Comments:       row.Comments,
+				Ratings:        row.Ratings,
+				AvgRating:      row.AvgRating,
+			},
+		})
+	}
+
+	fullResp := &student2.StudentsRankingResponse{
+		Period: student2.PeriodRange{
+			Start: start.Format(time.RFC3339),
+			End:   end.Format(time.RFC3339),
+		},
+		TotalStudents: total,
+		Rankings:      rankings,
+	}
+
+	responseJSON, err := json.Marshal(fullResp)
+	if err == nil {
+		ttl := 12 * time.Hour
+		if err := uc.cache.Set(ctx, cacheKey, string(responseJSON), ttl); err != nil {
+			uc.logger.Error(fmt.Sprintf("Error setting cache for key %s: %s", cacheKey, err.Error()))
+		}
+	}
+
+	return uc.paginateRankingResponse(fullResp, req), false, nil
+}
+
+func (uc *StudentReportUseCase) paginateRankingResponse(full *student2.StudentsRankingResponse, req student.GetStudentsRankingRequest) *student2.StudentsRankingResponse {
+	total := full.TotalStudents
+	limit := req.Limit
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	page := req.Page
+	if page < 1 {
+		page = 1
+	}
+	startIdx := (page - 1) * limit
+	endIdx := startIdx + limit
+	if startIdx >= len(full.Rankings) {
+		rankingsPage := []student2.StudentRankingEntry{}
+		totalPages := int(math.Ceil(float64(total) / float64(limit)))
+		pagination := dto.PaginationMeta{
+			Page:        page,
+			Limit:       limit,
+			TotalCount:  total,
+			TotalPages:  totalPages,
+			HasNextPage: page < totalPages,
+			HasPrevPage: page > 1,
+		}
+		return &student2.StudentsRankingResponse{
+			Period:        full.Period,
+			TotalStudents: total,
+			Rankings:      rankingsPage,
+			Pagination:    pagination,
+		}
+	}
+	if endIdx > len(full.Rankings) {
+		endIdx = len(full.Rankings)
+	}
+	rankingsPage := make([]student2.StudentRankingEntry, endIdx-startIdx)
+	copy(rankingsPage, full.Rankings[startIdx:endIdx])
+	for i := range rankingsPage {
+		rankingsPage[i].Position = startIdx + i + 1
+	}
+	totalPages := int(math.Ceil(float64(total) / float64(limit)))
+	pagination := dto.PaginationMeta{
+		Page:        page,
+		Limit:       limit,
+		TotalCount:  total,
+		TotalPages:  totalPages,
+		HasNextPage: page < totalPages,
+		HasPrevPage: page > 1,
+	}
+	return &student2.StudentsRankingResponse{
+		Period:        full.Period,
+		TotalStudents: total,
+		Rankings:      rankingsPage,
+		Pagination:    pagination,
+	}
+}
+
+func (uc *StudentReportUseCase) rankingPeriodBounds(req student.GetStudentsRankingRequest) (start, end time.Time) {
+	end = time.Now()
+	switch req.Period {
+	case student.PeriodWeek:
+		start = end.AddDate(0, 0, -7)
+	case student.PeriodMonth:
+		start = end.AddDate(0, 0, -30)
+	default:
+		start = *req.StartDate
+		end = *req.EndDate
+	}
+	return start, end
+}
+
+func (uc *StudentReportUseCase) buildRankingCacheKey(tenantID string, req student.GetStudentsRankingRequest, start, end time.Time) string {
+	startKey := start.Format(time.RFC3339)
+	endKey := end.Format(time.RFC3339)
+	if req.Period == student.PeriodWeek || req.Period == student.PeriodMonth {
+		endTrunc := end.Truncate(24 * time.Hour)
+		endKey = endTrunc.Format("2006-01-02")
+		if req.Period == student.PeriodMonth {
+			endKey = endTrunc.Format("2006-01")
+		}
+		startKey = endKey
+	}
+	cacheData := map[string]interface{}{
+		"tenantId": tenantID,
+		"period":   req.Period,
+		"metric":   req.Metric,
+		"start":    startKey,
+		"end":      endKey,
+	}
+	jsonData, _ := json.Marshal(cacheData)
+	hash := md5.Sum(jsonData)
+	return fmt.Sprintf("alunos_ranking:%s", hex.EncodeToString(hash[:]))
+}
+
 func (uc *StudentReportUseCase) buildCacheKey(tenantID string, req student.GetStudentReportRequest) string {
 	cacheData := map[string]interface{}{
 		"tenantId":  tenantID,

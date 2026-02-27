@@ -1244,6 +1244,93 @@ paths:
                 error: "Erro interno do servidor"
                 errorCode: "INTERNAL_ERROR"
 
+  /api/v1/admin/reports/students-ranking:
+    get:
+      tags:
+        - Admin
+        - Reports
+      summary: Ranking de alunos por engajamento
+      description: |
+        Retorna ranking de alunos (role member) do tenant por métricas de engajamento no período.
+        Métricas: logins (UserEvent type=login), aulas assistidas (Read), comentários (Comment), avaliações (Read.rating).
+        Autenticação: header mc-api-key. O tenant é identificado pela API key.
+        Cache: TTL 12 horas.
+      operationId: getStudentsRanking
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [week, month, custom]
+            default: month
+        - name: startDate
+          in: query
+          required: false
+          description: Obrigatório se period=custom (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          required: false
+          description: Obrigatório se period=custom (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: metric
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, logins, lessons, comments, ratings]
+            default: all
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        '200':
+          description: Ranking retornado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentsRankingResponse'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '500':
+          description: Erro interno do servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
   /api/v1/vitrine:
     get:
       tags:
@@ -1947,6 +2034,66 @@ components:
           format: date-time
           description: Data e hora em que a aula foi assistida
           example: "2024-01-18T14:00:00.000Z"
+
+    StudentsRankingResponse:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        totalStudents:
+          type: integer
+        rankings:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentRankingEntry'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    StudentRankingEntry:
+      type: object
+      properties:
+        position:
+          type: integer
+        student:
+          $ref: '#/components/schemas/StudentRankingInfo'
+        metrics:
+          $ref: '#/components/schemas/StudentRankingMetrics'
+
+    StudentRankingInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        picture:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+
+    StudentRankingMetrics:
+      type: object
+      properties:
+        logins:
+          type: integer
+        lessonsWatched:
+          type: integer
+        comments:
+          type: integer
+        ratings:
+          type: integer
+        avgRating:
+          type: number
+          format: float
 
     VitrineResponse:
       type: object

@@ -7,7 +7,9 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	student "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
+	responsestudent "github.com/memberclass-backend-golang/internal/domain/dto/response/student"
+
+	student "github.com/memberclass-backend-golang/internal/domain/dto/request/student"
 
 	time "time"
 )
@@ -25,25 +27,93 @@ func (_m *MockStudentReportRepository) EXPECT() *MockStudentReportRepository_Exp
 	return &MockStudentReportRepository_Expecter{mock: &_m.Mock}
 }
 
+// GetStudentsRanking provides a mock function with given fields: ctx, req, start, end
+func (_m *MockStudentReportRepository) GetStudentsRanking(ctx context.Context, req student.GetStudentsRankingRequest, start time.Time, end time.Time) ([]responsestudent.StudentRankingRow, int64, error) {
+	ret := _m.Called(ctx, req, start, end)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetStudentsRanking")
+	}
+
+	var r0 []responsestudent.StudentRankingRow
+	var r1 int64
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, student.GetStudentsRankingRequest, time.Time, time.Time) ([]responsestudent.StudentRankingRow, int64, error)); ok {
+		return rf(ctx, req, start, end)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, student.GetStudentsRankingRequest, time.Time, time.Time) []responsestudent.StudentRankingRow); ok {
+		r0 = rf(ctx, req, start, end)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]responsestudent.StudentRankingRow)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, student.GetStudentsRankingRequest, time.Time, time.Time) int64); ok {
+		r1 = rf(ctx, req, start, end)
+	} else {
+		r1 = ret.Get(1).(int64)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, student.GetStudentsRankingRequest, time.Time, time.Time) error); ok {
+		r2 = rf(ctx, req, start, end)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockStudentReportRepository_GetStudentsRanking_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetStudentsRanking'
+type MockStudentReportRepository_GetStudentsRanking_Call struct {
+	*mock.Call
+}
+
+// GetStudentsRanking is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req student.GetStudentsRankingRequest
+//   - start time.Time
+//   - end time.Time
+func (_e *MockStudentReportRepository_Expecter) GetStudentsRanking(ctx interface{}, req interface{}, start interface{}, end interface{}) *MockStudentReportRepository_GetStudentsRanking_Call {
+	return &MockStudentReportRepository_GetStudentsRanking_Call{Call: _e.mock.On("GetStudentsRanking", ctx, req, start, end)}
+}
+
+func (_c *MockStudentReportRepository_GetStudentsRanking_Call) Run(run func(ctx context.Context, req student.GetStudentsRankingRequest, start time.Time, end time.Time)) *MockStudentReportRepository_GetStudentsRanking_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(student.GetStudentsRankingRequest), args[2].(time.Time), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockStudentReportRepository_GetStudentsRanking_Call) Return(_a0 []responsestudent.StudentRankingRow, _a1 int64, _a2 error) *MockStudentReportRepository_GetStudentsRanking_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockStudentReportRepository_GetStudentsRanking_Call) RunAndReturn(run func(context.Context, student.GetStudentsRankingRequest, time.Time, time.Time) ([]responsestudent.StudentRankingRow, int64, error)) *MockStudentReportRepository_GetStudentsRanking_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetStudentsReport provides a mock function with given fields: ctx, tenantID, startDate, endDate, page, limit
-func (_m *MockStudentReportRepository) GetStudentsReport(ctx context.Context, tenantID string, startDate *time.Time, endDate *time.Time, page int, limit int) ([]student.StudentReport, int64, error) {
+func (_m *MockStudentReportRepository) GetStudentsReport(ctx context.Context, tenantID string, startDate *time.Time, endDate *time.Time, page int, limit int) ([]responsestudent.StudentReport, int64, error) {
 	ret := _m.Called(ctx, tenantID, startDate, endDate, page, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetStudentsReport")
 	}
 
-	var r0 []student.StudentReport
+	var r0 []responsestudent.StudentReport
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) ([]student.StudentReport, int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) ([]responsestudent.StudentReport, int64, error)); ok {
 		return rf(ctx, tenantID, startDate, endDate, page, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) []student.StudentReport); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, *time.Time, *time.Time, int, int) []responsestudent.StudentReport); ok {
 		r0 = rf(ctx, tenantID, startDate, endDate, page, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]student.StudentReport)
+			r0 = ret.Get(0).([]responsestudent.StudentReport)
 		}
 	}
 
@@ -85,12 +155,12 @@ func (_c *MockStudentReportRepository_GetStudentsReport_Call) Run(run func(ctx c
 	return _c
 }
 
-func (_c *MockStudentReportRepository_GetStudentsReport_Call) Return(_a0 []student.StudentReport, _a1 int64, _a2 error) *MockStudentReportRepository_GetStudentsReport_Call {
+func (_c *MockStudentReportRepository_GetStudentsReport_Call) Return(_a0 []responsestudent.StudentReport, _a1 int64, _a2 error) *MockStudentReportRepository_GetStudentsReport_Call {
 	_c.Call.Return(_a0, _a1, _a2)
 	return _c
 }
 
-func (_c *MockStudentReportRepository_GetStudentsReport_Call) RunAndReturn(run func(context.Context, string, *time.Time, *time.Time, int, int) ([]student.StudentReport, int64, error)) *MockStudentReportRepository_GetStudentsReport_Call {
+func (_c *MockStudentReportRepository_GetStudentsReport_Call) RunAndReturn(run func(context.Context, string, *time.Time, *time.Time, int, int) ([]responsestudent.StudentReport, int64, error)) *MockStudentReportRepository_GetStudentsReport_Call {
 	_c.Call.Return(run)
 	return _c
 }

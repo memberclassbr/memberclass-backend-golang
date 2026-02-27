@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	studentreq "github.com/memberclass-backend-golang/internal/domain/dto/request/student"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/student"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -23,6 +24,146 @@ func NewStudentReportRepository(db *sql.DB, log ports.Logger) student2.StudentRe
 	return &StudentReportRepository{
 		db:  db,
 		log: log,
+	}
+}
+
+const maxRankingLimit = 50000
+
+func (r *StudentReportRepository) GetStudentsRanking(ctx context.Context, req studentreq.GetStudentsRankingRequest, start, end time.Time) ([]student.StudentRankingRow, int64, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = maxRankingLimit
+	}
+	offset := (req.Page - 1) * limit
+	orderBy := r.rankingOrderBy(req.Metric)
+
+	query := fmt.Sprintf(`
+		WITH members AS (
+			SELECT uot."userId"
+			FROM "UsersOnTenants" uot
+			WHERE uot."tenantId" = $1 AND uot.role = 'member'
+		),
+		logins_cte AS (
+			SELECT ue."usersOnTenantsUserId" AS user_id, COUNT(*) AS cnt
+			FROM "UserEvent" ue
+			WHERE ue.type = 'login' AND ue."usersOnTenantsTenantId" = $1 AND ue."createdAt" BETWEEN $2 AND $3
+			GROUP BY ue."usersOnTenantsUserId"
+		),
+		lessons_cte AS (
+			SELECT r."userId" AS user_id, COUNT(*) AS cnt
+			FROM "Read" r
+			JOIN "Lesson" l ON r."lessonId" = l.id
+			JOIN "Module" m ON l."moduleId" = m.id
+			JOIN "Section" s ON m."sectionId" = s.id
+			JOIN "Course" c ON s."courseId" = c.id
+			JOIN "Vitrine" v ON c."vitrineId" = v.id
+			WHERE v."tenantId" = $1 AND r."createdAt" BETWEEN $2 AND $3
+			GROUP BY r."userId"
+		),
+		comments_cte AS (
+			SELECT c."userId" AS user_id, COUNT(*) AS cnt
+			FROM "Comment" c
+			JOIN "Lesson" l ON c."lessonId" = l.id
+			JOIN "Module" m ON l."moduleId" = m.id
+			JOIN "Section" s ON m."sectionId" = s.id
+			JOIN "Course" co ON s."courseId" = co.id
+			JOIN "Vitrine" v ON co."vitrineId" = v.id
+			WHERE v."tenantId" = $1 AND c."createdAt" BETWEEN $2 AND $3
+			GROUP BY c."userId"
+		),
+		ratings_cte AS (
+			SELECT r."userId" AS user_id, COUNT(*) AS cnt, AVG(r.rating) AS avg_rating
+			FROM "Read" r
+			JOIN "Lesson" l ON r."lessonId" = l.id
+			JOIN "Module" m ON l."moduleId" = m.id
+			JOIN "Section" s ON m."sectionId" = s.id
+			JOIN "Course" co ON s."courseId" = co.id
+			JOIN "Vitrine" v ON co."vitrineId" = v.id
+			WHERE v."tenantId" = $1 AND r.rating IS NOT NULL AND r."createdAt" BETWEEN $2 AND $3
+			GROUP BY r."userId"
+		)
+		SELECT u.id, u.email, COALESCE(uot.name, u.username, ''), u.image,
+			COALESCE(l.cnt, 0)::int, COALESCE(less.cnt, 0)::int, COALESCE(c.cnt, 0)::int, COALESCE(rat.cnt, 0)::int, COALESCE(rat.avg_rating, 0)::float8
+		FROM members m
+		JOIN "User" u ON u.id = m."userId"
+		JOIN "UsersOnTenants" uot ON uot."userId" = m."userId" AND uot."tenantId" = $1
+		LEFT JOIN logins_cte l ON l.user_id = m."userId"
+		LEFT JOIN lessons_cte less ON less.user_id = m."userId"
+		LEFT JOIN comments_cte c ON c.user_id = m."userId"
+		LEFT JOIN ratings_cte rat ON rat.user_id = m."userId"
+		%s
+		LIMIT $4 OFFSET $5
+	`, orderBy)
+
+	args := []interface{}{req.TenantID, start, end, limit, offset}
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		r.log.Error("Error getting students ranking: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error getting students ranking",
+		}
+	}
+	defer rows.Close()
+
+	var result []student.StudentRankingRow
+	for rows.Next() {
+		var row student.StudentRankingRow
+		var name string
+		var image sql.NullString
+		if err := rows.Scan(&row.UserID, &row.Email, &name, &image, &row.Logins, &row.LessonsWatched, &row.Comments, &row.Ratings, &row.AvgRating); err != nil {
+			r.log.Error("Error scanning ranking row: " + err.Error())
+			return nil, 0, &memberclasserrors.MemberClassError{
+				Code:    500,
+				Message: "error scanning ranking",
+			}
+		}
+		row.Name = name
+		if image.Valid {
+			row.Picture = &image.String
+		}
+		result = append(result, row)
+	}
+
+	if err = rows.Err(); err != nil {
+		r.log.Error("Error iterating ranking: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error iterating ranking",
+		}
+	}
+
+	countQuery := `
+		SELECT COUNT(*) FROM "UsersOnTenants" WHERE "tenantId" = $1 AND role = 'member'
+	`
+	var total int64
+	err = r.db.QueryRowContext(ctx, countQuery, req.TenantID).Scan(&total)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return result, 0, nil
+		}
+		r.log.Error("Error counting members: " + err.Error())
+		return nil, 0, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error counting members",
+		}
+	}
+
+	return result, total, nil
+}
+
+func (r *StudentReportRepository) rankingOrderBy(metric string) string {
+	switch metric {
+	case studentreq.MetricLogins:
+		return `ORDER BY COALESCE(l.cnt, 0) DESC`
+	case studentreq.MetricLessons:
+		return `ORDER BY COALESCE(less.cnt, 0) DESC`
+	case studentreq.MetricComments:
+		return `ORDER BY COALESCE(c.cnt, 0) DESC`
+	case studentreq.MetricRatings:
+		return `ORDER BY COALESCE(rat.cnt, 0) DESC`
+	default:
+		return `ORDER BY (COALESCE(l.cnt, 0) + COALESCE(less.cnt, 0) + COALESCE(c.cnt, 0) + COALESCE(rat.cnt, 0)) DESC`
 	}
 }
 
