@@ -91,8 +91,16 @@ func (h *LessonHandler) ProcessLesson(w http.ResponseWriter, r *http.Request) {
 		}
 		h.sendJSONResponse(w, http.StatusOK, response)
 
+	case "cleanup-failed":
+		result, err := h.useCase.CleanupPermanentlyFailedAssets(r.Context())
+		if err != nil {
+			h.handleUseCaseError(w, err)
+			return
+		}
+		h.sendJSONResponse(w, http.StatusOK, result)
+
 	default:
-		h.sendErrorResponse(w, http.StatusBadRequest, "Invalid action. Use: retry, cleanup, or lesson")
+		h.sendErrorResponse(w, http.StatusBadRequest, "Invalid action. Use: retry, cleanup, cleanup-failed, or lesson")
 	}
 }
 

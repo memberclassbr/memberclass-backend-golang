@@ -37,6 +37,19 @@ type RegeneratePDFResponse struct {
 	Status   string `json:"status"`
 }
 
+type CleanupFailedResult struct {
+	AssetID  string `json:"assetId"`
+	LessonID string `json:"lessonId"`
+	Error    string `json:"error"`
+}
+
+type CleanupFailedResponse struct {
+	Message string                `json:"message"`
+	Removed int                   `json:"removed"`
+	Total   int                   `json:"total"`
+	Results []CleanupFailedResult `json:"results"`
+}
+
 type ErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message,omitempty"`

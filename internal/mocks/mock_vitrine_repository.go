@@ -23,65 +23,6 @@ func (_m *MockVitrineRepository) EXPECT() *MockVitrineRepository_Expecter {
 	return &MockVitrineRepository_Expecter{mock: &_m.Mock}
 }
 
-// GetVitrinesByTenant provides a mock function with given fields: ctx, tenantID
-func (_m *MockVitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID string) (*vitrine.VitrineResponse, error) {
-	ret := _m.Called(ctx, tenantID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetVitrinesByTenant")
-	}
-
-	var r0 *vitrine.VitrineResponse
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) (*vitrine.VitrineResponse, error)); ok {
-		return rf(ctx, tenantID)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) *vitrine.VitrineResponse); ok {
-		r0 = rf(ctx, tenantID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*vitrine.VitrineResponse)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, tenantID)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockVitrineRepository_GetVitrinesByTenant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetVitrinesByTenant'
-type MockVitrineRepository_GetVitrinesByTenant_Call struct {
-	*mock.Call
-}
-
-// GetVitrinesByTenant is a helper method to define mock.On call
-//   - ctx context.Context
-//   - tenantID string
-func (_e *MockVitrineRepository_Expecter) GetVitrinesByTenant(ctx interface{}, tenantID interface{}) *MockVitrineRepository_GetVitrinesByTenant_Call {
-	return &MockVitrineRepository_GetVitrinesByTenant_Call{Call: _e.mock.On("GetVitrinesByTenant", ctx, tenantID)}
-}
-
-func (_c *MockVitrineRepository_GetVitrinesByTenant_Call) Run(run func(ctx context.Context, tenantID string)) *MockVitrineRepository_GetVitrinesByTenant_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
-	})
-	return _c
-}
-
-func (_c *MockVitrineRepository_GetVitrinesByTenant_Call) Return(_a0 *vitrine.VitrineResponse, _a1 error) *MockVitrineRepository_GetVitrinesByTenant_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockVitrineRepository_GetVitrinesByTenant_Call) RunAndReturn(run func(context.Context, string) (*vitrine.VitrineResponse, error)) *MockVitrineRepository_GetVitrinesByTenant_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GetCourseByID provides a mock function with given fields: ctx, courseID, tenantID, includeChildren
 func (_m *MockVitrineRepository) GetCourseByID(ctx context.Context, courseID string, tenantID string, includeChildren bool) (*vitrine.CourseDetailResponse, error) {
 	ret := _m.Called(ctx, courseID, tenantID, includeChildren)
@@ -321,6 +262,65 @@ func (_c *MockVitrineRepository_GetVitrineByID_Call) Return(_a0 *vitrine.Vitrine
 }
 
 func (_c *MockVitrineRepository_GetVitrineByID_Call) RunAndReturn(run func(context.Context, string, string, bool) (*vitrine.VitrineDetailResponse, error)) *MockVitrineRepository_GetVitrineByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetVitrinesByTenant provides a mock function with given fields: ctx, tenantID
+func (_m *MockVitrineRepository) GetVitrinesByTenant(ctx context.Context, tenantID string) (*vitrine.VitrineResponse, error) {
+	ret := _m.Called(ctx, tenantID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetVitrinesByTenant")
+	}
+
+	var r0 *vitrine.VitrineResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*vitrine.VitrineResponse, error)); ok {
+		return rf(ctx, tenantID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) *vitrine.VitrineResponse); ok {
+		r0 = rf(ctx, tenantID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*vitrine.VitrineResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, tenantID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockVitrineRepository_GetVitrinesByTenant_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetVitrinesByTenant'
+type MockVitrineRepository_GetVitrinesByTenant_Call struct {
+	*mock.Call
+}
+
+// GetVitrinesByTenant is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tenantID string
+func (_e *MockVitrineRepository_Expecter) GetVitrinesByTenant(ctx interface{}, tenantID interface{}) *MockVitrineRepository_GetVitrinesByTenant_Call {
+	return &MockVitrineRepository_GetVitrinesByTenant_Call{Call: _e.mock.On("GetVitrinesByTenant", ctx, tenantID)}
+}
+
+func (_c *MockVitrineRepository_GetVitrinesByTenant_Call) Run(run func(ctx context.Context, tenantID string)) *MockVitrineRepository_GetVitrinesByTenant_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockVitrineRepository_GetVitrinesByTenant_Call) Return(_a0 *vitrine.VitrineResponse, _a1 error) *MockVitrineRepository_GetVitrinesByTenant_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockVitrineRepository_GetVitrinesByTenant_Call) RunAndReturn(run func(context.Context, string) (*vitrine.VitrineResponse, error)) *MockVitrineRepository_GetVitrinesByTenant_Call {
 	_c.Call.Return(run)
 	return _c
 }

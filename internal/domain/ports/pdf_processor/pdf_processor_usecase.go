@@ -12,6 +12,7 @@ type PdfProcessorUseCase interface {
 	ProcessAllPendingLessons(ctx context.Context, limit int) (*dto.BatchProcessResult, error)
 	RetryFailedAssets(ctx context.Context) error
 	CleanupOrphanedPages(ctx context.Context) error
+	CleanupPermanentlyFailedAssets(ctx context.Context) (*dto.CleanupFailedResponse, error)
 	RegeneratePDF(ctx context.Context, lessonID string) error
 	ConvertPdfToImages(pdfURL string) ([]string, error)
 	CreateOrUpdatePDFAsset(ctx context.Context, lessonID, pdfURL string) (*lessons.LessonPDFAsset, error)

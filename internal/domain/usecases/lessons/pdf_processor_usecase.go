@@ -285,6 +285,82 @@ func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context) error {
 	return nil
 }
 
+// isPermanentError checks if the error message indicates a permanent failure that will never succeed on retry
+func isPermanentError(errorMsg *string) bool {
+	if errorMsg == nil {
+		return false
+	}
+	permanentPatterns := []string{
+		"EmptyFile",
+		"Damaged file",
+		"Filesize exceeded",
+		"TaskLimit",
+		"403 Forbidden",
+		"404 Not Found",
+		"UploadError",
+	}
+	for _, pattern := range permanentPatterns {
+		if strings.Contains(*errorMsg, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// CleanupPermanentlyFailedAssets - Mark permanently failed assets so they are not retried
+func (u *pdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context) (*dto.CleanupFailedResponse, error) {
+	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx)
+	if err != nil {
+		u.logger.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
+		return nil, &memberclasserrors.MemberClassError{
+			Code:    500,
+			Message: "error getting failed assets",
+		}
+	}
+
+	var results []dto.CleanupFailedResult
+	removed := 0
+
+	for _, asset := range failedAssets {
+		if !isPermanentError(asset.Error) {
+			continue
+		}
+
+		errorMsg := ""
+		if asset.Error != nil {
+			errorMsg = *asset.Error
+		}
+
+		// Delete orphaned pages first
+		err := u.lessonRepo.DeletePDFPagesByAssetID(ctx, asset.ID)
+		if err != nil {
+			u.logger.Error(fmt.Sprintf("Error deleting pages for asset %s: %v", asset.ID, err))
+		}
+
+		// Mark as permanently_failed
+		permanentErr := fmt.Sprintf("[permanently_failed] %s", errorMsg)
+		err = u.lessonRepo.UpdatePDFAssetStatus(ctx, asset.ID, "permanently_failed", nil, &permanentErr)
+		if err != nil {
+			u.logger.Error(fmt.Sprintf("Error updating asset %s to permanently_failed: %v", asset.ID, err))
+			continue
+		}
+
+		results = append(results, dto.CleanupFailedResult{
+			AssetID:  asset.ID,
+			LessonID: asset.LessonID,
+			Error:    errorMsg,
+		})
+		removed++
+	}
+
+	return &dto.CleanupFailedResponse{
+		Message: "Cleanup of permanently failed assets completed",
+		Removed: removed,
+		Total:   len(failedAssets),
+		Results: results,
+	}, nil
+}
+
 // CleanupOrphanedPages - Clean up orphaned PDF pages
 func (u *pdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) error {
 	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx)

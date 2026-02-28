@@ -42,6 +42,14 @@ func (m *MockPdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) erro
 	return args.Error(0)
 }
 
+func (m *MockPdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context) (*dto.CleanupFailedResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) != nil {
+		return args.Get(0).(*dto.CleanupFailedResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockPdfProcessorUseCase) RegeneratePDF(ctx context.Context, lessonID string) error {
 	args := m.Called(ctx, lessonID)
 	return args.Error(0)

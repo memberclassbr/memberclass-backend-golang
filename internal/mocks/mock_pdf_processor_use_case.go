@@ -70,6 +70,64 @@ func (_c *MockPdfProcessorUseCase_CleanupOrphanedPages_Call) RunAndReturn(run fu
 	return _c
 }
 
+// CleanupPermanentlyFailedAssets provides a mock function with given fields: ctx
+func (_m *MockPdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context) (*dto.CleanupFailedResponse, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CleanupPermanentlyFailedAssets")
+	}
+
+	var r0 *dto.CleanupFailedResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (*dto.CleanupFailedResponse, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) *dto.CleanupFailedResponse); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*dto.CleanupFailedResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CleanupPermanentlyFailedAssets'
+type MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call struct {
+	*mock.Call
+}
+
+// CleanupPermanentlyFailedAssets is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockPdfProcessorUseCase_Expecter) CleanupPermanentlyFailedAssets(ctx interface{}) *MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call {
+	return &MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call{Call: _e.mock.On("CleanupPermanentlyFailedAssets", ctx)}
+}
+
+func (_c *MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call) Run(run func(ctx context.Context)) *MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call) Return(_a0 *dto.CleanupFailedResponse, _a1 error) *MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call) RunAndReturn(run func(context.Context) (*dto.CleanupFailedResponse, error)) *MockPdfProcessorUseCase_CleanupPermanentlyFailedAssets_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ConvertPdfToImages provides a mock function with given fields: pdfURL
 func (_m *MockPdfProcessorUseCase) ConvertPdfToImages(pdfURL string) ([]string, error) {
 	ret := _m.Called(pdfURL)
