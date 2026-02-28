@@ -427,7 +427,7 @@ func TestIlovePdfService_GetToken_BlacklistedKey(t *testing.T) {
 	assert.Contains(t, err.Error(), "all API keys are blacklisted")
 }
 
-func TestIlovePdfService_GetToken_CreditsExhaustedError(t *testing.T) {
+func TestIlovePdfService_GetToken_CreditsExhaustedSingleKey(t *testing.T) {
 	mockLogger := &mocks.MockLogger{}
 	mockCache := &mocks.MockCache{}
 
@@ -437,19 +437,18 @@ func TestIlovePdfService_GetToken_CreditsExhaustedError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Mock cache to return that the key is not blacklisted initially
-	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
-	// Mock cache to set the blacklist when credits are exhausted
+	// First attempt: key not blacklisted
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil).Once()
+	// Blacklist the key
 	mockCache.EXPECT().Set(mock.Anything, "ilovepdf_blacklist:test-key", "exhausted", mock.AnythingOfType("time.Duration")).Return(nil)
-	// Mock logger to expect Warn call
+	// Second attempt: key now blacklisted, no more keys available
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(true, nil).Once()
+
 	mockLogger.EXPECT().Warn(mock.AnythingOfType("string")).Return()
 
 	service := &IlovePdfService{
 		apiKeys: []dto.ApiKeyInfo{
-			{
-				Key:      "test-key",
-				LastUsed: "",
-			},
+			{Key: "test-key"},
 		},
 		baseURL: server.URL,
 		log:     mockLogger,
@@ -460,7 +459,7 @@ func TestIlovePdfService_GetToken_CreditsExhaustedError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Empty(t, token)
-	assert.Contains(t, err.Error(), "authentication failed")
+	assert.Contains(t, err.Error(), "all API keys")
 }
 
 func TestIlovePdfService_IsCreditsExhaustedError(t *testing.T) {
@@ -480,12 +479,14 @@ func TestIlovePdfService_IsCreditsExhaustedError(t *testing.T) {
 		expected bool
 	}{
 		{"credits exhausted", true},
-		{"limit reached", true},
 		{"quota exceeded", true},
 		{"authentication failed", false},
 		{"network error", false},
 		{"Credits exhausted for this month", true},
-		{"API limit reached", true},
+		{"credit limit reached", true},
+		{"rate limit exceeded", true},
+		{"file size limit exceeded", false},
+		{"API limit reached", false},
 	}
 
 	for _, tc := range testCases {
@@ -520,6 +521,167 @@ func TestIlovePdfService_BlacklistKey(t *testing.T) {
 	err := service.blacklistKey("test-key")
 
 	assert.NoError(t, err)
+}
+
+func TestIlovePdfService_GetToken_RetryWithNextKeyOnCreditsExhausted(t *testing.T) {
+	mockLogger := &mocks.MockLogger{}
+	mockCache := &mocks.MockCache{}
+
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]string
+		json.NewDecoder(r.Body).Decode(&payload)
+
+		callCount++
+		if payload["public_key"] == "exhausted-key" {
+			// First key: credits exhausted
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("Credits exhausted for this month"))
+			return
+		}
+
+		// Second key: success
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(dto.AuthResponse{Token: "valid-token-from-key-2"})
+	}))
+	defer server.Close()
+
+	// Key 1 not blacklisted initially
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:exhausted-key").Return(false, nil).Once()
+	// Blacklist key 1 after credits error
+	mockCache.EXPECT().Set(mock.Anything, "ilovepdf_blacklist:exhausted-key", "exhausted", mock.AnythingOfType("time.Duration")).Return(nil)
+	// Key 1 now blacklisted on second getActiveKey call
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:exhausted-key").Return(true, nil).Once()
+	// Key 2 not blacklisted
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:good-key").Return(false, nil).Once()
+
+	mockLogger.EXPECT().Warn(mock.AnythingOfType("string")).Return()
+
+	service := &IlovePdfService{
+		apiKeys: []dto.ApiKeyInfo{
+			{Key: "exhausted-key"},
+			{Key: "good-key"},
+		},
+		baseURL: server.URL,
+		log:     mockLogger,
+		cache:   mockCache,
+	}
+
+	token, err := service.GetToken()
+
+	assert.NoError(t, err)
+	assert.Equal(t, "valid-token-from-key-2", token)
+	assert.Equal(t, 2, callCount, "should have made 2 auth attempts")
+}
+
+func TestIlovePdfService_GetToken_AllKeysExhausted(t *testing.T) {
+	mockLogger := &mocks.MockLogger{}
+	mockCache := &mocks.MockCache{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("Credits exhausted for this month"))
+	}))
+	defer server.Close()
+
+	// First attempt: key-1 not blacklisted
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:key-1").Return(false, nil).Once()
+	mockCache.EXPECT().Set(mock.Anything, "ilovepdf_blacklist:key-1", "exhausted", mock.AnythingOfType("time.Duration")).Return(nil)
+
+	// Second attempt: key-1 blacklisted, key-2 not blacklisted
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:key-1").Return(true, nil).Once()
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:key-2").Return(false, nil).Once()
+	mockCache.EXPECT().Set(mock.Anything, "ilovepdf_blacklist:key-2", "exhausted", mock.AnythingOfType("time.Duration")).Return(nil)
+
+	// Third attempt: both blacklisted
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:key-1").Return(true, nil).Once()
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:key-2").Return(true, nil).Once()
+
+	mockLogger.EXPECT().Warn(mock.AnythingOfType("string")).Return()
+
+	service := &IlovePdfService{
+		apiKeys: []dto.ApiKeyInfo{
+			{Key: "key-1"},
+			{Key: "key-2"},
+		},
+		baseURL: server.URL,
+		log:     mockLogger,
+		cache:   mockCache,
+	}
+
+	token, err := service.GetToken()
+
+	assert.Error(t, err)
+	assert.Empty(t, token)
+	assert.Contains(t, err.Error(), "all API keys")
+}
+
+func TestIlovePdfService_GetToken_SkipsAlreadyBlacklistedKey(t *testing.T) {
+	mockLogger := &mocks.MockLogger{}
+	mockCache := &mocks.MockCache{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]string
+		json.NewDecoder(r.Body).Decode(&payload)
+
+		assert.Equal(t, "good-key", payload["public_key"], "should skip blacklisted key and use good-key directly")
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(dto.AuthResponse{Token: "token-from-good-key"})
+	}))
+	defer server.Close()
+
+	// Key 1 already blacklisted
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:blacklisted-key").Return(true, nil)
+	// Key 2 not blacklisted
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:good-key").Return(false, nil)
+
+	service := &IlovePdfService{
+		apiKeys: []dto.ApiKeyInfo{
+			{Key: "blacklisted-key"},
+			{Key: "good-key"},
+		},
+		baseURL: server.URL,
+		log:     mockLogger,
+		cache:   mockCache,
+	}
+
+	token, err := service.GetToken()
+
+	assert.NoError(t, err)
+	assert.Equal(t, "token-from-good-key", token)
+}
+
+func TestIlovePdfService_GetToken_NonCreditErrorDoesNotRetry(t *testing.T) {
+	mockLogger := &mocks.MockLogger{}
+	mockCache := &mocks.MockCache{}
+
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal server error"))
+	}))
+	defer server.Close()
+
+	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:key-1").Return(false, nil)
+
+	service := &IlovePdfService{
+		apiKeys: []dto.ApiKeyInfo{
+			{Key: "key-1"},
+			{Key: "key-2"},
+		},
+		baseURL: server.URL,
+		log:     mockLogger,
+		cache:   mockCache,
+	}
+
+	token, err := service.GetToken()
+
+	assert.Error(t, err)
+	assert.Empty(t, token)
+	assert.Contains(t, err.Error(), "authentication failed")
+	assert.Equal(t, 1, callCount, "should NOT retry on non-credit errors")
 }
 
 func TestIlovePdfService_IsJPEGImage(t *testing.T) {

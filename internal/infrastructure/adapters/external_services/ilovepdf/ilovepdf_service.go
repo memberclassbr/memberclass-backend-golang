@@ -84,8 +84,8 @@ func (i *IlovePdfService) getActiveKey() (string, error) {
 
 	ctx := context.Background()
 
-	for _, keyInfo := range i.apiKeys {
-		blacklistKey := fmt.Sprintf("ilovepdf_blacklist:%s", keyInfo.Key)
+	for idx := range i.apiKeys {
+		blacklistKey := fmt.Sprintf("ilovepdf_blacklist:%s", i.apiKeys[idx].Key)
 
 		exists, err := i.cache.Exists(ctx, blacklistKey)
 		if err != nil {
@@ -94,8 +94,8 @@ func (i *IlovePdfService) getActiveKey() (string, error) {
 		}
 
 		if !exists {
-			keyInfo.LastUsed = time.Now().Format(time.RFC3339)
-			return keyInfo.Key, nil
+			i.apiKeys[idx].LastUsed = time.Now().Format(time.RFC3339)
+			return i.apiKeys[idx].Key, nil
 		}
 	}
 
@@ -128,22 +128,52 @@ func (i *IlovePdfService) isCreditsExhaustedError(err error) bool {
 
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "credits") ||
-		strings.Contains(errStr, "limit") ||
 		strings.Contains(errStr, "exhausted") ||
-		strings.Contains(errStr, "quota")
+		strings.Contains(errStr, "quota") ||
+		strings.Contains(errStr, "credit limit") ||
+		strings.Contains(errStr, "rate limit")
 }
 
-// GetToken - Get authentication token
+// GetToken - Get authentication token with automatic key rotation on credits exhaustion
 func (i *IlovePdfService) GetToken() (string, error) {
-	activeKey, err := i.getActiveKey()
-	if err != nil {
-		return "", fmt.Errorf("failed to get active API key: %w", err)
+	maxRetries := len(i.apiKeys)
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		activeKey, err := i.getActiveKey()
+		if err != nil {
+			if lastErr != nil {
+				return "", fmt.Errorf("failed to get active API key: %w (previous error: %v)", err, lastErr)
+			}
+			return "", fmt.Errorf("failed to get active API key: %w", err)
+		}
+
+		token, err := i.tryAuthenticate(activeKey)
+		if err == nil {
+			return token, nil
+		}
+
+		if i.isCreditsExhaustedError(err) {
+			if blacklistErr := i.blacklistKey(activeKey); blacklistErr != nil {
+				i.log.Warn(fmt.Sprintf("Failed to blacklist key: %v", blacklistErr))
+			}
+			i.log.Warn(fmt.Sprintf("Key credits exhausted, trying next key (attempt %d/%d)", attempt+1, maxRetries))
+			lastErr = err
+			continue
+		}
+
+		return "", err
 	}
 
+	return "", fmt.Errorf("all API keys exhausted: %v", lastErr)
+}
+
+// tryAuthenticate - Attempt authentication with a single key
+func (i *IlovePdfService) tryAuthenticate(apiKey string) (string, error) {
 	authURL := fmt.Sprintf("%s/auth", i.baseURL)
 
 	payload := map[string]string{
-		"public_key": activeKey,
+		"public_key": apiKey,
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -159,16 +189,7 @@ func (i *IlovePdfService) GetToken() (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		errorMsg := fmt.Sprintf("authentication failed: %s - %s", resp.Status, string(body))
-
-		// Check if it's a credits exhausted error
-		if i.isCreditsExhaustedError(fmt.Errorf("%s", errorMsg)) {
-			if blacklistErr := i.blacklistKey(activeKey); blacklistErr != nil {
-				i.log.Warn(fmt.Sprintf("Failed to blacklist key: %v", blacklistErr))
-			}
-		}
-
-		return "", fmt.Errorf("%s", errorMsg)
+		return "", fmt.Errorf("authentication failed: %s - %s", resp.Status, string(body))
 	}
 
 	var result dto.AuthResponse
