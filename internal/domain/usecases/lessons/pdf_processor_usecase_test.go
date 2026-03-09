@@ -228,6 +228,18 @@ func (m *mockPdfService) CreateTask(token string) (*dto.TaskResponse, error) {
 	}, nil
 }
 
+func (m *mockPdfService) GetTokenAndCreateTask() (string, *dto.TaskResponse, error) {
+	token, err := m.GetToken()
+	if err != nil {
+		return "", nil, err
+	}
+	task, err := m.CreateTask(token)
+	if err != nil {
+		return "", nil, err
+	}
+	return token, task, nil
+}
+
 func (m *mockPdfService) AddFile(token, taskID, pdfURL, server string) (string, error) {
 	return "mock-filename", nil
 }
@@ -874,6 +886,10 @@ func (m *mockPdfServiceWithError) GetToken() (string, error) {
 
 func (m *mockPdfServiceWithError) CreateTask(token string) (*dto.TaskResponse, error) {
 	return nil, assert.AnError
+}
+
+func (m *mockPdfServiceWithError) GetTokenAndCreateTask() (string, *dto.TaskResponse, error) {
+	return "", nil, assert.AnError
 }
 
 func (m *mockPdfServiceWithError) AddFile(token, taskID, pdfURL, server string) (string, error) {

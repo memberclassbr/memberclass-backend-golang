@@ -157,15 +157,15 @@ func (i *IlovePdfService) GetToken() (string, error) {
 			if blacklistErr := i.blacklistKey(activeKey); blacklistErr != nil {
 				i.log.Warn(fmt.Sprintf("Failed to blacklist key: %v", blacklistErr))
 			}
-			i.log.Warn(fmt.Sprintf("Key credits exhausted, trying next key (attempt %d/%d)", attempt+1, maxRetries))
+			i.log.Warn(fmt.Sprintf("Key [%s] credits exhausted at auth, trying next key (attempt %d/%d). Error: %v", i.keyPreview(activeKey), attempt+1, maxRetries, err))
 			lastErr = err
 			continue
 		}
 
-		return "", err
+		return "", fmt.Errorf("auth failed for key [%s]: %w", i.keyPreview(activeKey), err)
 	}
 
-	return "", fmt.Errorf("all API keys exhausted: %v", lastErr)
+	return "", fmt.Errorf("all API keys exhausted after %d attempts: %v", maxRetries, lastErr)
 }
 
 // tryAuthenticate - Attempt authentication with a single key
@@ -181,7 +181,14 @@ func (i *IlovePdfService) tryAuthenticate(apiKey string) (string, error) {
 		return "", fmt.Errorf("failed to marshal auth payload: %w", err)
 	}
 
-	resp, err := http.Post(authURL, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", authURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create auth request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to authenticate: %w", err)
 	}
@@ -198,6 +205,62 @@ func (i *IlovePdfService) tryAuthenticate(apiKey string) (string, error) {
 	}
 
 	return result.Token, nil
+}
+
+// keyPreview returns a safe preview of an API key for logging (first 20 chars)
+func (i *IlovePdfService) keyPreview(key string) string {
+	if len(key) > 20 {
+		return key[:20] + "..."
+	}
+	return key
+}
+
+// GetTokenAndCreateTask - Get token and create task with automatic key rotation
+// This handles the case where auth succeeds but task creation fails due to exhausted credits
+func (i *IlovePdfService) GetTokenAndCreateTask() (string, *dto.TaskResponse, error) {
+	maxRetries := len(i.apiKeys)
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		activeKey, err := i.getActiveKey()
+		if err != nil {
+			if lastErr != nil {
+				return "", nil, fmt.Errorf("failed to get active API key: %w (previous error: %v)", err, lastErr)
+			}
+			return "", nil, fmt.Errorf("failed to get active API key: %w", err)
+		}
+
+		token, err := i.tryAuthenticate(activeKey)
+		if err != nil {
+			if i.isCreditsExhaustedError(err) {
+				if blacklistErr := i.blacklistKey(activeKey); blacklistErr != nil {
+					i.log.Warn(fmt.Sprintf("Failed to blacklist key: %v", blacklistErr))
+				}
+				i.log.Warn(fmt.Sprintf("Key [%s] credits exhausted at auth, trying next key (attempt %d/%d). Error: %v", i.keyPreview(activeKey), attempt+1, maxRetries, err))
+				lastErr = err
+				continue
+			}
+			return "", nil, fmt.Errorf("auth failed for key [%s]: %w", i.keyPreview(activeKey), err)
+		}
+
+		task, err := i.CreateTask(token)
+		if err != nil {
+			if i.isCreditsExhaustedError(err) {
+				if blacklistErr := i.blacklistKey(activeKey); blacklistErr != nil {
+					i.log.Warn(fmt.Sprintf("Failed to blacklist key: %v", blacklistErr))
+				}
+				i.log.Warn(fmt.Sprintf("Key [%s] credits exhausted at task creation, trying next key (attempt %d/%d). Error: %v", i.keyPreview(activeKey), attempt+1, maxRetries, err))
+				lastErr = err
+				continue
+			}
+			return "", nil, fmt.Errorf("create task failed for key [%s]: %w", i.keyPreview(activeKey), err)
+		}
+
+		i.log.Info(fmt.Sprintf("Successfully authenticated and created task with key [%s]", i.keyPreview(activeKey)))
+		return token, task, nil
+	}
+
+	return "", nil, fmt.Errorf("all API keys exhausted after %d attempts: %v", maxRetries, lastErr)
 }
 
 // CreateTask - Create new task

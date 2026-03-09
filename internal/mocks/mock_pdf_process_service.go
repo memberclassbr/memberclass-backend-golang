@@ -255,6 +255,70 @@ func (_c *MockPdfProcessService_ExtractImagesFromZip_Call) RunAndReturn(run func
 	return _c
 }
 
+// GetTokenAndCreateTask provides a mock function with no fields
+func (_m *MockPdfProcessService) GetTokenAndCreateTask() (string, *dto.TaskResponse, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTokenAndCreateTask")
+	}
+
+	var r0 string
+	var r1 *dto.TaskResponse
+	var r2 error
+	if rf, ok := ret.Get(0).(func() (string, *dto.TaskResponse, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func() *dto.TaskResponse); ok {
+		r1 = rf()
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*dto.TaskResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(2).(func() error); ok {
+		r2 = rf()
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockPdfProcessService_GetTokenAndCreateTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTokenAndCreateTask'
+type MockPdfProcessService_GetTokenAndCreateTask_Call struct {
+	*mock.Call
+}
+
+// GetTokenAndCreateTask is a helper method to define mock.On call
+func (_e *MockPdfProcessService_Expecter) GetTokenAndCreateTask() *MockPdfProcessService_GetTokenAndCreateTask_Call {
+	return &MockPdfProcessService_GetTokenAndCreateTask_Call{Call: _e.mock.On("GetTokenAndCreateTask")}
+}
+
+func (_c *MockPdfProcessService_GetTokenAndCreateTask_Call) Run(run func()) *MockPdfProcessService_GetTokenAndCreateTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockPdfProcessService_GetTokenAndCreateTask_Call) Return(_a0 string, _a1 *dto.TaskResponse, _a2 error) *MockPdfProcessService_GetTokenAndCreateTask_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockPdfProcessService_GetTokenAndCreateTask_Call) RunAndReturn(run func() (string, *dto.TaskResponse, error)) *MockPdfProcessService_GetTokenAndCreateTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetToken provides a mock function with no fields
 func (_m *MockPdfProcessService) GetToken() (string, error) {
 	ret := _m.Called()

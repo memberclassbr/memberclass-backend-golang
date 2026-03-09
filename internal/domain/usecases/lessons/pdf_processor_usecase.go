@@ -562,37 +562,31 @@ func (u *pdfProcessorUseCase) RegeneratePDF(ctx context.Context, lessonID string
 
 // ConvertPdfToImages - Complete PDF to images conversion flow
 func (u *pdfProcessorUseCase) ConvertPdfToImages(pdfURL string) ([]string, error) {
-	// 1. Get authentication token
-	token, err := u.pdfService.GetToken()
+	// 1. Get authentication token and create task (with automatic key rotation)
+	token, task, err := u.pdfService.GetTokenAndCreateTask()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get token: %w", err)
+		return nil, fmt.Errorf("failed to get token and create task: %w", err)
 	}
 
-	// 2. Create task
-	task, err := u.pdfService.CreateTask(token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create task: %w", err)
-	}
-
-	// 3. Add file
+	// 2. Add file
 	serverFilename, err := u.pdfService.AddFile(token, task.Task, pdfURL, task.Server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add file: %w", err)
 	}
 
-	// 4. Process task
+	// 3. Process task
 	err = u.pdfService.ProcessTask(token, task.Task, serverFilename, task.Server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process task: %w", err)
 	}
 
-	// 5. Download result
+	// 4. Download result
 	zipData, err := u.pdfService.DownloadTask(token, task.Task, task.Server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download task: %w", err)
 	}
 
-	// 6. Extract images
+	// 5. Extract images
 	images, err := u.pdfService.ExtractImagesFromZip(zipData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract images: %w", err)
