@@ -1043,12 +1043,12 @@ func TestLessonRepository_GetFailedPDFAssets_Success(t *testing.T) {
 	)
 
 	mockDB.ExpectQuery(`SELECT id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt"
-		FROM "LessonPdfAsset" 
+		FROM "LessonPdfAsset"
 		WHERE status IN \('failed', 'partial'\)
 		ORDER BY "updatedAt" ASC`).
 		WillReturnRows(rows)
 
-	result, err := repo.GetFailedPDFAssets(context.Background())
+	result, err := repo.GetFailedPDFAssets(context.Background(), 0)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -1069,12 +1069,12 @@ func TestLessonRepository_GetFailedPDFAssets_DatabaseError(t *testing.T) {
 	repo := &LessonRepository{db: db, log: mockLogger}
 
 	mockDB.ExpectQuery(`SELECT id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt"
-		FROM "LessonPdfAsset" 
+		FROM "LessonPdfAsset"
 		WHERE status IN \('failed', 'partial'\)
 		ORDER BY "updatedAt" ASC`).
 		WillReturnError(errors.New("database error"))
 
-	result, err := repo.GetFailedPDFAssets(context.Background())
+	result, err := repo.GetFailedPDFAssets(context.Background(), 0)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -1098,12 +1098,12 @@ func TestLessonRepository_GetFailedPDFAssets_ScanError(t *testing.T) {
 	).RowError(0, errors.New("scan error"))
 
 	mockDB.ExpectQuery(`SELECT id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt"
-		FROM "LessonPdfAsset" 
+		FROM "LessonPdfAsset"
 		WHERE status IN \('failed', 'partial'\)
 		ORDER BY "updatedAt" ASC`).
 		WillReturnRows(rows)
 
-	result, err := repo.GetFailedPDFAssets(context.Background())
+	result, err := repo.GetFailedPDFAssets(context.Background(), 0)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
@@ -1127,12 +1127,12 @@ func TestLessonRepository_GetFailedPDFAssets_RowsError(t *testing.T) {
 	).CloseError(errors.New("rows error"))
 
 	mockDB.ExpectQuery(`SELECT id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt"
-		FROM "LessonPdfAsset" 
+		FROM "LessonPdfAsset"
 		WHERE status IN \('failed', 'partial'\)
 		ORDER BY "updatedAt" ASC`).
 		WillReturnRows(rows)
 
-	result, err := repo.GetFailedPDFAssets(context.Background())
+	result, err := repo.GetFailedPDFAssets(context.Background(), 0)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

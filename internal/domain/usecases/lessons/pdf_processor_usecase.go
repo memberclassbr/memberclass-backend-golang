@@ -215,26 +215,33 @@ func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limi
 }
 
 // RetryFailedAssets - Retry processing failed PDF assets
-func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context) error {
-	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx)
+func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit int) (*dto.BatchProcessResult, error) {
+	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx, limit)
 	if err != nil {
 		u.logger.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
-		return &memberclasserrors.MemberClassError{
+		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error getting failed assets",
 		}
 	}
 
 	if len(failedAssets) == 0 {
-		return nil
+		return &dto.BatchProcessResult{
+			Processed: 0,
+			Total:     0,
+			Results:   []dto.ProcessResult{},
+		}, nil
 	}
 
 	// Retry assets concurrently using worker pool
 	const maxWorkers = 3
 	jobChan := make(chan lessons.LessonPDFAsset, len(failedAssets))
-	resultChan := make(chan error, len(failedAssets))
+	resultChan := make(chan ProcessingResult, len(failedAssets))
 
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	results := make([]dto.ProcessResult, 0, len(failedAssets))
+	processed := 0
 
 	// Start workers
 	for i := 0; i < maxWorkers; i++ {
@@ -246,9 +253,9 @@ func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context) error {
 				case <-ctx.Done():
 					return
 				default:
-					_, err := u.ProcessLesson(ctx, asset.LessonID)
+					result, err := u.ProcessLesson(ctx, asset.LessonID)
 					select {
-					case resultChan <- err:
+					case resultChan <- ProcessingResult{LessonID: asset.LessonID, Result: result, Error: err}:
 					case <-ctx.Done():
 						return
 					}
@@ -276,13 +283,28 @@ func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context) error {
 	}()
 
 	// Process results
-	for err := range resultChan {
-		if err != nil {
-			u.logger.Error(fmt.Sprintf("Failed to retry asset: %v", err))
+	for result := range resultChan {
+		mu.Lock()
+		if result.Error != nil {
+			u.logger.Error(fmt.Sprintf("Failed to retry asset %s: %v", result.LessonID, result.Error))
+			results = append(results, dto.ProcessResult{
+				Success: false,
+				Error:   result.Error.Error(),
+			})
+		} else {
+			results = append(results, *result.Result)
+			if result.Result.Success {
+				processed++
+			}
 		}
+		mu.Unlock()
 	}
 
-	return nil
+	return &dto.BatchProcessResult{
+		Processed: processed,
+		Total:     len(failedAssets),
+		Results:   results,
+	}, nil
 }
 
 // isPermanentError checks if the error message indicates a permanent failure that will never succeed on retry
@@ -309,7 +331,7 @@ func isPermanentError(errorMsg *string) bool {
 
 // CleanupPermanentlyFailedAssets - Mark permanently failed assets so they are not retried
 func (u *pdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context) (*dto.CleanupFailedResponse, error) {
-	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx)
+	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx, 0)
 	if err != nil {
 		u.logger.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
 		return nil, &memberclasserrors.MemberClassError{
@@ -363,7 +385,7 @@ func (u *pdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context
 
 // CleanupOrphanedPages - Clean up orphaned PDF pages
 func (u *pdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) error {
-	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx)
+	failedAssets, err := u.lessonRepo.GetFailedPDFAssets(ctx, 0)
 	if err != nil {
 		u.logger.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
 		return &memberclasserrors.MemberClassError{

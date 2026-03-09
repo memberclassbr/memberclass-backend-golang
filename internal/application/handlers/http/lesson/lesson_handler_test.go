@@ -32,9 +32,9 @@ func (m *MockPdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, 
 	return args.Get(0).(*dto.BatchProcessResult), args.Error(1)
 }
 
-func (m *MockPdfProcessorUseCase) RetryFailedAssets(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
+func (m *MockPdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit int) (*dto.BatchProcessResult, error) {
+	args := m.Called(ctx, limit)
+	return args.Get(0).(*dto.BatchProcessResult), args.Error(1)
 }
 
 func (m *MockPdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) error {

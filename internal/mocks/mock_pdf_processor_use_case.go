@@ -529,22 +529,26 @@ func (_c *MockPdfProcessorUseCase_RegeneratePDF_Call) RunAndReturn(run func(cont
 	return _c
 }
 
-// RetryFailedAssets provides a mock function with given fields: ctx
-func (_m *MockPdfProcessorUseCase) RetryFailedAssets(ctx context.Context) error {
-	ret := _m.Called(ctx)
+// RetryFailedAssets provides a mock function with given fields: ctx, limit
+func (_m *MockPdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit int) (*dto.BatchProcessResult, error) {
+	ret := _m.Called(ctx, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for RetryFailedAssets")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
-		r0 = rf(ctx)
+	var r0 *dto.BatchProcessResult
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int) (*dto.BatchProcessResult, error)); ok {
+		r0, r1 = rf(ctx, limit)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*dto.BatchProcessResult)
+		}
+		r1 = ret.Error(1)
 	}
 
-	return r0
+	return r0, r1
 }
 
 // MockPdfProcessorUseCase_RetryFailedAssets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RetryFailedAssets'
@@ -554,23 +558,24 @@ type MockPdfProcessorUseCase_RetryFailedAssets_Call struct {
 
 // RetryFailedAssets is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockPdfProcessorUseCase_Expecter) RetryFailedAssets(ctx interface{}) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
-	return &MockPdfProcessorUseCase_RetryFailedAssets_Call{Call: _e.mock.On("RetryFailedAssets", ctx)}
+//   - limit int
+func (_e *MockPdfProcessorUseCase_Expecter) RetryFailedAssets(ctx interface{}, limit interface{}) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
+	return &MockPdfProcessorUseCase_RetryFailedAssets_Call{Call: _e.mock.On("RetryFailedAssets", ctx, limit)}
 }
 
-func (_c *MockPdfProcessorUseCase_RetryFailedAssets_Call) Run(run func(ctx context.Context)) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
+func (_c *MockPdfProcessorUseCase_RetryFailedAssets_Call) Run(run func(ctx context.Context, limit int)) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(int))
 	})
 	return _c
 }
 
-func (_c *MockPdfProcessorUseCase_RetryFailedAssets_Call) Return(_a0 error) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
-	_c.Call.Return(_a0)
+func (_c *MockPdfProcessorUseCase_RetryFailedAssets_Call) Return(_a0 *dto.BatchProcessResult, _a1 error) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockPdfProcessorUseCase_RetryFailedAssets_Call) RunAndReturn(run func(context.Context) error) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
+func (_c *MockPdfProcessorUseCase_RetryFailedAssets_Call) RunAndReturn(run func(context.Context, int) (*dto.BatchProcessResult, error)) *MockPdfProcessorUseCase_RetryFailedAssets_Call {
 	_c.Call.Return(run)
 	return _c
 }

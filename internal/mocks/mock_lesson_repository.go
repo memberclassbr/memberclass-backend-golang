@@ -476,9 +476,9 @@ func (_c *MockLessonRepository_GetByIDWithTenant_Call) RunAndReturn(run func(con
 	return _c
 }
 
-// GetFailedPDFAssets provides a mock function with given fields: ctx
-func (_m *MockLessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*lessons.LessonPDFAsset, error) {
-	ret := _m.Called(ctx)
+// GetFailedPDFAssets provides a mock function with given fields: ctx, limit
+func (_m *MockLessonRepository) GetFailedPDFAssets(ctx context.Context, limit int) ([]*lessons.LessonPDFAsset, error) {
+	ret := _m.Called(ctx, limit)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetFailedPDFAssets")
@@ -486,19 +486,19 @@ func (_m *MockLessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*less
 
 	var r0 []*lessons.LessonPDFAsset
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]*lessons.LessonPDFAsset, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, int) ([]*lessons.LessonPDFAsset, error)); ok {
+		return rf(ctx, limit)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []*lessons.LessonPDFAsset); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, int) []*lessons.LessonPDFAsset); ok {
+		r0 = rf(ctx, limit)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*lessons.LessonPDFAsset)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, limit)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -513,13 +513,14 @@ type MockLessonRepository_GetFailedPDFAssets_Call struct {
 
 // GetFailedPDFAssets is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockLessonRepository_Expecter) GetFailedPDFAssets(ctx interface{}) *MockLessonRepository_GetFailedPDFAssets_Call {
-	return &MockLessonRepository_GetFailedPDFAssets_Call{Call: _e.mock.On("GetFailedPDFAssets", ctx)}
+//   - limit int
+func (_e *MockLessonRepository_Expecter) GetFailedPDFAssets(ctx interface{}, limit interface{}) *MockLessonRepository_GetFailedPDFAssets_Call {
+	return &MockLessonRepository_GetFailedPDFAssets_Call{Call: _e.mock.On("GetFailedPDFAssets", ctx, limit)}
 }
 
-func (_c *MockLessonRepository_GetFailedPDFAssets_Call) Run(run func(ctx context.Context)) *MockLessonRepository_GetFailedPDFAssets_Call {
+func (_c *MockLessonRepository_GetFailedPDFAssets_Call) Run(run func(ctx context.Context, limit int)) *MockLessonRepository_GetFailedPDFAssets_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(int))
 	})
 	return _c
 }
@@ -529,7 +530,7 @@ func (_c *MockLessonRepository_GetFailedPDFAssets_Call) Return(_a0 []*lessons.Le
 	return _c
 }
 
-func (_c *MockLessonRepository_GetFailedPDFAssets_Call) RunAndReturn(run func(context.Context) ([]*lessons.LessonPDFAsset, error)) *MockLessonRepository_GetFailedPDFAssets_Call {
+func (_c *MockLessonRepository_GetFailedPDFAssets_Call) RunAndReturn(run func(context.Context, int) ([]*lessons.LessonPDFAsset, error)) *MockLessonRepository_GetFailedPDFAssets_Call {
 	_c.Call.Return(run)
 	return _c
 }

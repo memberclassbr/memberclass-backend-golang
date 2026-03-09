@@ -10,7 +10,7 @@ import (
 type PdfProcessorUseCase interface {
 	ProcessLesson(ctx context.Context, lessonID string) (*dto.ProcessResult, error)
 	ProcessAllPendingLessons(ctx context.Context, limit int) (*dto.BatchProcessResult, error)
-	RetryFailedAssets(ctx context.Context) error
+	RetryFailedAssets(ctx context.Context, limit int) (*dto.BatchProcessResult, error)
 	CleanupOrphanedPages(ctx context.Context) error
 	CleanupPermanentlyFailedAssets(ctx context.Context) (*dto.CleanupFailedResponse, error)
 	RegeneratePDF(ctx context.Context, lessonID string) error

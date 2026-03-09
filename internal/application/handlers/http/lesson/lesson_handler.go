@@ -68,14 +68,31 @@ func (h *LessonHandler) ProcessLesson(w http.ResponseWriter, r *http.Request) {
 		h.sendJSONResponse(w, http.StatusOK, response)
 
 	case "retry":
-		err := h.useCase.RetryFailedAssets(r.Context())
+		limit := 0
+		if req.Limit != nil {
+			limit = *req.Limit
+		}
+		result, err := h.useCase.RetryFailedAssets(r.Context(), limit)
 		if err != nil {
 			h.handleUseCaseError(w, err)
 			return
 		}
-		response := dto.ProcessLessonResponse{
-			Message: "Failed assets retry completed",
-			Action:  "retry",
+		results := make([]dto.ProcessLessonResult, len(result.Results))
+		for i, res := range result.Results {
+			results[i] = dto.ProcessLessonResult{
+				Success:        res.Success,
+				TotalPages:     res.TotalPages,
+				ProcessedPages: res.ProcessedPages,
+				Error:          res.Error,
+			}
+		}
+		response := dto.ProcessAllResponse{
+			Message:   "Failed assets retry completed",
+			Processed: result.Processed,
+			Total:     result.Total,
+			Limit:     req.Limit,
+			Success:   result.Processed > 0,
+			Results:   results,
 		}
 		h.sendJSONResponse(w, http.StatusOK, response)
 

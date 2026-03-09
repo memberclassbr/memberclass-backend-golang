@@ -3,6 +3,7 @@ package dto
 type ProcessLessonRequest struct {
 	Action   string `json:"action" validate:"required"`
 	LessonID string `json:"lessonId,omitempty"`
+	Limit    *int   `json:"limit,omitempty"`
 }
 
 type ProcessAllRequest struct {

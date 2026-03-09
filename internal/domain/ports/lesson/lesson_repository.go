@@ -19,7 +19,7 @@ type LessonRepository interface {
 	CreatePDFAsset(ctx context.Context, asset *lessons.LessonPDFAsset) error
 	UpdatePDFAsset(ctx context.Context, asset *lessons.LessonPDFAsset) error
 	UpdatePDFAssetStatus(ctx context.Context, assetID, status string, totalPages *int, errorMsg *string) error
-	GetFailedPDFAssets(ctx context.Context) ([]*lessons.LessonPDFAsset, error)
+	GetFailedPDFAssets(ctx context.Context, limit int) ([]*lessons.LessonPDFAsset, error)
 
 	CreatePDFPage(ctx context.Context, page *lessons.LessonPDFPage) error
 	GetPDFPageByAssetAndNumber(ctx context.Context, assetID string, pageNumber int) (*lessons.LessonPDFPage, error)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -429,11 +430,15 @@ func (l *LessonRepository) UpdatePDFAssetStatus(ctx context.Context, assetID, st
 }
 
 // GetFailedPDFAssets - Get failed PDF assets for retry
-func (l *LessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*lessonsentities.LessonPDFAsset, error) {
+func (l *LessonRepository) GetFailedPDFAssets(ctx context.Context, limit int) ([]*lessonsentities.LessonPDFAsset, error) {
 	query := `SELECT id, "lessonId", "sourcePdfUrl", "totalPages", status, error, "createdAt", "updatedAt"
-		FROM "LessonPdfAsset" 
+		FROM "LessonPdfAsset"
 		WHERE status IN ('failed', 'partial')
 		ORDER BY "updatedAt" ASC`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
 
 	rows, err := l.db.QueryContext(ctx, query)
 	if err != nil {

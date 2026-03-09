@@ -126,7 +126,7 @@ func (m *mockLessonRepository) UpdatePDFAssetStatus(ctx context.Context, assetID
 	return nil
 }
 
-func (m *mockLessonRepository) GetFailedPDFAssets(ctx context.Context) ([]*lessons.LessonPDFAsset, error) {
+func (m *mockLessonRepository) GetFailedPDFAssets(ctx context.Context, limit int) ([]*lessons.LessonPDFAsset, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	var failed []*lessons.LessonPDFAsset
@@ -662,9 +662,11 @@ func TestRetryFailedAssets_NoFailedAssets(t *testing.T) {
 		logger:         logger,
 	}
 
-	err := useCase.RetryFailedAssets(context.Background())
+	result, err := useCase.RetryFailedAssets(context.Background(), 0)
 
 	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 0, result.Total)
 }
 
 func TestCleanupOrphanedPages_Success(t *testing.T) {
@@ -735,9 +737,10 @@ func TestRetryFailedAssets_WithFailedAssets(t *testing.T) {
 		logger:         logger,
 	}
 
-	err := useCase.RetryFailedAssets(context.Background())
+	result, err := useCase.RetryFailedAssets(context.Background(), 0)
 
 	assert.NoError(t, err)
+	assert.NotNil(t, result)
 }
 
 func TestCleanupOrphanedPages_WithOrphanedPages(t *testing.T) {
@@ -1181,7 +1184,7 @@ func TestRetryFailedAssets_RepositoryError(t *testing.T) {
 		logger:         logger,
 	}
 
-	err := useCase.RetryFailedAssets(context.Background())
+	_, err := useCase.RetryFailedAssets(context.Background(), 0)
 
 	assert.Error(t, err)
 }
@@ -1453,7 +1456,7 @@ func (m *mockLessonRepositoryWithError) UpdatePDFAssetStatus(ctx context.Context
 	return assert.AnError
 }
 
-func (m *mockLessonRepositoryWithError) GetFailedPDFAssets(ctx context.Context) ([]*lessons.LessonPDFAsset, error) {
+func (m *mockLessonRepositoryWithError) GetFailedPDFAssets(ctx context.Context, limit int) ([]*lessons.LessonPDFAsset, error) {
 	return nil, assert.AnError
 }
 
