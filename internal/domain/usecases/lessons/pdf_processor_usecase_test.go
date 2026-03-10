@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// --- Mock Lesson Repository ---
+
 type mockLessonRepository struct {
 	lessons           map[string]*lessons.Lesson
 	pdfAssets         map[string]*lessons.LessonPDFAsset
@@ -25,17 +27,14 @@ type mockLessonRepository struct {
 }
 
 func (m *mockLessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]lesson2.AILessonWithHierarchy, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
 func (m *mockLessonRepository) GetByIDWithTenant(ctx context.Context, lessonID string) (*lessons.Lesson, *tenant.Tenant, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
 func (m *mockLessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
-	//TODO implement me
 	panic("implement me")
 }
 
@@ -207,6 +206,70 @@ func (m *mockLessonRepository) FindCompletedLessonsByEmail(ctx context.Context, 
 	return []lesson.CompletedLesson{}, int64(0), nil
 }
 
+// --- Mock Lesson Repo Resolver ---
+
+type mockLessonRepoResolver struct {
+	repo lesson2.LessonRepository
+}
+
+func newMockRepoResolver(repo lesson2.LessonRepository) *mockLessonRepoResolver {
+	return &mockLessonRepoResolver{repo: repo}
+}
+
+func (r *mockLessonRepoResolver) Resolve(bucket string) lesson2.LessonRepository {
+	return r.repo
+}
+
+func (r *mockLessonRepoResolver) All() map[string]lesson2.LessonRepository {
+	return map[string]lesson2.LessonRepository{"default": r.repo}
+}
+
+func (r *mockLessonRepoResolver) Default() lesson2.LessonRepository {
+	return r.repo
+}
+
+func (r *mockLessonRepoResolver) FindByLessonID(ctx context.Context, lessonID string) (lesson2.LessonRepository, string, error) {
+	l, err := r.repo.GetByID(ctx, lessonID)
+	if err == nil && l != nil {
+		return r.repo, "default", nil
+	}
+	return nil, "", &memberclasserrors.MemberClassError{
+		Code:    404,
+		Message: "lesson not found in any database",
+	}
+}
+
+// --- Mock Error Repo Resolver (always returns error repo) ---
+
+type mockErrorRepoResolver struct {
+	repo lesson2.LessonRepository
+}
+
+func newMockErrorRepoResolver(repo lesson2.LessonRepository) *mockErrorRepoResolver {
+	return &mockErrorRepoResolver{repo: repo}
+}
+
+func (r *mockErrorRepoResolver) Resolve(bucket string) lesson2.LessonRepository {
+	return r.repo
+}
+
+func (r *mockErrorRepoResolver) All() map[string]lesson2.LessonRepository {
+	return map[string]lesson2.LessonRepository{"default": r.repo}
+}
+
+func (r *mockErrorRepoResolver) Default() lesson2.LessonRepository {
+	return r.repo
+}
+
+func (r *mockErrorRepoResolver) FindByLessonID(ctx context.Context, lessonID string) (lesson2.LessonRepository, string, error) {
+	return nil, "", &memberclasserrors.MemberClassError{
+		Code:    404,
+		Message: "lesson not found in any database",
+	}
+}
+
+// --- Mock PDF Service ---
+
 type mockPdfService struct {
 	images []string
 }
@@ -256,12 +319,16 @@ func (m *mockPdfService) ExtractImagesFromZip(zipData []byte) ([]string, error) 
 	return m.images, nil
 }
 
+// --- Mock Logger ---
+
 type mockLogger struct{}
 
 func (m *mockLogger) Debug(msg string, args ...any) {}
 func (m *mockLogger) Info(msg string, args ...any)  {}
 func (m *mockLogger) Warn(msg string, args ...any)  {}
 func (m *mockLogger) Error(msg string, args ...any) {}
+
+// --- Mock Storage Service ---
 
 type mockStorageService struct{}
 
@@ -285,605 +352,31 @@ func (m *mockStorageService) Exists(ctx context.Context, urlOrKey string) (bool,
 	return true, nil
 }
 
-func stringPtr(s string) *string {
-	return &s
+// --- Mock Storage Service With Error ---
+
+type mockStorageServiceWithError struct{}
+
+func (m *mockStorageServiceWithError) Upload(ctx context.Context, data []byte, filename string, contentType string) (string, error) {
+	return "", assert.AnError
 }
 
-func TestNewPdfProcessorUseCase(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := NewPdfProcessorUseCase(repo, pdfService, storageService, logger)
-
-	assert.NotNil(t, useCase)
+func (m *mockStorageServiceWithError) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
+	return "", assert.AnError
 }
 
-func TestProcessAllPendingLessons_NoLessons(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	result, err := useCase.ProcessAllPendingLessons(ctx, 10)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Empty(t, result.Results)
+func (m *mockStorageServiceWithError) Download(ctx context.Context, urlOrKey string) ([]byte, error) {
+	return nil, assert.AnError
 }
 
-func TestProcessAllPendingLessons_WithLessons(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	lessons := []*lessons.Lesson{
-		{ID: stringPtr("lesson1"), MediaURL: stringPtr("http://example.com/doc1.pdf")},
-		{ID: stringPtr("lesson2"), MediaURL: stringPtr("http://example.com/doc2.pdf")},
-	}
-
-	for _, lesson := range lessons {
-		repo.lessons[*lesson.ID] = lesson
-	}
-
-	ctx := context.Background()
-	result, err := useCase.ProcessAllPendingLessons(ctx, 10)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Len(t, result.Results, 2)
+func (m *mockStorageServiceWithError) Delete(ctx context.Context, urlOrKey string) error {
+	return assert.AnError
 }
 
-func TestProcessLesson_Success(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	lessonID := "lesson1"
-	lesson := &lessons.Lesson{
-		ID:       &lessonID,
-		MediaURL: stringPtr("http://example.com/doc1.pdf"),
-	}
-	repo.lessons[lessonID] = lesson
-
-	ctx := context.Background()
-	result, err := useCase.ProcessLesson(ctx, lessonID)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
+func (m *mockStorageServiceWithError) Exists(ctx context.Context, urlOrKey string) (bool, error) {
+	return false, assert.AnError
 }
 
-func TestProcessLesson_NoMediaURL(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	lessonID := "lesson1"
-	lesson := &lessons.Lesson{
-		ID: &lessonID,
-	}
-	repo.lessons[lessonID] = lesson
-
-	ctx := context.Background()
-	result, err := useCase.ProcessLesson(ctx, lessonID)
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestProcessLesson_LessonNotFound(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	result, err := useCase.ProcessLesson(ctx, "nonexistent")
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestSaveSinglePage_NewPage(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	assetID := "test-asset"
-	pageNumber := 1
-	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-
-	created, err := useCase.saveSinglePage(ctx, assetID, pageNumber, imageBase64, "")
-
-	assert.NoError(t, err)
-	assert.True(t, created)
-	assert.Equal(t, 1, repo.createPageCalls)
-}
-
-func TestSaveSinglePage_ExistingPage(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	existingPage := &lessons.LessonPDFPage{
-		AssetID:    "test-asset",
-		PageNumber: 1,
-		ImageURL:   "existing-url",
-	}
-	repo.pdfPages["test-asset"] = []*lessons.LessonPDFPage{existingPage}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	assetID := "test-asset"
-	pageNumber := 1
-	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-
-	created, err := useCase.saveSinglePage(ctx, assetID, pageNumber, imageBase64, "")
-
-	assert.NoError(t, err)
-	assert.True(t, created)
-	assert.Equal(t, 0, repo.createPageCalls)
-}
-
-func TestSaveSinglePage_InvalidBase64(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	assetID := "test-asset"
-	pageNumber := 1
-	imageBase64 := "invalid-base64"
-
-	created, err := useCase.saveSinglePage(ctx, assetID, pageNumber, imageBase64, "")
-
-	assert.Error(t, err)
-	assert.False(t, created)
-	assert.Equal(t, 0, repo.createPageCalls)
-}
-
-func TestConvertPdfToImages_Success(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	pdfURL := "http://example.com/test.pdf"
-	images, err := useCase.ConvertPdfToImages(pdfURL)
-
-	assert.NoError(t, err)
-	assert.Len(t, images, 5)
-}
-
-func TestCreateOrUpdatePDFAsset_Success(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	lessonID := "lesson1"
-	pdfURL := "http://example.com/test.pdf"
-
-	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), lessonID, pdfURL)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, asset)
-	assert.Equal(t, lessonID, asset.LessonID)
-	assert.Equal(t, pdfURL, asset.SourcePDFURL)
-}
-
-func TestValidateLessonHasPDF_Success(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID:       stringPtr("lesson1"),
-		MediaURL: stringPtr("http://example.com/test.pdf"),
-		PDFAsset: &lessons.LessonPDFAsset{
-			ID:       "asset1",
-			LessonID: "lesson1",
-			Status:   "completed",
-		},
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
-
-	assert.NoError(t, err)
-}
-
-func TestValidateLessonHasPDF_NoPDF(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID: stringPtr("lesson1"),
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-}
-
-func TestGetLessonWithPDFAsset_Success(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID: stringPtr("lesson1"),
-		PDFAsset: &lessons.LessonPDFAsset{
-			ID:       "asset1",
-			LessonID: "lesson1",
-			Status:   "completed",
-		},
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "lesson1")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.NotNil(t, result.ID)
-	assert.Equal(t, "lesson1", *result.ID)
-	assert.NotNil(t, result.PDFAsset)
-}
-
-func TestGetLessonWithPDFAsset_NotFound(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "nonexistent")
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestRetryFailedAssets_NoFailedAssets(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.RetryFailedAssets(context.Background(), 0)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Equal(t, 0, result.Total)
-}
-
-func TestCleanupOrphanedPages_Success(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.CleanupOrphanedPages(context.Background())
-
-	assert.NoError(t, err)
-}
-
-func TestRegeneratePDF_Success(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID:       stringPtr("lesson1"),
-		MediaURL: stringPtr("http://example.com/test.pdf"),
-		PDFAsset: &lessons.LessonPDFAsset{
-			ID:       "asset1",
-			LessonID: "lesson1",
-			Status:   "completed",
-		},
-	}
-	repo.lessons["lesson1"] = lesson
-	repo.pdfAssets["asset1"] = lesson.PDFAsset
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.RegeneratePDF(context.Background(), "lesson1")
-
-	assert.NoError(t, err)
-}
-
-func TestRetryFailedAssets_WithFailedAssets(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	failedAsset := &lessons.LessonPDFAsset{
-		ID:       "asset1",
-		LessonID: "lesson1",
-		Status:   "failed",
-	}
-	repo.pdfAssets["asset1"] = failedAsset
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.RetryFailedAssets(context.Background(), 0)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-}
-
-func TestCleanupOrphanedPages_WithOrphanedPages(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	orphanedPage := &lessons.LessonPDFPage{
-		ID:         "page1",
-		AssetID:    "nonexistent-asset",
-		PageNumber: 1,
-		ImageURL:   "http://example.com/page1.jpg",
-	}
-	repo.pdfPages["nonexistent-asset"] = []*lessons.LessonPDFPage{orphanedPage}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.CleanupOrphanedPages(context.Background())
-
-	assert.NoError(t, err)
-}
-
-func TestProcessLesson_PdfServiceError(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := &mockPdfServiceWithError{}
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lessonID := "lesson1"
-	lesson := &lessons.Lesson{
-		ID:       &lessonID,
-		MediaURL: stringPtr("http://example.com/doc1.pdf"),
-	}
-	repo.lessons[lessonID] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	result, err := useCase.ProcessLesson(ctx, lessonID)
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestConvertPdfToImages_PdfServiceError(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := &mockPdfServiceWithError{}
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	pdfURL := "http://example.com/test.pdf"
-	images, err := useCase.ConvertPdfToImages(pdfURL)
-
-	assert.Error(t, err)
-	assert.Nil(t, images)
-}
-
-func TestCreateOrUpdatePDFAsset_ExistingAsset(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	existingAsset := &lessons.LessonPDFAsset{
-		ID:           "asset1",
-		LessonID:     "lesson1",
-		SourcePDFURL: "http://example.com/old.pdf",
-		Status:       "processing",
-	}
-	repo.pdfAssets["asset1"] = existingAsset
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	lessonID := "lesson1"
-	pdfURL := "http://example.com/new.pdf"
-
-	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), lessonID, pdfURL)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, asset)
-	assert.Equal(t, "http://example.com/old.pdf", asset.SourcePDFURL)
-}
-
-func TestProcessAllPendingLessons_WithLimit(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lessons := []*lessons.Lesson{
-		{ID: stringPtr("lesson1"), MediaURL: stringPtr("http://example.com/doc1.pdf")},
-		{ID: stringPtr("lesson2"), MediaURL: stringPtr("http://example.com/doc2.pdf")},
-		{ID: stringPtr("lesson3"), MediaURL: stringPtr("http://example.com/doc3.pdf")},
-		{ID: stringPtr("lesson4"), MediaURL: stringPtr("http://example.com/doc4.pdf")},
-		{ID: stringPtr("lesson5"), MediaURL: stringPtr("http://example.com/doc5.pdf")},
-	}
-
-	for _, lesson := range lessons {
-		repo.lessons[*lesson.ID] = lesson
-	}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	result, err := useCase.ProcessAllPendingLessons(ctx, 3)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.Len(t, result.Results, 3)
-	assert.Equal(t, 3, result.Total)
-}
+// --- Mock PDF Service With Error ---
 
 type mockPdfServiceWithError struct{}
 
@@ -915,520 +408,19 @@ func (m *mockPdfServiceWithError) ExtractImagesFromZip(zipData []byte) ([]string
 	return nil, assert.AnError
 }
 
-func TestRegeneratePDF_LessonNotFound(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.RegeneratePDF(context.Background(), "nonexistent")
-
-	assert.Error(t, err)
-}
-
-func TestRegeneratePDF_NoMediaURL(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID: stringPtr("lesson1"),
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.RegeneratePDF(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-}
-
-func TestRegeneratePDF_NoPDFAsset(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID:       stringPtr("lesson1"),
-		MediaURL: stringPtr("http://example.com/test.pdf"),
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.RegeneratePDF(context.Background(), "lesson1")
-
-	assert.NoError(t, err)
-}
-
-func TestValidateLessonHasPDF_LessonNotFound(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.ValidateLessonHasPDF(context.Background(), "nonexistent")
-
-	assert.Error(t, err)
-}
-
-func TestValidateLessonHasPDF_NoMediaURL(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID: stringPtr("lesson1"),
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-}
-
-func TestGetLessonWithPDFAsset_LessonNotFound(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "nonexistent")
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestCreateOrUpdatePDFAsset_LessonNotFound(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), "nonexistent", "http://example.com/test.pdf")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, asset)
-}
-
-func TestCreateOrUpdatePDFAsset_NoMediaURL(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID: stringPtr("lesson1"),
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), "lesson1", "http://example.com/test.pdf")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, asset)
-}
-
-func TestSaveSinglePage_StorageServiceError(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageServiceWithError{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	assetID := "test-asset"
-	pageNumber := 1
-	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-
-	created, err := useCase.saveSinglePage(ctx, assetID, pageNumber, imageBase64, "")
-
-	assert.Error(t, err)
-	assert.False(t, created)
-	assert.Equal(t, 0, repo.createPageCalls)
-}
-
-type mockStorageServiceWithError struct{}
-
-func (m *mockStorageServiceWithError) Upload(ctx context.Context, data []byte, filename string, contentType string) (string, error) {
-	return "", assert.AnError
-}
-
-func (m *mockStorageServiceWithError) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
-	return "", assert.AnError
-}
-
-func (m *mockStorageServiceWithError) Download(ctx context.Context, urlOrKey string) ([]byte, error) {
-	return nil, assert.AnError
-}
-
-func (m *mockStorageServiceWithError) Delete(ctx context.Context, urlOrKey string) error {
-	return assert.AnError
-}
-
-func (m *mockStorageServiceWithError) Exists(ctx context.Context, urlOrKey string) (bool, error) {
-	return false, assert.AnError
-}
-
-func TestCleanupOrphanedPages_WithFailedAssets(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	failedAsset := &lessons.LessonPDFAsset{
-		ID:       "asset1",
-		LessonID: "lesson1",
-		Status:   "failed",
-	}
-	repo.pdfAssets["asset1"] = failedAsset
-
-	pages := []*lessons.LessonPDFPage{
-		{ID: "page1", AssetID: "asset1", PageNumber: 1, ImageURL: "http://example.com/page1.jpg"},
-		{ID: "page2", AssetID: "asset1", PageNumber: 2, ImageURL: "http://example.com/page2.jpg"},
-	}
-	repo.pdfPages["asset1"] = pages
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.CleanupOrphanedPages(context.Background())
-
-	assert.NoError(t, err)
-}
-
-func TestCleanupOrphanedPages_RepositoryError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.CleanupOrphanedPages(context.Background())
-
-	assert.Error(t, err)
-}
-
-func TestRetryFailedAssets_RepositoryError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	_, err := useCase.RetryFailedAssets(context.Background(), 0)
-
-	assert.Error(t, err)
-}
-
-func TestProcessAllPendingLessons_RepositoryError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.ProcessAllPendingLessons(context.Background(), 10)
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestProcessLesson_CreateAssetError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.ProcessLesson(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestProcessLesson_SavePagesError(t *testing.T) {
-	repo := newMockLessonRepository()
-	pdfService := newMockPdfService()
-	storageService := &mockStorageServiceWithError{}
-	logger := &mockLogger{}
-
-	lesson := &lessons.Lesson{
-		ID:       stringPtr("lesson1"),
-		MediaURL: stringPtr("http://example.com/doc1.pdf"),
-	}
-	repo.lessons["lesson1"] = lesson
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.ProcessLesson(context.Background(), "lesson1")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, result)
-	assert.False(t, result.Success)
-	assert.Equal(t, 0, result.ProcessedPages)
-}
-
-func TestProcessLesson_UpdateStatusError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.ProcessLesson(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestRegeneratePDF_DeletePagesError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.RegeneratePDF(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-}
-
-func TestRegeneratePDF_UpdateAssetError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.RegeneratePDF(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-}
-
-func TestRegeneratePDF_CreateAssetError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.RegeneratePDF(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-}
-
-func TestValidateLessonHasPDF_RepositoryError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-}
-
-func TestGetLessonWithPDFAsset_RepositoryError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "lesson1")
-
-	assert.Error(t, err)
-	assert.Nil(t, result)
-}
-
-func TestCreateOrUpdatePDFAsset_RepositoryError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), "lesson1", "http://example.com/test.pdf")
-
-	assert.Error(t, err)
-	assert.Nil(t, asset)
-}
-
-func TestSaveSinglePage_RepositoryError(t *testing.T) {
-	repo := &mockLessonRepositoryWithError{}
-	pdfService := newMockPdfService()
-	storageService := &mockStorageService{}
-	logger := &mockLogger{}
-
-	useCase := &pdfProcessorUseCase{
-		lessonRepo:     repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
-
-	ctx := context.Background()
-	assetID := "test-asset"
-	pageNumber := 1
-	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-
-	created, err := useCase.saveSinglePage(ctx, assetID, pageNumber, imageBase64, "")
-
-	assert.Error(t, err)
-	assert.False(t, created)
-}
+// --- Mock Lesson Repository With Error ---
 
 type mockLessonRepositoryWithError struct{}
 
 func (m *mockLessonRepositoryWithError) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]lesson2.AILessonWithHierarchy, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
 func (m *mockLessonRepositoryWithError) GetByIDWithTenant(ctx context.Context, lessonID string) (*lessons.Lesson, *tenant.Tenant, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
 func (m *mockLessonRepositoryWithError) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
-	//TODO implement me
 	panic("implement me")
 }
 
@@ -1494,4 +486,927 @@ func (m *mockLessonRepositoryWithError) DeletePDFPagesByAssetID(ctx context.Cont
 
 func (m *mockLessonRepositoryWithError) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]lesson.CompletedLesson, int64, error) {
 	return nil, int64(0), assert.AnError
+}
+
+// --- Helper ---
+
+func stringPtr(s string) *string {
+	return &s
+}
+
+// --- Tests ---
+
+func TestNewPdfProcessorUseCase(t *testing.T) {
+	repo := newMockLessonRepository()
+	resolver := newMockRepoResolver(repo)
+	pdfService := newMockPdfService()
+	storageService := &mockStorageService{}
+	logger := &mockLogger{}
+
+	useCase := NewPdfProcessorUseCase(resolver, pdfService, storageService, logger)
+
+	assert.NotNil(t, useCase)
+}
+
+func TestProcessAllPendingLessons_NoLessons(t *testing.T) {
+	repo := newMockLessonRepository()
+	resolver := newMockRepoResolver(repo)
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   resolver,
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	result, err := useCase.ProcessAllPendingLessons(ctx, 10)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Results)
+}
+
+func TestProcessAllPendingLessons_WithLessons(t *testing.T) {
+	repo := newMockLessonRepository()
+	resolver := newMockRepoResolver(repo)
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   resolver,
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	lessonList := []*lessons.Lesson{
+		{ID: stringPtr("lesson1"), MediaURL: stringPtr("http://example.com/doc1.pdf")},
+		{ID: stringPtr("lesson2"), MediaURL: stringPtr("http://example.com/doc2.pdf")},
+	}
+
+	for _, l := range lessonList {
+		repo.lessons[*l.ID] = l
+	}
+
+	ctx := context.Background()
+	result, err := useCase.ProcessAllPendingLessons(ctx, 10)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result.Results, 2)
+}
+
+func TestProcessLesson_Success(t *testing.T) {
+	repo := newMockLessonRepository()
+	resolver := newMockRepoResolver(repo)
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   resolver,
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	lessonID := "lesson1"
+	l := &lessons.Lesson{
+		ID:       &lessonID,
+		MediaURL: stringPtr("http://example.com/doc1.pdf"),
+	}
+	repo.lessons[lessonID] = l
+
+	ctx := context.Background()
+	result, err := useCase.ProcessLesson(ctx, lessonID)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestProcessLesson_NoMediaURL(t *testing.T) {
+	repo := newMockLessonRepository()
+	resolver := newMockRepoResolver(repo)
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   resolver,
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	lessonID := "lesson1"
+	l := &lessons.Lesson{
+		ID: &lessonID,
+	}
+	repo.lessons[lessonID] = l
+
+	ctx := context.Background()
+	result, err := useCase.ProcessLesson(ctx, lessonID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestProcessLesson_LessonNotFound(t *testing.T) {
+	repo := newMockLessonRepository()
+	resolver := newMockRepoResolver(repo)
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   resolver,
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	result, err := useCase.ProcessLesson(ctx, "nonexistent")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestSaveSinglePage_NewPage(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	assetID := "test-asset"
+	pageNumber := 1
+	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+
+	assert.NoError(t, err)
+	assert.True(t, created)
+	assert.Equal(t, 1, repo.createPageCalls)
+}
+
+func TestSaveSinglePage_ExistingPage(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	existingPage := &lessons.LessonPDFPage{
+		AssetID:    "test-asset",
+		PageNumber: 1,
+		ImageURL:   "existing-url",
+	}
+	repo.pdfPages["test-asset"] = []*lessons.LessonPDFPage{existingPage}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	assetID := "test-asset"
+	pageNumber := 1
+	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+
+	assert.NoError(t, err)
+	assert.True(t, created)
+	assert.Equal(t, 0, repo.createPageCalls)
+}
+
+func TestSaveSinglePage_InvalidBase64(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	assetID := "test-asset"
+	pageNumber := 1
+	imageBase64 := "invalid-base64"
+
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+
+	assert.Error(t, err)
+	assert.False(t, created)
+	assert.Equal(t, 0, repo.createPageCalls)
+}
+
+func TestConvertPdfToImages_Success(t *testing.T) {
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	pdfURL := "http://example.com/test.pdf"
+	images, err := useCase.ConvertPdfToImages(pdfURL)
+
+	assert.NoError(t, err)
+	assert.Len(t, images, 5)
+}
+
+func TestCreateOrUpdatePDFAsset_Success(t *testing.T) {
+	repo := newMockLessonRepository()
+	// CreateOrUpdatePDFAsset uses FindByLessonID, so the lesson must exist
+	lessonID := "lesson1"
+	repo.lessons[lessonID] = &lessons.Lesson{ID: &lessonID, MediaURL: stringPtr("http://example.com/test.pdf")}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	pdfURL := "http://example.com/test.pdf"
+
+	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), lessonID, pdfURL)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, asset)
+	assert.Equal(t, lessonID, asset.LessonID)
+	assert.Equal(t, pdfURL, asset.SourcePDFURL)
+}
+
+func TestValidateLessonHasPDF_Success(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	l := &lessons.Lesson{
+		ID:       stringPtr("lesson1"),
+		MediaURL: stringPtr("http://example.com/test.pdf"),
+		PDFAsset: &lessons.LessonPDFAsset{
+			ID:       "asset1",
+			LessonID: "lesson1",
+			Status:   "completed",
+		},
+	}
+	repo.lessons["lesson1"] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
+
+	assert.NoError(t, err)
+}
+
+func TestValidateLessonHasPDF_NoPDF(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	l := &lessons.Lesson{
+		ID: stringPtr("lesson1"),
+	}
+	repo.lessons["lesson1"] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+}
+
+func TestGetLessonWithPDFAsset_Success(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	l := &lessons.Lesson{
+		ID: stringPtr("lesson1"),
+		PDFAsset: &lessons.LessonPDFAsset{
+			ID:       "asset1",
+			LessonID: "lesson1",
+			Status:   "completed",
+		},
+	}
+	repo.lessons["lesson1"] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "lesson1")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.NotNil(t, result.ID)
+	assert.Equal(t, "lesson1", *result.ID)
+	assert.NotNil(t, result.PDFAsset)
+}
+
+func TestGetLessonWithPDFAsset_NotFound(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "nonexistent")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestRetryFailedAssets_NoFailedAssets(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.RetryFailedAssets(context.Background(), 0)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 0, result.Total)
+}
+
+func TestCleanupOrphanedPages_Success(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.CleanupOrphanedPages(context.Background())
+
+	assert.NoError(t, err)
+}
+
+func TestRegeneratePDF_Success(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	l := &lessons.Lesson{
+		ID:       stringPtr("lesson1"),
+		MediaURL: stringPtr("http://example.com/test.pdf"),
+		PDFAsset: &lessons.LessonPDFAsset{
+			ID:       "asset1",
+			LessonID: "lesson1",
+			Status:   "completed",
+		},
+	}
+	repo.lessons["lesson1"] = l
+	repo.pdfAssets["asset1"] = l.PDFAsset
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.RegeneratePDF(context.Background(), "lesson1")
+
+	assert.NoError(t, err)
+}
+
+func TestRetryFailedAssets_WithFailedAssets(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	failedAsset := &lessons.LessonPDFAsset{
+		ID:       "asset1",
+		LessonID: "lesson1",
+		Status:   "failed",
+	}
+	repo.pdfAssets["asset1"] = failedAsset
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.RetryFailedAssets(context.Background(), 0)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestCleanupOrphanedPages_WithOrphanedPages(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	orphanedPage := &lessons.LessonPDFPage{
+		ID:         "page1",
+		AssetID:    "nonexistent-asset",
+		PageNumber: 1,
+		ImageURL:   "http://example.com/page1.jpg",
+	}
+	repo.pdfPages["nonexistent-asset"] = []*lessons.LessonPDFPage{orphanedPage}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.CleanupOrphanedPages(context.Background())
+
+	assert.NoError(t, err)
+}
+
+func TestProcessLesson_PdfServiceError(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	lessonID := "lesson1"
+	l := &lessons.Lesson{
+		ID:       &lessonID,
+		MediaURL: stringPtr("http://example.com/doc1.pdf"),
+	}
+	repo.lessons[lessonID] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     &mockPdfServiceWithError{},
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	result, err := useCase.ProcessLesson(ctx, lessonID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestConvertPdfToImages_PdfServiceError(t *testing.T) {
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		pdfService:     &mockPdfServiceWithError{},
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	pdfURL := "http://example.com/test.pdf"
+	images, err := useCase.ConvertPdfToImages(pdfURL)
+
+	assert.Error(t, err)
+	assert.Nil(t, images)
+}
+
+func TestCreateOrUpdatePDFAsset_ExistingAsset(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	lessonID := "lesson1"
+	repo.lessons[lessonID] = &lessons.Lesson{ID: &lessonID, MediaURL: stringPtr("http://example.com/test.pdf")}
+
+	existingAsset := &lessons.LessonPDFAsset{
+		ID:           "asset1",
+		LessonID:     "lesson1",
+		SourcePDFURL: "http://example.com/old.pdf",
+		Status:       "processing",
+	}
+	repo.pdfAssets["asset1"] = existingAsset
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	pdfURL := "http://example.com/new.pdf"
+
+	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), lessonID, pdfURL)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, asset)
+	assert.Equal(t, "http://example.com/old.pdf", asset.SourcePDFURL)
+}
+
+func TestProcessAllPendingLessons_WithLimit(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	lessonList := []*lessons.Lesson{
+		{ID: stringPtr("lesson1"), MediaURL: stringPtr("http://example.com/doc1.pdf")},
+		{ID: stringPtr("lesson2"), MediaURL: stringPtr("http://example.com/doc2.pdf")},
+		{ID: stringPtr("lesson3"), MediaURL: stringPtr("http://example.com/doc3.pdf")},
+		{ID: stringPtr("lesson4"), MediaURL: stringPtr("http://example.com/doc4.pdf")},
+		{ID: stringPtr("lesson5"), MediaURL: stringPtr("http://example.com/doc5.pdf")},
+	}
+
+	for _, l := range lessonList {
+		repo.lessons[*l.ID] = l
+	}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	result, err := useCase.ProcessAllPendingLessons(ctx, 3)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result.Results, 3)
+	assert.Equal(t, 3, result.Total)
+}
+
+func TestRegeneratePDF_LessonNotFound(t *testing.T) {
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.RegeneratePDF(context.Background(), "nonexistent")
+
+	assert.Error(t, err)
+}
+
+func TestRegeneratePDF_NoMediaURL(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	l := &lessons.Lesson{
+		ID: stringPtr("lesson1"),
+	}
+	repo.lessons["lesson1"] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.RegeneratePDF(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+}
+
+func TestRegeneratePDF_NoPDFAsset(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	l := &lessons.Lesson{
+		ID:       stringPtr("lesson1"),
+		MediaURL: stringPtr("http://example.com/test.pdf"),
+	}
+	repo.lessons["lesson1"] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.RegeneratePDF(context.Background(), "lesson1")
+
+	assert.NoError(t, err)
+}
+
+func TestValidateLessonHasPDF_LessonNotFound(t *testing.T) {
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.ValidateLessonHasPDF(context.Background(), "nonexistent")
+
+	assert.Error(t, err)
+}
+
+func TestValidateLessonHasPDF_NoMediaURL(t *testing.T) {
+	repo := newMockLessonRepository()
+	l := &lessons.Lesson{ID: stringPtr("lesson1")}
+	repo.lessons["lesson1"] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+}
+
+func TestGetLessonWithPDFAsset_LessonNotFound(t *testing.T) {
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "nonexistent")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestCreateOrUpdatePDFAsset_LessonNotFound(t *testing.T) {
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), "nonexistent", "http://example.com/test.pdf")
+
+	assert.Error(t, err)
+	assert.Nil(t, asset)
+}
+
+func TestSaveSinglePage_StorageServiceError(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageServiceWithError{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	assetID := "test-asset"
+	pageNumber := 1
+	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+
+	assert.Error(t, err)
+	assert.False(t, created)
+	assert.Equal(t, 0, repo.createPageCalls)
+}
+
+func TestCleanupOrphanedPages_WithFailedAssets(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	failedAsset := &lessons.LessonPDFAsset{
+		ID:       "asset1",
+		LessonID: "lesson1",
+		Status:   "failed",
+	}
+	repo.pdfAssets["asset1"] = failedAsset
+
+	pages := []*lessons.LessonPDFPage{
+		{ID: "page1", AssetID: "asset1", PageNumber: 1, ImageURL: "http://example.com/page1.jpg"},
+		{ID: "page2", AssetID: "asset1", PageNumber: 2, ImageURL: "http://example.com/page2.jpg"},
+	}
+	repo.pdfPages["asset1"] = pages
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.CleanupOrphanedPages(context.Background())
+
+	assert.NoError(t, err)
+}
+
+// Error repo resolver tests - these use the error resolver where FindByLessonID always fails
+
+func TestCleanupOrphanedPages_RepositoryError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	// CleanupOrphanedPages iterates all repos, errors are logged but not returned
+	err := useCase.CleanupOrphanedPages(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestRetryFailedAssets_RepositoryError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	// RetryFailedAssets iterates all repos, errors are logged but processing continues
+	result, err := useCase.RetryFailedAssets(context.Background(), 0)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 0, result.Total)
+}
+
+func TestProcessAllPendingLessons_RepositoryError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	// ProcessAllPendingLessons iterates all repos, errors are logged, returns empty result
+	result, err := useCase.ProcessAllPendingLessons(context.Background(), 10)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 0, result.Total)
+}
+
+func TestProcessLesson_CreateAssetError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.ProcessLesson(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestProcessLesson_SavePagesError(t *testing.T) {
+	repo := newMockLessonRepository()
+
+	l := &lessons.Lesson{
+		ID:       stringPtr("lesson1"),
+		MediaURL: stringPtr("http://example.com/doc1.pdf"),
+	}
+	repo.lessons["lesson1"] = l
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockRepoResolver(repo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageServiceWithError{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.ProcessLesson(context.Background(), "lesson1")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.False(t, result.Success)
+	assert.Equal(t, 0, result.ProcessedPages)
+}
+
+func TestProcessLesson_UpdateStatusError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.ProcessLesson(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestRegeneratePDF_DeletePagesError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.RegeneratePDF(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+}
+
+func TestRegeneratePDF_UpdateAssetError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.RegeneratePDF(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+}
+
+func TestRegeneratePDF_CreateAssetError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.RegeneratePDF(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+}
+
+func TestValidateLessonHasPDF_RepositoryError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	err := useCase.ValidateLessonHasPDF(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+}
+
+func TestGetLessonWithPDFAsset_RepositoryError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	result, err := useCase.GetLessonWithPDFAsset(context.Background(), "lesson1")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestCreateOrUpdatePDFAsset_RepositoryError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	asset, err := useCase.CreateOrUpdatePDFAsset(context.Background(), "lesson1", "http://example.com/test.pdf")
+
+	assert.Error(t, err)
+	assert.Nil(t, asset)
+}
+
+func TestSaveSinglePage_RepositoryError(t *testing.T) {
+	errorRepo := &mockLessonRepositoryWithError{}
+
+	useCase := &pdfProcessorUseCase{
+		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		pdfService:     newMockPdfService(),
+		storageService: &mockStorageService{},
+		logger:         &mockLogger{},
+	}
+
+	ctx := context.Background()
+	assetID := "test-asset"
+	pageNumber := 1
+	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+	created, err := useCase.saveSinglePage(ctx, errorRepo, assetID, pageNumber, imageBase64, "")
+
+	assert.Error(t, err)
+	assert.False(t, created)
 }

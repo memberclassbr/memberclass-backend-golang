@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"os"
 	"os/signal"
@@ -65,13 +64,15 @@ func main() {
 	fx.New(
 		fx.Provide(
 			logger.NewLogger,
-			database.NewDB,
+			database.NewMultiDB,
+			database.DefaultDB,
 			database.NewMigrationService,
 			cache.NewRedisCache,
 			storage.NewDigitalOceanSpaces,
 
 			tenant.NewTenantRepository,
 			user.NewUserRepository,
+			lesson.NewLessonRepoResolver,
 			lesson.NewLessonRepository,
 			comment.NewCommentRepository,
 			comment.NewSocialCommentRepository,
@@ -148,7 +149,7 @@ func main() {
 
 func startApplication(
 	log ports.Logger,
-	db *sql.DB,
+	dbMap database.DBMap,
 	cache ports.Cache,
 	migrationService *database.MigrationService,
 	router *router.Router,
@@ -201,8 +202,8 @@ func startApplication(
 		log.Error("Error closing cache: " + err.Error())
 	}
 
-	if err := db.Close(); err != nil {
-		log.Error("Error closing database: " + err.Error())
+	if err := dbMap.CloseAll(); err != nil {
+		log.Error("Error closing databases: " + err.Error())
 	}
 
 	log.Info("Server exited")
