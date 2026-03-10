@@ -65,8 +65,8 @@ func (m *MockPdfProcessorUseCase) CreateOrUpdatePDFAsset(ctx context.Context, le
 	return args.Get(0).(*lessonsentities.LessonPDFAsset), args.Error(1)
 }
 
-func (m *MockPdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error) {
-	args := m.Called(ctx, assetID, lessonID, images)
+func (m *MockPdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string, bucket string) (int, error) {
+	args := m.Called(ctx, assetID, lessonID, images, bucket)
 	return args.Int(0), args.Error(1)
 }
 

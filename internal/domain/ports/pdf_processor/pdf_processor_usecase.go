@@ -16,7 +16,7 @@ type PdfProcessorUseCase interface {
 	RegeneratePDF(ctx context.Context, lessonID string) error
 	ConvertPdfToImages(pdfURL string) ([]string, error)
 	CreateOrUpdatePDFAsset(ctx context.Context, lessonID, pdfURL string) (*lessons.LessonPDFAsset, error)
-	SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error)
+	SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string, bucket string) (int, error)
 	ValidateLessonHasPDF(ctx context.Context, lessonID string) error
 	GetLessonWithPDFAsset(ctx context.Context, lessonID string) (*lessons.Lesson, error)
 	GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*lessons.LessonPDFPage, error)

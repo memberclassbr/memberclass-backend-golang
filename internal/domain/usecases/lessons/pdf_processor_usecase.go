@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -74,6 +75,10 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 		}
 	}
 
+	// Extract bucket from lesson media URL for dynamic storage routing
+	bucket := extractBucketFromMediaURL(*lesson.MediaURL)
+	u.logger.Info(fmt.Sprintf("Resolved bucket '%s' from media URL for lesson %s", bucket, lessonID))
+
 	// 4. Process PDF to images using the complete flow
 	images, err := u.ConvertPdfToImages(*lesson.MediaURL)
 	if err != nil {
@@ -87,7 +92,7 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 	}
 
 	// 5. Save pages directly
-	processedPages, err := u.SavePagesDirectly(ctx, asset.ID, lessonID, images)
+	processedPages, err := u.SavePagesDirectly(ctx, asset.ID, lessonID, images, bucket)
 	totalImages := len(images)
 	if err != nil {
 		errorMsg := err.Error()
@@ -644,7 +649,7 @@ func (u *pdfProcessorUseCase) CreateOrUpdatePDFAsset(ctx context.Context, lesson
 }
 
 // saveSinglePage - Save a single page (thread-safe)
-func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, assetID string, pageNumber int, imageBase64 string) (bool, error) {
+func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, assetID string, pageNumber int, imageBase64 string, bucket string) (bool, error) {
 	existingPage, err := u.lessonRepo.GetPDFPageByAssetAndNumber(ctx, assetID, pageNumber)
 	if err != nil && !errors.Is(err, memberclasserrors.ErrPDFPageNotFound) {
 		return false, err
@@ -670,12 +675,18 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, assetID string
 	// 3. Generate unique filename
 	filename := fmt.Sprintf("lessons/%s/page-%d.jpg", assetID, pageNumber)
 
-	// 4. Upload to DigitalOcean Spaces
+	// 4. Upload to DigitalOcean Spaces (dynamic bucket)
 	u.logger.Info(fmt.Sprintf("Uploading page %d to storage for asset %s", pageNumber, assetID))
-	imageURL, err := u.storageService.Upload(ctx, imageData, filename, "image/jpeg")
-	if err != nil {
-		u.logger.Error(fmt.Sprintf("Failed to upload page %d to storage for asset %s: %v", pageNumber, assetID, err))
-		return false, fmt.Errorf("failed to upload image to storage: %w", err)
+	var imageURL string
+	var uploadErr error
+	if bucket != "" {
+		imageURL, uploadErr = u.storageService.UploadToBucket(ctx, bucket, imageData, filename, "image/jpeg")
+	} else {
+		imageURL, uploadErr = u.storageService.Upload(ctx, imageData, filename, "image/jpeg")
+	}
+	if uploadErr != nil {
+		u.logger.Error(fmt.Sprintf("Failed to upload page %d to storage for asset %s: %v", pageNumber, assetID, uploadErr))
+		return false, fmt.Errorf("failed to upload image to storage: %w", uploadErr)
 	}
 
 	u.logger.Info(fmt.Sprintf("Successfully uploaded page %d to storage: %s", pageNumber, imageURL))
@@ -698,7 +709,7 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, assetID string
 }
 
 // SavePagesDirectly - Save pages directly without upload service
-func (u *pdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error) {
+func (u *pdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string, bucket string) (int, error) {
 	if len(images) == 0 {
 		return 0, nil
 	}
@@ -740,7 +751,7 @@ func (u *pdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, le
 				case <-ctx.Done():
 					return
 				default:
-					success, err := u.saveSinglePage(ctx, assetID, job.pageNumber, job.imageBase64)
+					success, err := u.saveSinglePage(ctx, assetID, job.pageNumber, job.imageBase64, bucket)
 					select {
 					case resultChan <- pageResult{
 						index:      job.index,
@@ -851,4 +862,23 @@ func (u *pdfProcessorUseCase) GetPDFPagesByAssetID(ctx context.Context, assetID 
 	}
 
 	return pages, nil
+}
+
+func extractBucketFromMediaURL(mediaURL string) string {
+	if !strings.HasPrefix(mediaURL, "http") {
+		return ""
+	}
+
+	parsed, err := url.Parse(mediaURL)
+	if err != nil {
+		return ""
+	}
+
+	host := parsed.Hostname()
+	parts := strings.SplitN(host, ".", 2)
+	if len(parts) < 2 {
+		return ""
+	}
+
+	return parts[0]
 }

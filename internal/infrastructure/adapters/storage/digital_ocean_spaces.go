@@ -90,19 +90,42 @@ func (d *DigitalOceanSpaces) Upload(ctx context.Context, data []byte, filename s
 	return publicURL, nil
 }
 
+func (d *DigitalOceanSpaces) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
+	d.logger.Info("Uploading file to DigitalOcean Spaces", "filename", filename, "bucket", bucket, "size", len(data))
+
+	input := &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(filename),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(contentType),
+		ACL:         types.ObjectCannedACLPublicRead,
+	}
+	_, err := d.client.PutObject(ctx, input)
+	if err != nil {
+		d.logger.Error("Failed to upload file to DigitalOcean Spaces", "filename", filename, "bucket", bucket, "error", err)
+		return "", fmt.Errorf("failed to upload file: %w", err)
+	}
+
+	publicURL := fmt.Sprintf("https://%s.%s.digitaloceanspaces.com/%s", bucket, d.region, filename)
+	d.logger.Info("File uploaded successfully", "filename", filename, "bucket", bucket, "url", publicURL)
+
+	return publicURL, nil
+}
+
 func (d *DigitalOceanSpaces) Download(ctx context.Context, urlOrKey string) ([]byte, error) {
 	key := d.extractKeyFromURL(urlOrKey)
+	bucket := d.extractBucketFromURL(urlOrKey)
 
-	d.logger.Info("Downloading file from DigitalOcean Spaces", "key", key)
+	d.logger.Info("Downloading file from DigitalOcean Spaces", "key", key, "bucket", bucket)
 
 	input := &s3.GetObjectInput{
-		Bucket: aws.String(d.bucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}
 
 	result, err := d.client.GetObject(ctx, input)
 	if err != nil {
-		d.logger.Error("Failed to download file from DigitalOcean Spaces", "key", key, "error", err)
+		d.logger.Error("Failed to download file from DigitalOcean Spaces", "key", key, "bucket", bucket, "error", err)
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 	defer result.Body.Close()
@@ -113,50 +136,52 @@ func (d *DigitalOceanSpaces) Download(ctx context.Context, urlOrKey string) ([]b
 		return nil, fmt.Errorf("failed to read file content: %w", err)
 	}
 
-	d.logger.Info("File downloaded successfully", "key", key, "size", len(data))
+	d.logger.Info("File downloaded successfully", "key", key, "bucket", bucket, "size", len(data))
 	return data, nil
 }
 
 func (d *DigitalOceanSpaces) Delete(ctx context.Context, urlOrKey string) error {
 	key := d.extractKeyFromURL(urlOrKey)
+	bucket := d.extractBucketFromURL(urlOrKey)
 
-	d.logger.Info("Deleting file from DigitalOcean Spaces", "key", key)
+	d.logger.Info("Deleting file from DigitalOcean Spaces", "key", key, "bucket", bucket)
 
 	input := &s3.DeleteObjectInput{
-		Bucket: aws.String(d.bucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}
 
 	_, err := d.client.DeleteObject(ctx, input)
 	if err != nil {
-		d.logger.Error("Failed to delete file from DigitalOcean Spaces", "key", key, "error", err)
+		d.logger.Error("Failed to delete file from DigitalOcean Spaces", "key", key, "bucket", bucket, "error", err)
 		return fmt.Errorf("failed to delete file: %w", err)
 	}
 
-	d.logger.Info("File deleted successfully", "key", key)
+	d.logger.Info("File deleted successfully", "key", key, "bucket", bucket)
 	return nil
 }
 
 func (d *DigitalOceanSpaces) Exists(ctx context.Context, urlOrKey string) (bool, error) {
 	key := d.extractKeyFromURL(urlOrKey)
+	bucket := d.extractBucketFromURL(urlOrKey)
 
-	d.logger.Debug("Checking if file exists in DigitalOcean Spaces", "key", key)
+	d.logger.Debug("Checking if file exists in DigitalOcean Spaces", "key", key, "bucket", bucket)
 
 	input := &s3.HeadObjectInput{
-		Bucket: aws.String(d.bucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}
 
 	_, err := d.client.HeadObject(ctx, input)
 	if err != nil {
-		if err != nil && !strings.Contains(err.Error(), "NotFound") {
-			d.logger.Error("Error checking file existence", "key", key, "error", err)
+		if !strings.Contains(err.Error(), "NotFound") {
+			d.logger.Error("Error checking file existence", "key", key, "bucket", bucket, "error", err)
 			return false, fmt.Errorf("failed to check file existence: %w", err)
 		}
 		return false, nil
 	}
 
-	d.logger.Debug("File exists", "key", key)
+	d.logger.Debug("File exists", "key", key, "bucket", bucket)
 	return true, nil
 }
 
@@ -170,6 +195,25 @@ func (d *DigitalOceanSpaces) extractKeyFromURL(urlOrKey string) string {
 		return key
 	}
 	return urlOrKey
+}
+
+func (d *DigitalOceanSpaces) extractBucketFromURL(urlOrKey string) string {
+	if !strings.HasPrefix(urlOrKey, "http") {
+		return d.bucket
+	}
+
+	parsedURL, err := url.Parse(urlOrKey)
+	if err != nil {
+		return d.bucket
+	}
+
+	host := parsedURL.Hostname()
+	parts := strings.SplitN(host, ".", 2)
+	if len(parts) < 2 {
+		return d.bucket
+	}
+
+	return parts[0]
 }
 
 func (d *DigitalOceanSpaces) GetPublicURL(key string) string {

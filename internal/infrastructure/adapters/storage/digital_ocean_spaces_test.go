@@ -332,6 +332,57 @@ func TestDigitalOceanSpaces_Upload_SuccessPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to upload file")
 }
 
+func TestDigitalOceanSpaces_UploadToBucket_InvalidCredentials(t *testing.T) {
+	os.Setenv("DO_SPACES_ID", "invalid")
+	os.Setenv("DO_SPACES_SECRET", "invalid")
+	os.Setenv("DO_SPACES_BUCKET", "default-bucket")
+	os.Setenv("DO_SPACES_URL", "https://sfo3.digitaloceanspaces.com")
+
+	mockLogger := &MockLogger{}
+	service, _ := NewDigitalOceanSpaces(mockLogger)
+
+	ctx := context.Background()
+	data := []byte("test data")
+	filename := "test.jpg"
+	contentType := "image/jpeg"
+
+	_, err := service.UploadToBucket(ctx, "custom-bucket", data, filename, contentType)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to upload file")
+}
+
+func TestExtractBucketFromURL(t *testing.T) {
+	os.Setenv("DO_SPACES_ID", "invalid")
+	os.Setenv("DO_SPACES_SECRET", "invalid")
+	os.Setenv("DO_SPACES_BUCKET", "default-bucket")
+	os.Setenv("DO_SPACES_URL", "https://nyc3.digitaloceanspaces.com")
+
+	mockLogger := &MockLogger{}
+	service, _ := NewDigitalOceanSpaces(mockLogger)
+	dos := service.(*DigitalOceanSpaces)
+
+	tests := []struct {
+		name     string
+		url      string
+		expected string
+	}{
+		{"Full DO Spaces URL", "https://my-bucket.nyc3.digitaloceanspaces.com/path/file.pdf", "my-bucket"},
+		{"Different bucket", "https://other-bucket.nyc3.digitaloceanspaces.com/lessons/abc/page-1.jpg", "other-bucket"},
+		{"Just a key (no URL)", "lessons/abc/page-1.jpg", "default-bucket"},
+		{"Empty string", "", "default-bucket"},
+		{"Non-DO URL", "https://example.com/file.pdf", "example"},
+		{"URL without path", "https://my-bucket.nyc3.digitaloceanspaces.com", "my-bucket"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := dos.extractBucketFromURL(tt.url)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestDigitalOceanSpaces_Download_SuccessPath(t *testing.T) {
 	os.Setenv("DO_SPACES_ID", "invalid")
 	os.Setenv("DO_SPACES_SECRET", "invalid")
