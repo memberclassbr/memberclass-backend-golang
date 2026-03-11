@@ -952,6 +952,13 @@ func (u *pdfProcessorUseCase) GetPDFPagesByAssetID(ctx context.Context, assetID 
 	return []*lessons.LessonPDFPage{}, nil
 }
 
+// hostToBucket maps CDN hostname prefixes to real DigitalOcean Spaces bucket names.
+var hostToBucket = map[string]string{
+	"storage":      "memberclass",
+	"ephra":        "ephra",
+	"celetusclass": "celetusclass",
+}
+
 func extractBucketFromMediaURL(mediaURL string) string {
 	if !strings.HasPrefix(mediaURL, "http") {
 		return ""
@@ -968,5 +975,10 @@ func extractBucketFromMediaURL(mediaURL string) string {
 		return ""
 	}
 
-	return parts[0]
+	subdomain := parts[0]
+	if bucket, ok := hostToBucket[subdomain]; ok {
+		return bucket
+	}
+
+	return subdomain
 }
