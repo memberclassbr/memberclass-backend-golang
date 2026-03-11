@@ -737,7 +737,6 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.Le
 	filename := fmt.Sprintf("lessons/%s/page-%d.jpg", assetID, pageNumber)
 
 	// 4. Upload to DigitalOcean Spaces (dynamic bucket)
-	u.logger.Info(fmt.Sprintf("Uploading page %d to storage for asset %s", pageNumber, assetID))
 	var imageURL string
 	var uploadErr error
 	if bucket != "" {
@@ -749,8 +748,6 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.Le
 		u.logger.Error(fmt.Sprintf("Failed to upload page %d to storage for asset %s: %v", pageNumber, assetID, uploadErr))
 		return false, fmt.Errorf("failed to upload image to storage: %w", uploadErr)
 	}
-
-	u.logger.Info(fmt.Sprintf("Successfully uploaded page %d to storage: %s", pageNumber, imageURL))
 
 	// 5. Save storage URL to database
 	page := &lessons.LessonPDFPage{
@@ -872,6 +869,8 @@ func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, rep
 		}
 		mu.Unlock()
 	}
+
+	u.logger.Info(fmt.Sprintf("Pages saved for asset %s: %d/%d (bucket: %s)", assetID, processedPages, len(images), bucket))
 
 	return processedPages, nil
 }

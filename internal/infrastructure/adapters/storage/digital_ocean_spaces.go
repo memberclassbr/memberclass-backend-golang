@@ -69,8 +69,6 @@ func NewDigitalOceanSpaces(logger ports.Logger) (ports.Storage, error) {
 }
 
 func (d *DigitalOceanSpaces) Upload(ctx context.Context, data []byte, filename string, contentType string) (string, error) {
-	d.logger.Info("Uploading file to DigitalOcean Spaces", "filename", filename, "size", len(data))
-
 	input := &s3.PutObjectInput{
 		Bucket:      aws.String(d.bucket),
 		Key:         aws.String(filename),
@@ -85,14 +83,10 @@ func (d *DigitalOceanSpaces) Upload(ctx context.Context, data []byte, filename s
 	}
 
 	publicURL := fmt.Sprintf("%s/%s", d.publicURL, filename)
-	d.logger.Info("File uploaded successfully", "filename", filename, "url", publicURL)
-
 	return publicURL, nil
 }
 
 func (d *DigitalOceanSpaces) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
-	d.logger.Info("Uploading file to DigitalOcean Spaces", "filename", filename, "bucket", bucket, "size", len(data))
-
 	input := &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(filename),
@@ -107,8 +101,6 @@ func (d *DigitalOceanSpaces) UploadToBucket(ctx context.Context, bucket string, 
 	}
 
 	publicURL := fmt.Sprintf("https://%s.%s.digitaloceanspaces.com/%s", bucket, d.region, filename)
-	d.logger.Info("File uploaded successfully", "filename", filename, "bucket", bucket, "url", publicURL)
-
 	return publicURL, nil
 }
 
