@@ -32,6 +32,10 @@ tags:
       - Vitrines, cursos, seções, módulos e aulas
       - Listagem completa com hierarquia
       - Busca individual por ID
+  - name: Auth
+    description: Endpoints para autenticação via magic link
+  - name: SSO
+    description: Endpoints para Single Sign-On (geração e validação de tokens)
 
 paths:
   /api/v1/comments:
@@ -1483,6 +1487,265 @@ paths:
                 $ref: '#/components/schemas/CustomErrorResponse'
         '401':
           description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
+  /api/v1/auth:
+    post:
+      tags:
+        - Auth
+      summary: Gerar magic link de login
+      description: |
+        Gera um link de login (magic link) para o usuário autenticado no tenant.
+
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      parameters:
+        - in: header
+          name: mc-api-key
+          required: true
+          schema:
+            type: string
+          description: Token de API do tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Email do usuário
+                  example: "usuario@exemplo.com"
+      responses:
+        '200':
+          description: Magic link gerado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  link:
+                    type: string
+                    description: URL do magic link para login
+                    example: "https://app.memberclass.com.br/auth/login?token=abc123"
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '404':
+          description: Usuário não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '429':
+          description: Rate limit excedido
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Total de requisições permitidas
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Requisições restantes
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Timestamp Unix do reset do limite
+            Retry-After:
+              schema:
+                type: integer
+              description: Segundos até poder tentar novamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
+  /api/v1/sso/generate-token:
+    post:
+      tags:
+        - SSO
+      summary: Gerar token SSO
+      description: |
+        Gera um token SSO para autenticação do usuário em serviços externos.
+
+        **Autenticação:** Requer header `x-internal-api-key` com chave interna válida.
+      parameters:
+        - in: header
+          name: x-internal-api-key
+          required: true
+          schema:
+            type: string
+          description: Chave de API interna
+        - in: query
+          name: externalUrl
+          required: true
+          schema:
+            type: string
+          description: URL externa para redirecionamento após SSO
+          example: "https://app.exemplo.com/callback"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - tenantId
+              properties:
+                userId:
+                  type: string
+                  description: ID do usuário
+                  example: "user-123"
+                tenantId:
+                  type: string
+                  description: ID do tenant
+                  example: "tenant-456"
+      responses:
+        '200':
+          description: Token SSO gerado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Token SSO gerado
+                    example: "sso-token-abc123"
+                  redirectUrl:
+                    type: string
+                    description: URL de redirecionamento com token
+                    example: "https://app.exemplo.com/callback?token=sso-token-abc123"
+                  expiresInSecs:
+                    type: integer
+                    description: Tempo de expiração em segundos
+                    example: 300
+        '400':
+          description: Requisição inválida (campos obrigatórios faltando)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Não autorizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '429':
+          description: Rate limit excedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+
+  /api/v1/sso/validate-token:
+    post:
+      tags:
+        - SSO
+      summary: Validar token SSO
+      description: |
+        Valida um token SSO e retorna os dados do usuário e tenant associados.
+
+        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+      parameters:
+        - in: header
+          name: mc-api-key
+          required: true
+          schema:
+            type: string
+          description: Token de API do tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: Token SSO a ser validado
+                  example: "sso-token-abc123"
+      responses:
+        '200':
+          description: Token válido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "user-123"
+                      email:
+                        type: string
+                        example: "usuario@exemplo.com"
+                      name:
+                        type: string
+                        nullable: true
+                        example: "João Silva"
+                      phone:
+                        type: string
+                        nullable: true
+                        example: "+5511999999999"
+                      document:
+                        type: string
+                        nullable: true
+                        example: "123.456.789-00"
+                  tenant:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "tenant-456"
+                      name:
+                        type: string
+                        example: "Minha Escola"
+        '400':
+          description: Requisição inválida (token faltando)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '401':
+          description: Token inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '403':
+          description: Acesso proibido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+        '404':
+          description: Token ou recurso não encontrado
           content:
             application/json:
               schema:

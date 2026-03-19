@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	ai3 "github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
@@ -60,6 +61,7 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load()
 
 	fx.New(
 		fx.Provide(

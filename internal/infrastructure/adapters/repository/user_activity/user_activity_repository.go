@@ -31,12 +31,15 @@ func (r *UserActivityRepository) FindActivitiesByEmail(ctx context.Context, emai
 	offset := (page - 1) * limit
 
 	query := `
-		SELECT 
-			TO_CHAR(sl."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as data
-		FROM "SystemLog" sl
-		JOIN "User" u ON sl.user_id = u.id
+		SELECT
+			TO_CHAR(ue."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as data
+		FROM "UserEvent" ue
+		JOIN "UsersOnTenants" uot ON uot."userId" = ue."usersOnTenantsUserId"
+			AND uot."tenantId" = ue."usersOnTenantsTenantId"
+		JOIN "User" u ON u.id = uot."userId"
 		WHERE u.email = $1
-		ORDER BY sl."createdAt" DESC
+		  AND ue.type = 'login'
+		ORDER BY ue."createdAt" DESC
 		LIMIT $2 OFFSET $3
 	`
 
@@ -72,10 +75,13 @@ func (r *UserActivityRepository) FindActivitiesByEmail(ctx context.Context, emai
 	}
 
 	countQuery := `
-		SELECT COUNT(*) 
-		FROM "SystemLog" sl
-		JOIN "User" u ON sl.user_id = u.id
+		SELECT COUNT(*)
+		FROM "UserEvent" ue
+		JOIN "UsersOnTenants" uot ON uot."userId" = ue."usersOnTenantsUserId"
+			AND uot."tenantId" = ue."usersOnTenantsTenantId"
+		JOIN "User" u ON u.id = uot."userId"
 		WHERE u.email = $1
+		  AND ue.type = 'login'
 	`
 
 	var total int64
