@@ -41,6 +41,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
+	"github.com/memberclass-backend-golang/internal/features/activity_summary"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
@@ -102,7 +103,7 @@ func main() {
 			user3.NewUserPurchaseUseCase,
 			user3.NewUserInformationsUseCase,
 			comment3.NewSocialCommentUseCase,
-			user3.NewActivitySummaryUseCase,
+			activity_summary.New,
 			lessons.NewLessonsCompletedUseCase,
 			student.NewStudentReportUseCase,
 			auth.NewAuthUseCase,
@@ -130,7 +131,6 @@ func main() {
 			purchase2.NewUserPurchaseHandler,
 			user4.NewUserInformationsHandler,
 			comment4.NewSocialCommentHandler,
-			user4.NewActivitySummaryHandler,
 			lesson2.NewLessonsCompletedHandler,
 			student2.NewStudentReportHandler,
 			internalhttp.NewSwaggerHandler,

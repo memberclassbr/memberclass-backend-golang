@@ -74,5 +74,4 @@ packages:
       UserActivityUseCase:
       UserPurchaseUseCase:
       UserInformationsUseCase:
-      ActivitySummaryUseCase:
       SessionValidatorUseCase:
