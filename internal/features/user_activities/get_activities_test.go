@@ -59,12 +59,15 @@ func (fakeLogger) Error(string, ...any) {}
 
 // ---------- Helpers ----------
 
+// newTestFeature builds a Feature in dev mode (cache bypassed) so tests don't
+// exercise the cache path unless they opt in by setting f.devMode = false.
 func newTestFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, *fakeCache, func()) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	cache := newFakeCache()
 	f := New(db, cache, fakeLogger{})
+	f.devMode = true
 	return f, mock, cache, func() { _ = db.Close() }
 }
 
@@ -178,7 +181,7 @@ func TestGetActivities_UnionReturnsMixedEvents(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"id", "type", "date", "details"}).
 		AddRow("evt-3", "certificate", t3, []byte(`{"title":"Curso X","status":"issued"}`)).
 		AddRow("evt-2", "lessonCompleted", t2, []byte(`{"lessonId":"l-1","lessonName":"Aula 1","rating":5}`)).
-		AddRow("evt-1", "login", t1, []byte(`{"whereEvent":"web","withEvent":"chrome","value":"ok"}`))
+		AddRow("evt-1", "login", t1, nil) // login: SQL returns NULL::jsonb
 
 	expectEventsAndCount(mock, rows, 3)
 
@@ -190,9 +193,17 @@ func TestGetActivities_UnionReturnsMixedEvents(t *testing.T) {
 	assert.Equal(t, "lessonCompleted", resp.Events[1].Type)
 	assert.Equal(t, "login", resp.Events[2].Type)
 
-	var loginDetails map[string]any
-	require.NoError(t, json.Unmarshal(resp.Events[2].Details, &loginDetails))
-	assert.Equal(t, "web", loginDetails["whereEvent"])
+	// Login carries no details; the field is omitted from the JSON response.
+	assert.Empty(t, resp.Events[2].Details)
+
+	marshaled, err := json.Marshal(resp.Events[2])
+	require.NoError(t, err)
+	assert.NotContains(t, string(marshaled), `"details"`, "login event must not serialize a details field")
+
+	// Other event types still carry their type-specific payload.
+	var certDetails map[string]any
+	require.NoError(t, json.Unmarshal(resp.Events[0].Details, &certDetails))
+	assert.Equal(t, "Curso X", certDetails["title"])
 
 	assert.Equal(t, int64(3), resp.Pagination.TotalCount)
 	assert.Equal(t, "a@b.com", resp.Email)
@@ -210,29 +221,6 @@ func TestGetActivities_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, resp.Events)
 	assert.Equal(t, int64(0), resp.Pagination.TotalCount)
-}
-
-func TestGetActivities_CacheHit(t *testing.T) {
-	f, mock, cache, done := newTestFeature(t)
-	defer done()
-
-	expectResolveUserID(mock, "a@b.com", "tenant-123", "user-1")
-
-	cached := activitiesResponse{
-		Email:      "a@b.com",
-		Events:     []event{{ID: "evt-1", Type: "login", Date: time.Now(), Details: json.RawMessage(`{"value":"ok"}`)}},
-		Pagination: dto.PaginationMeta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
-	}
-	raw, _ := json.Marshal(cached)
-	req := getActivitiesRequest{Email: "a@b.com", Page: 1, Limit: 10}
-	startDate, endDate := resolveDateRange(req)
-	cache.store[buildCacheKey("tenant-123", "user-1", req, startDate, endDate)] = string(raw)
-
-	resp, err := f.getActivities(context.Background(), req, "tenant-123")
-	require.NoError(t, err)
-	require.Len(t, resp.Events, 1)
-	// No event/count queries should have been called.
-	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestGetActivities_UnionError(t *testing.T) {
@@ -282,6 +270,73 @@ func TestGetActivities_Pagination(t *testing.T) {
 	assert.Equal(t, 3, resp.Pagination.TotalPages)
 	assert.True(t, resp.Pagination.HasNextPage)
 	assert.True(t, resp.Pagination.HasPrevPage)
+}
+
+func TestGetActivities_DevMode_NoCacheField(t *testing.T) {
+	f, mock, _, done := newTestFeature(t)
+	defer done()
+	// default: devMode=true
+
+	expectResolveUserID(mock, "a@b.com", "tenant-123", "user-1")
+	expectEventsAndCount(mock,
+		sqlmock.NewRows([]string{"id", "type", "date", "details"}).AddRow("evt-1", "login", time.Now(), nil),
+		1,
+	)
+
+	resp, err := f.getActivities(context.Background(), getActivitiesRequest{Email: "a@b.com", Page: 1, Limit: 10}, "tenant-123")
+	require.NoError(t, err)
+	assert.Nil(t, resp.Cache, "dev mode must not attach cache metadata")
+}
+
+func TestGetActivities_ProdMode_CacheMissSetsMetaAndStores(t *testing.T) {
+	f, mock, cache, done := newTestFeature(t)
+	defer done()
+	f.devMode = false
+
+	expectResolveUserID(mock, "a@b.com", "tenant-123", "user-1")
+	expectEventsAndCount(mock,
+		sqlmock.NewRows([]string{"id", "type", "date", "details"}).AddRow("evt-1", "login", time.Now(), nil),
+		1,
+	)
+
+	before := time.Now().UTC()
+	resp, err := f.getActivities(context.Background(), getActivitiesRequest{Email: "a@b.com", Page: 1, Limit: 10}, "tenant-123")
+	require.NoError(t, err)
+	require.NotNil(t, resp.Cache, "prod mode must attach cache metadata")
+
+	assert.WithinDuration(t, before, resp.Cache.CachedAt, 2*time.Second)
+	assert.Equal(t, cacheTTL, resp.Cache.RefreshAt.Sub(resp.Cache.CachedAt))
+	assert.Len(t, cache.store, 1, "prod mode must write the response to cache")
+}
+
+func TestGetActivities_ProdMode_CacheHitReturnsStoredMeta(t *testing.T) {
+	f, mock, cache, done := newTestFeature(t)
+	defer done()
+	f.devMode = false
+
+	expectResolveUserID(mock, "a@b.com", "tenant-123", "user-1")
+
+	storedAt := time.Date(2026, 4, 23, 10, 0, 0, 0, time.UTC)
+	stored := activitiesResponse{
+		Email: "a@b.com",
+		Events: []event{
+			{ID: "cached-1", Type: "login", Date: storedAt},
+		},
+		Pagination: dto.PaginationMeta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
+		Cache:      &cacheMeta{CachedAt: storedAt, RefreshAt: storedAt.Add(cacheTTL)},
+	}
+	raw, _ := json.Marshal(stored)
+	req := getActivitiesRequest{Email: "a@b.com", Page: 1, Limit: 10}
+	startDate, endDate := resolveDateRange(req)
+	cache.store[buildCacheKey("tenant-123", "user-1", req, startDate, endDate)] = string(raw)
+
+	resp, err := f.getActivities(context.Background(), req, "tenant-123")
+	require.NoError(t, err)
+	require.Len(t, resp.Events, 1)
+	assert.Equal(t, "cached-1", resp.Events[0].ID)
+	require.NotNil(t, resp.Cache)
+	assert.Equal(t, storedAt, resp.Cache.CachedAt.UTC())
+	assert.NoError(t, mock.ExpectationsWereMet(), "cache hit must not hit the DB event/count queries")
 }
 
 func TestBuildCacheKey_IncludesTenantAndUser(t *testing.T) {

@@ -39,14 +39,25 @@ type event struct {
 	ID      string          `json:"id"`
 	Type    string          `json:"type"`
 	Date    time.Time       `json:"date"`
-	Details json.RawMessage `json:"details"`
+	Details json.RawMessage `json:"details,omitempty"`
+}
+
+// cacheMeta is attached to responses served (or being stored) in production.
+// It tells the client when this payload was computed and when it will expire.
+// Absent when the cache is disabled (development mode).
+type cacheMeta struct {
+	CachedAt  time.Time `json:"cachedAt"`
+	RefreshAt time.Time `json:"refreshAt"`
 }
 
 type activitiesResponse struct {
 	Email      string             `json:"email"`
 	Events     []event            `json:"events"`
 	Pagination dto.PaginationMeta `json:"pagination"`
+	Cache      *cacheMeta         `json:"cache,omitempty"`
 }
+
+const cacheTTL = 5 * time.Minute
 
 // ---------- 1. HTTP handler ----------
 
@@ -101,13 +112,19 @@ func (f *Feature) getActivities(ctx context.Context, req getActivitiesRequest, t
 	}
 
 	startDate, endDate := resolveDateRange(req)
-	cacheKey := buildCacheKey(tenantID, userID, req, startDate, endDate)
 
-	if cached, err := f.cache.Get(ctx, cacheKey); err == nil && cached != "" {
-		var hit activitiesResponse
-		if err := json.Unmarshal([]byte(cached), &hit); err == nil {
-			f.log.Debug(fmt.Sprintf("Cache hit for key: %s", cacheKey))
-			return &hit, nil
+	// Cache is bypassed in development mode so local testing always hits fresh
+	// data. In production we read-through the cache and, on miss, compute +
+	// store with an attached cacheMeta so the client knows the refresh window.
+	var cacheKey string
+	if !f.devMode {
+		cacheKey = buildCacheKey(tenantID, userID, req, startDate, endDate)
+		if cached, err := f.cache.Get(ctx, cacheKey); err == nil && cached != "" {
+			var hit activitiesResponse
+			if err := json.Unmarshal([]byte(cached), &hit); err == nil {
+				f.log.Debug(fmt.Sprintf("Cache hit for key: %s", cacheKey))
+				return &hit, nil
+			}
 		}
 	}
 
@@ -127,11 +144,16 @@ func (f *Feature) getActivities(ctx context.Context, req getActivitiesRequest, t
 		Pagination: buildPaginationMeta(req.Page, req.Limit, totalCount),
 	}
 
-	if raw, err := json.Marshal(resp); err == nil {
-		if err := f.cache.Set(ctx, cacheKey, string(raw), 5*time.Minute); err != nil {
-			f.log.Error(fmt.Sprintf("Error setting cache for key %s: %s", cacheKey, err.Error()))
-		} else {
-			f.log.Debug(fmt.Sprintf("Cache set for key: %s", cacheKey))
+	if !f.devMode {
+		now := time.Now().UTC()
+		resp.Cache = &cacheMeta{CachedAt: now, RefreshAt: now.Add(cacheTTL)}
+
+		if raw, err := json.Marshal(resp); err == nil {
+			if err := f.cache.Set(ctx, cacheKey, string(raw), cacheTTL); err != nil {
+				f.log.Error(fmt.Sprintf("Error setting cache for key %s: %s", cacheKey, err.Error()))
+			} else {
+				f.log.Debug(fmt.Sprintf("Cache set for key: %s", cacheKey))
+			}
 		}
 	}
 
@@ -379,15 +401,13 @@ const sqlResolveUserID = `
 // Params: $1 userId, $2 tenantId, $3 startDate, $4 endDate, $5 limit, $6 offset.
 const sqlEventsUnion = `
 	SELECT id, type, date, details FROM (
+		-- Login events omit details: the timestamp and type are the
+		-- whole story. NULL::jsonb keeps the UNION ALL column shape.
 		SELECT
 			ue.id::text AS id,
 			'login' AS type,
 			ue."createdAt" AS date,
-			jsonb_build_object(
-				'whereEvent', ue."whereEvent",
-				'withEvent', ue."withEvent",
-				'value', ue.value
-			) AS details
+			NULL::jsonb AS details
 		FROM "UserEvent" ue
 		WHERE ue."usersOnTenantsUserId" = $1
 		  AND ue."usersOnTenantsTenantId" = $2
@@ -424,9 +444,11 @@ const sqlEventsUnion = `
 		FROM "Read" r
 		JOIN "Lesson" l ON l.id = r."lessonId"
 		JOIN "Module" m ON m.id = l."moduleId"
-		JOIN "Course" c ON c.id = m."courseId"
+		JOIN "Section" s ON s.id = m."sectionId"
+		JOIN "Course" c ON c.id = s."courseId"
+		JOIN "Vitrine" v ON v.id = c."vitrineId"
 		WHERE r."userId" = $1
-		  AND c."tenantId" = $2
+		  AND v."tenantId" = $2
 		  AND r.read = true
 		  AND r."createdAt" BETWEEN $3 AND $4
 
@@ -462,9 +484,11 @@ const sqlEventsUnion = `
 		FROM "Comment" cm
 		JOIN "Lesson" l ON l.id = cm."lessonId"
 		JOIN "Module" m ON m.id = l."moduleId"
-		JOIN "Course" c ON c.id = m."courseId"
+		JOIN "Section" s ON s.id = m."sectionId"
+		JOIN "Course" c ON c.id = s."courseId"
+		JOIN "Vitrine" v ON v.id = c."vitrineId"
 		WHERE cm."userId" = $1
-		  AND c."tenantId" = $2
+		  AND v."tenantId" = $2
 		  AND cm."createdAt" BETWEEN $3 AND $4
 
 		UNION ALL
@@ -527,8 +551,10 @@ const sqlEventsCount = `
 		SELECT 1 FROM "Read" r
 		JOIN "Lesson" l ON l.id = r."lessonId"
 		JOIN "Module" m ON m.id = l."moduleId"
-		JOIN "Course" c ON c.id = m."courseId"
-		WHERE r."userId" = $1 AND c."tenantId" = $2 AND r.read = true
+		JOIN "Section" s ON s.id = m."sectionId"
+		JOIN "Course" c ON c.id = s."courseId"
+		JOIN "Vitrine" v ON v.id = c."vitrineId"
+		WHERE r."userId" = $1 AND v."tenantId" = $2 AND r.read = true
 		  AND r."createdAt" BETWEEN $3 AND $4
 
 		UNION ALL
@@ -541,8 +567,10 @@ const sqlEventsCount = `
 		SELECT 1 FROM "Comment" cm
 		JOIN "Lesson" l ON l.id = cm."lessonId"
 		JOIN "Module" m ON m.id = l."moduleId"
-		JOIN "Course" c ON c.id = m."courseId"
-		WHERE cm."userId" = $1 AND c."tenantId" = $2
+		JOIN "Section" s ON s.id = m."sectionId"
+		JOIN "Course" c ON c.id = s."courseId"
+		JOIN "Vitrine" v ON v.id = c."vitrineId"
+		WHERE cm."userId" = $1 AND v."tenantId" = $2
 		  AND cm."createdAt" BETWEEN $3 AND $4
 
 		UNION ALL
