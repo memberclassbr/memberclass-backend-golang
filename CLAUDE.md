@@ -31,7 +31,8 @@ internal/features/
 ### Migration progress
 
 - [x] Pilot: `activity_summary`
-- [ ] Everything else (14 features remaining): auth, sso, user_informations, user_activity, user_purchase, comment, social_comment, vitrine, student_report, ai_lesson, ai_tenant, video, bunny, lesson (+ pdf_processor + transcription job)
+- [x] `user_activities` — unified events timeline (login, lessonCompleted, download, comment, acceptTerms, quiz, certificate); fixed tenant leak in SQL + cache key
+- [ ] Everything else (13 features remaining): auth, sso, user_informations, user_purchase, comment, social_comment, vitrine, student_report, ai_lesson, ai_tenant, video, bunny, lesson (+ pdf_processor + transcription job)
 - [ ] Cleanup PR: delete `internal/domain/*`, `internal/application/handlers|middlewares|jobs|router`, `internal/infrastructure/adapters`, `internal/mocks/`, `.mockery.yaml`; remove `go.uber.org/fx` from `go.mod`.
 
 When touching an existing old-structure feature for a bugfix, leave the structure alone — don't mix a refactor into an unrelated fix. Schedule the slice migration as its own PR.

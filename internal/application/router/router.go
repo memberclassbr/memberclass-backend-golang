@@ -20,6 +20,7 @@ import (
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/features/activity_summary"
+	"github.com/memberclass-backend-golang/internal/features/user_activities"
 )
 
 type Router struct {
@@ -27,7 +28,7 @@ type Router struct {
 	videoHandler              *video.VideoHandler
 	lessonHandler             *lesson.LessonHandler
 	commentHandler            *comment.CommentHandler
-	userActivityHandler       *user.UserActivityHandler
+	userActivities            *user_activities.Feature
 	userPurchaseHandler       *purchase.UserPurchaseHandler
 	userInformationsHandler   *user.UserInformationsHandler
 	socialCommentHandler      *comment.SocialCommentHandler
@@ -51,7 +52,7 @@ func NewRouter(
 	videoHandler *video.VideoHandler,
 	lessonHandler *lesson.LessonHandler,
 	commentHandler *comment.CommentHandler,
-	userActivityHandler *user.UserActivityHandler,
+	userActivities *user_activities.Feature,
 	userPurchaseHandler *purchase.UserPurchaseHandler,
 	userInformationsHandler *user.UserInformationsHandler,
 	socialCommentHandler *comment.SocialCommentHandler,
@@ -89,7 +90,7 @@ func NewRouter(
 		videoHandler:              videoHandler,
 		lessonHandler:             lessonHandler,
 		commentHandler:            commentHandler,
-		userActivityHandler:       userActivityHandler,
+		userActivities:            userActivities,
 		userPurchaseHandler:       userPurchaseHandler,
 		userInformationsHandler:   userInformationsHandler,
 		socialCommentHandler:      socialCommentHandler,
@@ -172,10 +173,11 @@ func (r *Router) SetupRoutes() {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
 			).Get("/informations", r.userInformationsHandler.GetUserInformations)
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/activities", r.userActivityHandler.GetUserActivities)
+
+			r.userActivities.Register(router, user_activities.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 
 			r.activitySummary.Register(router, activity_summary.MiddlewareSet{
 				AuthExternal:    r.authExternalMiddleware.Authenticate,

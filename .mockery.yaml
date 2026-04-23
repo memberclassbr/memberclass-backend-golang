@@ -70,8 +70,6 @@ packages:
   github.com/memberclass-backend-golang/internal/domain/ports/user:
     interfaces:
       UserRepository:
-      UserActivityRepository:
-      UserActivityUseCase:
       UserPurchaseUseCase:
       UserInformationsUseCase:
       SessionValidatorUseCase:
