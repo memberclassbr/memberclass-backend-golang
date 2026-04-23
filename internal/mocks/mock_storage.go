@@ -243,6 +243,66 @@ func (_c *MockStorage_Upload_Call) RunAndReturn(run func(context.Context, []byte
 	return _c
 }
 
+// UploadToBucket provides a mock function with given fields: ctx, bucket, data, filename, contentType
+func (_m *MockStorage) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
+	ret := _m.Called(ctx, bucket, data, filename, contentType)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UploadToBucket")
+	}
+
+	var r0 string
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, string) (string, error)); ok {
+		return rf(ctx, bucket, data, filename, contentType)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte, string, string) string); ok {
+		r0 = rf(ctx, bucket, data, filename, contentType)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, []byte, string, string) error); ok {
+		r1 = rf(ctx, bucket, data, filename, contentType)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockStorage_UploadToBucket_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UploadToBucket'
+type MockStorage_UploadToBucket_Call struct {
+	*mock.Call
+}
+
+// UploadToBucket is a helper method to define mock.On call
+//   - ctx context.Context
+//   - bucket string
+//   - data []byte
+//   - filename string
+//   - contentType string
+func (_e *MockStorage_Expecter) UploadToBucket(ctx interface{}, bucket interface{}, data interface{}, filename interface{}, contentType interface{}) *MockStorage_UploadToBucket_Call {
+	return &MockStorage_UploadToBucket_Call{Call: _e.mock.On("UploadToBucket", ctx, bucket, data, filename, contentType)}
+}
+
+func (_c *MockStorage_UploadToBucket_Call) Run(run func(ctx context.Context, bucket string, data []byte, filename string, contentType string)) *MockStorage_UploadToBucket_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].([]byte), args[3].(string), args[4].(string))
+	})
+	return _c
+}
+
+func (_c *MockStorage_UploadToBucket_Call) Return(_a0 string, _a1 error) *MockStorage_UploadToBucket_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockStorage_UploadToBucket_Call) RunAndReturn(run func(context.Context, string, []byte, string, string) (string, error)) *MockStorage_UploadToBucket_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewMockStorage creates a new instance of MockStorage. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockStorage(t interface {

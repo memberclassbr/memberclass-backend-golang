@@ -321,15 +321,34 @@ paths:
     get:
       tags:
         - Users
-      summary: Listar atividades de acesso do usuário
+      summary: Timeline unificada de eventos do usuário
       description: |
-        Retorna uma lista paginada de atividades de acesso de um usuário específico.
-        
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
-        
-        **Cache:** Este endpoint utiliza cache Redis com TTL de 5 minutos para melhorar a performance.
-        
-        **Paginação:** Suporta parâmetros de paginação via query string.
+        Retorna uma lista paginada e ordenada por data (desc) de todos os eventos
+        que um usuário gerou dentro do tenant autenticado. Unifica sete fontes:
+
+        | `type` | Origem |
+        |---|---|
+        | `login` | `UserEvent` type=login (sem `details`) |
+        | `acceptTerms` | `UserEvent` type=acceptTerms |
+        | `lessonCompleted` | `Read` com `read=true` |
+        | `download` | `Download` + `Arquive` |
+        | `comment` | `Comment` em lição |
+        | `quiz` | `StudentQuiz` (não deletado) |
+        | `certificate` | `UserCertificates` |
+
+        **Autenticação:** header `mc-api-key`.
+
+        **Cache:** em produção, respostas são cacheadas por 5 minutos no Redis e
+        trazem o bloco `cache: {cachedAt, refreshAt}`. Em desenvolvimento
+        (`APP_ENV=development|dev|local`) o cache é ignorado e o campo `cache`
+        é omitido.
+
+        **Regras de Data:**
+        - Sem `startDate` e `endDate` → últimos 31 dias
+        - Apenas `startDate` → dia inteiro de `startDate` (00:00 a 23:59)
+        - `endDate` sem `startDate` → erro
+        - `startDate > endDate` → erro
+        - Período máximo: **31 dias**
       operationId: getUserActivities
       parameters:
         - name: mc-api-key
@@ -342,7 +361,7 @@ paths:
         - name: email
           in: query
           required: true
-          description: Email do usuário
+          description: Email do usuário (obrigatório)
           schema:
             type: string
             format: email
@@ -364,58 +383,132 @@ paths:
             minimum: 1
             maximum: 100
             default: 10
+        - name: startDate
+          in: query
+          required: false
+          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-01T00:00:00Z"
+        - name: endDate
+          in: query
+          required: false
+          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-31T23:59:59Z"
       responses:
         '200':
-          description: Lista de atividades retornada com sucesso
+          description: Timeline de eventos retornada com sucesso
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ActivityResponse'
+                $ref: '#/components/schemas/UserActivitiesResponse'
               example:
                 email: "user@example.com"
-                access:
-                  - data: "2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'"
-                  - data: "2024-01-14T15:20:00Z - Acessou o curso 'Curso de Go'"
-                  - data: "2024-01-13T09:10:00Z - Completou a lição 'Variáveis e Tipos'"
+                events:
+                  - id: "cmobpsp9g0050l40cj4hm0uwi"
+                    type: "download"
+                    date: "2026-04-23T16:47:23.621Z"
+                    details:
+                      arquiveId: "cmd38zaed0001l804j7tv4aj9"
+                      arquiveName: "1727886721562-Micael-Pereira.pdf"
+                      size: 501390
+                  - id: "cmobpqqkw006bi50cv5b0gcy7"
+                    type: "acceptTerms"
+                    date: "2026-04-23T16:45:52.017Z"
+                    details:
+                      whereEvent: "[\"<p>teste123</p>\",\"2026-04-23T16:44:35.291Z\"]"
+                      withEvent: "Thu Apr 23 2026 13:45:52 GMT-0300"
+                  - id: "cmobpprpa004il80c8r1zg1dy"
+                    type: "certificate"
+                    date: "2026-04-23T16:45:06.815Z"
+                    details:
+                      certificateId: "cmeg516j00001jq04lklxvhs7"
+                      certificateUrl: "https://storage.filesmemberclass.com/certificate-....pdf"
+                      status: "success"
+                      title: "Nome Certificado"
+                  - id: "cmobpnmkl0056in0cp2yqxnfq"
+                    type: "lessonCompleted"
+                    date: "2026-04-23T16:43:26.854Z"
+                    details:
+                      lessonId: "cm21tp36f00023lf0v6js889y"
+                      lessonName: "Prova Final Explicação"
+                      rating: null
+                  - id: "cmobomhr8000kin0cxfs3fhug"
+                    type: "comment"
+                    date: "2026-04-23T16:14:34.341Z"
+                    details:
+                      lessonId: "cmfgqnfd4000rvvx1qmu7ggsi"
+                      question: "teste comentário"
+                      answer: null
+                      published: true
+                  - id: "clf2y4szs0000cu2kurt0lri9-cleoqbtj20002l508rnfywxcr-23-04-2026"
+                    type: "login"
+                    date: "2026-04-23T16:09:20.608Z"
                 pagination:
                   page: 1
                   limit: 10
-                  totalCount: 25
-                  totalPages: 3
-                  hasNextPage: true
+                  totalCount: 6
+                  totalPages: 1
+                  hasNextPage: false
                   hasPrevPage: false
+                cache:
+                  cachedAt: "2026-04-23T16:48:38.532Z"
+                  refreshAt: "2026-04-23T16:53:38.532Z"
         '400':
           description: Requisição inválida
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/CustomErrorResponse'
               examples:
-                emailRequired:
+                missingEmail:
                   summary: Email não informado
                   value:
-                    error: "Bad Request"
-                    message: "email parameter is required"
-                invalidPage:
-                  summary: Página inválida
+                    ok: false
+                    error: "email é obrigatório"
+                    errorCode: "MISSING_EMAIL"
+                invalidPagination:
+                  summary: Paginação inválida
                   value:
-                    error: "Bad Request"
-                    message: "page must be a positive integer"
-                invalidLimit:
-                  summary: Limite inválido
+                    ok: false
+                    error: "page deve ser >= 1"
+                    errorCode: "INVALID_PAGINATION"
+                invalidDateFormat:
+                  summary: Formato de data inválido
                   value:
-                    error: "Bad Request"
-                    message: "limit must be between 1 and 100"
+                    ok: false
+                    error: "formato de data inválido para startDate"
+                    errorCode: "INVALID_DATE_FORMAT"
+                invalidDateRange:
+                  summary: Período inválido
+                  value:
+                    ok: false
+                    error: "período máximo de 31 dias"
+                    errorCode: "INVALID_DATE_RANGE"
         '401':
           description: Não autorizado
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UnauthorizedResponse'
+                $ref: '#/components/schemas/CustomErrorResponse'
               example:
                 ok: false
                 error: "API key invalid"
                 errorCode: "INVALID_API_KEY"
+        '404':
+          description: Usuário não encontrado no tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomErrorResponse'
+              example:
+                ok: false
+                error: "Usuário não encontrado ou não pertence ao tenant autenticado"
+                errorCode: "USER_NOT_FOUND"
         '500':
           description: Erro interno do servidor
           content:
@@ -1801,29 +1894,85 @@ components:
           description: Indica se há página anterior
           example: false
 
-    AccessData:
+    CacheMeta:
       type: object
+      description: |
+        Metadados de cache. Presente apenas quando o cache está ativo
+        (ambiente de produção). Em dev o campo é omitido da resposta.
       properties:
-        data:
+        cachedAt:
           type: string
-          description: Dados da atividade de acesso
-          example: "2024-01-15T10:30:00Z - Acessou a aula 'Introdução ao Golang'"
+          format: date-time
+          description: Quando a resposta foi computada/armazenada
+          example: "2026-04-23T16:48:38.532Z"
+        refreshAt:
+          type: string
+          format: date-time
+          description: Quando o cache expira (cachedAt + 5min)
+          example: "2026-04-23T16:53:38.532Z"
 
-    ActivityResponse:
+    UserActivityEventType:
+      type: string
+      description: Tipo do evento, usado como discriminador
+      enum:
+        - login
+        - acceptTerms
+        - lessonCompleted
+        - download
+        - comment
+        - quiz
+        - certificate
+
+    UserActivityEvent:
       type: object
+      required: [id, type, date]
+      properties:
+        id:
+          type: string
+          description: Identificador da linha na tabela fonte
+          example: "cmobpsp9g0050l40cj4hm0uwi"
+        type:
+          $ref: '#/components/schemas/UserActivityEventType'
+        date:
+          type: string
+          format: date-time
+          description: |
+            Timestamp do evento. Origem varia por tipo: `createdAt` em
+            UserEvent/Read/Comment/StudentQuiz/UserCertificates, `timestamp`
+            em Download.
+          example: "2026-04-23T16:47:23.621Z"
+        details:
+          type: object
+          description: |
+            Payload específico do tipo. **Omitido** para `login` (o timestamp e
+            tipo já são a história toda). Shape por tipo:
+
+            - **acceptTerms**: `{ whereEvent, withEvent }`
+            - **lessonCompleted**: `{ lessonId, lessonName, rating }`
+            - **download**: `{ arquiveId, arquiveName, size }`
+            - **comment**: `{ lessonId, question, answer, published }`
+            - **quiz**: `{ quizId, quizTitle, status, score, attemptOfNum }`
+            - **certificate**: `{ title, status, certificateUrl, certificateId }`
+          additionalProperties: true
+
+    UserActivitiesResponse:
+      type: object
+      required: [email, events, pagination]
       properties:
         email:
           type: string
           format: email
-          description: Email do usuário
+          description: Email do usuário consultado (echo do input)
           example: "user@example.com"
-        access:
+        events:
           type: array
           items:
-            $ref: '#/components/schemas/AccessData'
-          description: Lista de atividades de acesso
+            $ref: '#/components/schemas/UserActivityEvent'
+          description: Timeline unificada, ordenada por `date` desc
         pagination:
           $ref: '#/components/schemas/PaginationMeta'
+        cache:
+          $ref: '#/components/schemas/CacheMeta'
 
     UserPurchaseData:
       type: object

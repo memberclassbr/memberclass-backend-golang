@@ -19,6 +19,8 @@ import (
 	vitrine2 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
+	"github.com/memberclass-backend-golang/internal/features/activity_summary"
+	"github.com/memberclass-backend-golang/internal/features/user_activities"
 )
 
 type Router struct {
@@ -26,11 +28,11 @@ type Router struct {
 	videoHandler              *video.VideoHandler
 	lessonHandler             *lesson.LessonHandler
 	commentHandler            *comment.CommentHandler
-	userActivityHandler       *user.UserActivityHandler
+	userActivities            *user_activities.Feature
 	userPurchaseHandler       *purchase.UserPurchaseHandler
 	userInformationsHandler   *user.UserInformationsHandler
 	socialCommentHandler      *comment.SocialCommentHandler
-	activitySummaryHandler    *user.ActivitySummaryHandler
+	activitySummary           *activity_summary.Feature
 	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
 	studentReportHandler      *student.StudentReportHandler
 	swaggerHandler            *internalhttp.SwaggerHandler
@@ -50,11 +52,11 @@ func NewRouter(
 	videoHandler *video.VideoHandler,
 	lessonHandler *lesson.LessonHandler,
 	commentHandler *comment.CommentHandler,
-	userActivityHandler *user.UserActivityHandler,
+	userActivities *user_activities.Feature,
 	userPurchaseHandler *purchase.UserPurchaseHandler,
 	userInformationsHandler *user.UserInformationsHandler,
 	socialCommentHandler *comment.SocialCommentHandler,
-	activitySummaryHandler *user.ActivitySummaryHandler,
+	activitySummary *activity_summary.Feature,
 	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
 	studentReportHandler *student.StudentReportHandler,
 	swaggerHandler *internalhttp.SwaggerHandler,
@@ -88,11 +90,11 @@ func NewRouter(
 		videoHandler:              videoHandler,
 		lessonHandler:             lessonHandler,
 		commentHandler:            commentHandler,
-		userActivityHandler:       userActivityHandler,
+		userActivities:            userActivities,
 		userPurchaseHandler:       userPurchaseHandler,
 		userInformationsHandler:   userInformationsHandler,
 		socialCommentHandler:      socialCommentHandler,
-		activitySummaryHandler:    activitySummaryHandler,
+		activitySummary:           activitySummary,
 		lessonsCompletedHandler:   lessonsCompletedHandler,
 		studentReportHandler:      studentReportHandler,
 		swaggerHandler:            swaggerHandler,
@@ -171,14 +173,17 @@ func (r *Router) SetupRoutes() {
 			router.With(
 				r.authExternalMiddleware.Authenticate,
 			).Get("/informations", r.userInformationsHandler.GetUserInformations)
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/activities", r.userActivityHandler.GetUserActivities)
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/activity/summary", r.activitySummaryHandler.GetActivitySummary)
+
+			r.userActivities.Register(router, user_activities.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
+
+			r.activitySummary.Register(router, activity_summary.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
+
 			router.With(
 				r.authExternalMiddleware.Authenticate,
 				r.rateLimitTenantMiddleware.LimitByTenant,

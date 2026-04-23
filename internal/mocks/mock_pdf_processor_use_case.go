@@ -540,11 +540,19 @@ func (_m *MockPdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit 
 	var r0 *dto.BatchProcessResult
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, int) (*dto.BatchProcessResult, error)); ok {
-		r0, r1 = rf(ctx, limit)
+		return rf(ctx, limit)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int) *dto.BatchProcessResult); ok {
+		r0 = rf(ctx, limit)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*dto.BatchProcessResult)
 		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int) error); ok {
+		r1 = rf(ctx, limit)
+	} else {
 		r1 = ret.Error(1)
 	}
 
@@ -580,9 +588,9 @@ func (_c *MockPdfProcessorUseCase_RetryFailedAssets_Call) RunAndReturn(run func(
 	return _c
 }
 
-// SavePagesDirectly provides a mock function with given fields: ctx, assetID, lessonID, images
-func (_m *MockPdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID string, lessonID string, images []string) (int, error) {
-	ret := _m.Called(ctx, assetID, lessonID, images)
+// SavePagesDirectly provides a mock function with given fields: ctx, assetID, lessonID, images, bucket
+func (_m *MockPdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID string, lessonID string, images []string, bucket string) (int, error) {
+	ret := _m.Called(ctx, assetID, lessonID, images, bucket)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SavePagesDirectly")
@@ -590,17 +598,17 @@ func (_m *MockPdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetI
 
 	var r0 int
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string) (int, error)); ok {
-		return rf(ctx, assetID, lessonID, images)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, string) (int, error)); ok {
+		return rf(ctx, assetID, lessonID, images, bucket)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string) int); ok {
-		r0 = rf(ctx, assetID, lessonID, images)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, []string, string) int); ok {
+		r0 = rf(ctx, assetID, lessonID, images, bucket)
 	} else {
 		r0 = ret.Get(0).(int)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, string, []string) error); ok {
-		r1 = rf(ctx, assetID, lessonID, images)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, []string, string) error); ok {
+		r1 = rf(ctx, assetID, lessonID, images, bucket)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -618,13 +626,14 @@ type MockPdfProcessorUseCase_SavePagesDirectly_Call struct {
 //   - assetID string
 //   - lessonID string
 //   - images []string
-func (_e *MockPdfProcessorUseCase_Expecter) SavePagesDirectly(ctx interface{}, assetID interface{}, lessonID interface{}, images interface{}) *MockPdfProcessorUseCase_SavePagesDirectly_Call {
-	return &MockPdfProcessorUseCase_SavePagesDirectly_Call{Call: _e.mock.On("SavePagesDirectly", ctx, assetID, lessonID, images)}
+//   - bucket string
+func (_e *MockPdfProcessorUseCase_Expecter) SavePagesDirectly(ctx interface{}, assetID interface{}, lessonID interface{}, images interface{}, bucket interface{}) *MockPdfProcessorUseCase_SavePagesDirectly_Call {
+	return &MockPdfProcessorUseCase_SavePagesDirectly_Call{Call: _e.mock.On("SavePagesDirectly", ctx, assetID, lessonID, images, bucket)}
 }
 
-func (_c *MockPdfProcessorUseCase_SavePagesDirectly_Call) Run(run func(ctx context.Context, assetID string, lessonID string, images []string)) *MockPdfProcessorUseCase_SavePagesDirectly_Call {
+func (_c *MockPdfProcessorUseCase_SavePagesDirectly_Call) Run(run func(ctx context.Context, assetID string, lessonID string, images []string, bucket string)) *MockPdfProcessorUseCase_SavePagesDirectly_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].([]string))
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].([]string), args[4].(string))
 	})
 	return _c
 }
@@ -634,7 +643,7 @@ func (_c *MockPdfProcessorUseCase_SavePagesDirectly_Call) Return(_a0 int, _a1 er
 	return _c
 }
 
-func (_c *MockPdfProcessorUseCase_SavePagesDirectly_Call) RunAndReturn(run func(context.Context, string, string, []string) (int, error)) *MockPdfProcessorUseCase_SavePagesDirectly_Call {
+func (_c *MockPdfProcessorUseCase_SavePagesDirectly_Call) RunAndReturn(run func(context.Context, string, string, []string, string) (int, error)) *MockPdfProcessorUseCase_SavePagesDirectly_Call {
 	_c.Call.Return(run)
 	return _c
 }

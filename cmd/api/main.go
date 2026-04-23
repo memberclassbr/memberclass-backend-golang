@@ -41,6 +41,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
+	"github.com/memberclass-backend-golang/internal/features/activity_summary"
+	"github.com/memberclass-backend-golang/internal/features/user_activities"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
@@ -54,7 +56,6 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
-	user_activity "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user_activity"
 	vitrine_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/vitrine"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
 	"go.uber.org/fx"
@@ -79,7 +80,6 @@ func main() {
 			comment.NewCommentRepository,
 			comment.NewSocialCommentRepository,
 			topic.NewTopicRepository,
-			user_activity.NewUserActivityRepository,
 			student_report.NewStudentReportRepository,
 			sso_repository.NewSSORepository,
 			vitrine_repository.NewVitrineRepository,
@@ -98,11 +98,11 @@ func main() {
 				return comment3.NewCommentUseCase(logger, commentRepo, userRepo)
 			},
 			auth.NewApiTokenTenantUseCase,
-			user3.NewUserActivityUseCase,
 			user3.NewUserPurchaseUseCase,
 			user3.NewUserInformationsUseCase,
 			comment3.NewSocialCommentUseCase,
-			user3.NewActivitySummaryUseCase,
+			activity_summary.New,
+			user_activities.New,
 			lessons.NewLessonsCompletedUseCase,
 			student.NewStudentReportUseCase,
 			auth.NewAuthUseCase,
@@ -126,11 +126,9 @@ func main() {
 			lesson2.NewLessonHandler,
 			video.NewVideoHandler,
 			comment4.NewCommentHandler,
-			user4.NewUserActivityHandler,
 			purchase2.NewUserPurchaseHandler,
 			user4.NewUserInformationsHandler,
 			comment4.NewSocialCommentHandler,
-			user4.NewActivitySummaryHandler,
 			lesson2.NewLessonsCompletedHandler,
 			student2.NewStudentReportHandler,
 			internalhttp.NewSwaggerHandler,
