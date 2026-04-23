@@ -32,8 +32,8 @@ func NewDigitalOceanSpaces(logger ports.Logger) (ports.Storage, error) {
 	bucket := os.Getenv("DO_SPACES_BUCKET")
 	spacesURL := os.Getenv("DO_SPACES_URL")
 
-	if accessKey == "" || secretKey == "" || spacesURL == "" {
-		return nil, fmt.Errorf("missing required environment variables: DO_SPACES_ID, DO_SPACES_SECRET, DO_SPACES_URL")
+	if accessKey == "" || secretKey == "" || bucket == "" || spacesURL == "" {
+		return nil, fmt.Errorf("missing required environment variables: DO_SPACES_ID, DO_SPACES_SECRET, DO_SPACES_BUCKET, DO_SPACES_URL")
 	}
 
 	region := extractRegionFromURL(spacesURL)
