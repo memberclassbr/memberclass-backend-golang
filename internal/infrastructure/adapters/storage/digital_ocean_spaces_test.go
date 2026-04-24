@@ -158,14 +158,18 @@ func TestExtractRegionFromURL_EdgeCases(t *testing.T) {
 }
 
 func TestNewDigitalOceanSpaces_PartialEnvVars(t *testing.T) {
+	// DO_SPACES_BUCKET is optional (callers can resolve bucket per-request
+	// via UploadToBucket / URL-based methods). Only ID/SECRET/URL are
+	// required at construction time.
 	tests := []struct {
-		name string
-		env  map[string]string
+		name      string
+		env       map[string]string
+		expectErr bool
 	}{
-		{"Missing ID", map[string]string{"DO_SPACES_SECRET": "secret", "DO_SPACES_BUCKET": "bucket", "DO_SPACES_URL": "https://sfo3.digitaloceanspaces.com"}},
-		{"Missing Secret", map[string]string{"DO_SPACES_ID": "id", "DO_SPACES_BUCKET": "bucket", "DO_SPACES_URL": "https://sfo3.digitaloceanspaces.com"}},
-		{"Missing Bucket", map[string]string{"DO_SPACES_ID": "id", "DO_SPACES_SECRET": "secret", "DO_SPACES_URL": "https://sfo3.digitaloceanspaces.com"}},
-		{"Missing URL", map[string]string{"DO_SPACES_ID": "id", "DO_SPACES_SECRET": "secret", "DO_SPACES_BUCKET": "bucket"}},
+		{"Missing ID", map[string]string{"DO_SPACES_SECRET": "secret", "DO_SPACES_BUCKET": "bucket", "DO_SPACES_URL": "https://sfo3.digitaloceanspaces.com"}, true},
+		{"Missing Secret", map[string]string{"DO_SPACES_ID": "id", "DO_SPACES_BUCKET": "bucket", "DO_SPACES_URL": "https://sfo3.digitaloceanspaces.com"}, true},
+		{"Missing Bucket", map[string]string{"DO_SPACES_ID": "id", "DO_SPACES_SECRET": "secret", "DO_SPACES_URL": "https://sfo3.digitaloceanspaces.com"}, false},
+		{"Missing URL", map[string]string{"DO_SPACES_ID": "id", "DO_SPACES_SECRET": "secret", "DO_SPACES_BUCKET": "bucket"}, true},
 	}
 
 	for _, tt := range tests {
@@ -182,9 +186,14 @@ func TestNewDigitalOceanSpaces_PartialEnvVars(t *testing.T) {
 			mockLogger := &MockLogger{}
 			service, err := NewDigitalOceanSpaces(mockLogger)
 
-			assert.Error(t, err)
-			assert.Nil(t, service)
-			assert.Contains(t, err.Error(), "missing required environment variables")
+			if tt.expectErr {
+				assert.Error(t, err)
+				assert.Nil(t, service)
+				assert.Contains(t, err.Error(), "missing required environment variables")
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, service)
+			}
 		})
 	}
 }

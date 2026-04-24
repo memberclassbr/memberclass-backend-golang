@@ -4,7 +4,7 @@ services:
   app:
     build: .
     ports:
-      - "${PORT:-8181}:8181"
+      - '${PORT:-8181}:8181'
     environment:
       - DB_DRIVER=${DB_DRIVER}
       - DB_DSN=${DB_DSN}

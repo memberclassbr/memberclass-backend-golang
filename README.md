@@ -58,7 +58,7 @@ memberclass-backend-golang/
 │   │   │   └── http/           # HTTP Handlers (Controllers)
 │   │   ├── middlewares/        # HTTP Middlewares
 │   │   └── router/             # Route configuration
-│   │   
+│   │
 │   ├── domain/                 # Domain Layer (Core Business)
 │   │   ├── constants/          # Domain constants
 │   │   ├── dto/                 # Data Transfer Objects
@@ -96,25 +96,30 @@ memberclass-backend-golang/
 ## 🚀 Technologies
 
 ### Language and Framework
+
 - **Go 1.25.1** - Main language
 - **Chi Router v5** - HTTP routing
 - **Uber FX** - Dependency injection
 
 ### Database and Cache
+
 - **PostgreSQL** - Main database
 - **Redis** - Cache and rate limiting
 
 ### External Services
+
 - **Bunny CDN** - CDN for video uploads
 - **iLovePDF** - PDF processing
 - **AWS S3** - File storage
 
 ### Testing
+
 - **Testify** - Testing framework
 - **Mockery** - Mock generation
 - **sqlmock** - Database mocking
 
 ### Tools
+
 - **Docker** - Containerization
 - **Swagger/OpenAPI** - API documentation
 - **Postman** - API testing
@@ -122,18 +127,21 @@ memberclass-backend-golang/
 ## 📐 Patterns and Conventions
 
 ### Naming
+
 - **Handlers**: `{resource}_handler.go` (e.g., `auth_handler.go`)
 - **Use Cases**: `{resource}_usecase.go` (e.g., `auth_usecase.go`)
 - **Repositories**: `{resource}_repository.go` (e.g., `user_repository.go`)
 - **DTOs**: `{action}_{resource}_{request|response}.go` (e.g., `auth_request.go`)
 
 ### Code Structure
+
 - Each handler has its own file
 - Use cases contain business logic
 - Repositories abstract data access
 - DTOs separated for request and response
 
 ### Testing
+
 - Test files: `{file}_test.go`
 - Minimum coverage: 85% for use cases
 - Use of mocks for dependency isolation
@@ -218,6 +226,7 @@ make dev-setup
 ```
 
 This command will:
+
 - Install Mockery for mock generation
 - Generate all necessary mocks
 
@@ -226,38 +235,44 @@ This command will:
 The application uses the following environment variables:
 
 **Application:**
+
 - `PORT` - Application port (default: 8181)
 - `LOG_LEVEL` - Log level (INFO, DEBUG, ERROR)
 
 **Database:**
+
 - `DB_DRIVER` - Database driver (postgres)
 - `DB_DSN` - Database connection string (PostgreSQL connection string)
 
 **Redis:**
+
 - `UPSTASH_REDIS_URL` - Redis REST URL
 - `UPSTASH_REDIS_TOKEN` - Redis REST token
 
 **Bunny CDN:**
+
 - `BUNNY_API_KEY` - Bunny CDN API key
 - `BUNNY_BASE_URL` - Bunny CDN base URL (default: https://video.bunnycdn.com/library/)
 - `BUNNY_TIMEOUT_SECONDS` - Bunny CDN timeout in seconds (default: 30)
 
 **DigitalOcean Spaces:**
+
 - `DO_SPACES_ID` - DigitalOcean Spaces access key ID
 - `DO_SPACES_SECRET` - DigitalOcean Spaces secret access key
 - `DO_SPACES_BUCKET` - DigitalOcean Spaces bucket name
 - `DO_SPACES_URL` - DigitalOcean Spaces endpoint URL
 
 **iLovePDF:**
+
 - `ILOVEPDF_BASE_URL` - iLovePDF API base URL (default: https://api.ilovepdf.com/v1)
 - `ILOVEPDF_API_KEYS` - iLovePDF API keys (comma-separated list)
 
 **Authentication:**
+
 - `INTERNAL_AI_API_KEY` - Internal API key for AI endpoints validation
 - `PUBLIC_ROOT_DOMAIN` - Public root domain for magic links generation (default: localhost:8181)
 
-**Memberclass Transcription**
--`TRANSCRIPTION_API_URL`- Url to app memberclass transcription
+**Memberclass Transcription** -`TRANSCRIPTION_API_URL`- Url to app memberclass transcription
 
 ## 🏃‍♂️ Running the Application
 
@@ -422,6 +437,7 @@ go run github.com/vektra/mockery/v2@latest
 ### Swagger UI
 
 Access the interactive documentation at:
+
 ```
 http://localhost:8080/docs/
 ```
@@ -446,6 +462,7 @@ The project implements rate limiting at multiple levels:
 ### Rate Limit Headers
 
 Responses include the following headers:
+
 - `X-RateLimit-Limit`: Total limit
 - `X-RateLimit-Remaining`: Remaining requests
 - `X-RateLimit-Reset`: Reset timestamp
