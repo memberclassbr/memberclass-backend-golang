@@ -32,6 +32,7 @@ internal/features/
 
 - [x] Pilot: `activity_summary`
 - [x] `user_activities` — unified events timeline (login, lessonCompleted, download, comment, acceptTerms, quiz, certificate); fixed tenant leak in SQL + cache key
+- [x] `member_import` — admin bulk-import endpoint (`POST /imports/members`); NextAuth session cookie + role guard, async processor, Resend batch emails, UserImport/UserImportRow persistence, startup reset + 24h retention job
 - [ ] Everything else (13 features remaining): auth, sso, user_informations, user_purchase, comment, social_comment, vitrine, student_report, ai_lesson, ai_tenant, video, bunny, lesson (+ pdf_processor + transcription job)
 - [ ] Cleanup PR: delete `internal/domain/*`, `internal/application/handlers|middlewares|jobs|router`, `internal/infrastructure/adapters`, `internal/mocks/`, `.mockery.yaml`; remove `go.uber.org/fx` from `go.mod`.
 
@@ -55,7 +56,8 @@ Docker: `make docker-build && make docker-run`.
 
 ## Environment
 
-`.env.example` is the reference. Required for local run: `DB_DRIVER=postgres`, `DB_DSN`, plus optionally `DB_EPHRA_DSN` and `DB_CELETUS_DSN` (see multi-DB below). Redis is via Upstash (`UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`). Default port is `8181`.
+`.env.example` is the reference. Required for local run: `DB_DRIVER=postgres`, `DB_DSN`, plus optionally `DB_EPHRA_DSN` and `DB_CELETUS_DSN` (see multi-DB below).
+Default port is `8181`.
 
 ## Architecture
 

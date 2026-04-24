@@ -29,11 +29,14 @@ type DigitalOceanSpaces struct {
 func NewDigitalOceanSpaces(logger ports.Logger) (ports.Storage, error) {
 	accessKey := os.Getenv("DO_SPACES_ID")
 	secretKey := os.Getenv("DO_SPACES_SECRET")
+	// bucket is optional: callers that use UploadToBucket / URL-based
+	// methods resolve the bucket per-request. The default bucket is only
+	// used by Upload() / GetPublicURL() when set.
 	bucket := os.Getenv("DO_SPACES_BUCKET")
 	spacesURL := os.Getenv("DO_SPACES_URL")
 
-	if accessKey == "" || secretKey == "" || bucket == "" || spacesURL == "" {
-		return nil, fmt.Errorf("missing required environment variables: DO_SPACES_ID, DO_SPACES_SECRET, DO_SPACES_BUCKET, DO_SPACES_URL")
+	if accessKey == "" || secretKey == "" || spacesURL == "" {
+		return nil, fmt.Errorf("missing required environment variables: DO_SPACES_ID, DO_SPACES_SECRET, DO_SPACES_URL")
 	}
 
 	region := extractRegionFromURL(spacesURL)

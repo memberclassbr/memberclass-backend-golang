@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"os"
 	"os/signal"
@@ -41,12 +42,14 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
-	"github.com/memberclass-backend-golang/internal/features/activity_summary"
-	"github.com/memberclass-backend-golang/internal/features/user_activities"
+	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
+	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
+	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
@@ -89,6 +92,7 @@ func main() {
 			rate_limiter.NewRateLimiterIP,
 			ilovepdf.NewIlovePdfService,
 			bunny.NewBunnyService,
+			resend.New,
 
 			user3.NewValidateSessionUseCase,
 			lessons.NewPdfProcessorUseCase,
@@ -103,6 +107,7 @@ func main() {
 			comment3.NewSocialCommentUseCase,
 			activity_summary.New,
 			user_activities.New,
+			member_import.New,
 			lessons.NewLessonsCompletedUseCase,
 			student.NewStudentReportUseCase,
 			auth.NewAuthUseCase,
@@ -122,6 +127,7 @@ func main() {
 			rate_limit.NewRateLimitIPMiddleware,
 			auth3.NewAuthMiddleware,
 			auth3.NewAuthExternalMiddleware,
+			auth3.NewBearerMiddleware,
 
 			lesson2.NewLessonHandler,
 			video.NewVideoHandler,
@@ -150,11 +156,13 @@ func main() {
 func startApplication(
 	log ports.Logger,
 	dbMap database.DBMap,
+	db *sql.DB,
 	cache ports.Cache,
 	migrationService *database.MigrationService,
 	router *router.Router,
 	scheduler *jobs.Scheduler,
 	transcriptionJob *transcription.TranscriptionJob,
+	memberImport *member_import.Feature,
 ) {
 	router.SetupRoutes()
 
@@ -163,6 +171,13 @@ func startApplication(
 	}
 
 	scheduler.Start()
+
+	// Member-import slice: clear orphaned "processing" imports on startup,
+	// then kick off the 24h retention goroutine for UserImportRow.
+	member_import.StartupReset(db, log)
+	importRetentionCtx, stopImportRetention := context.WithCancel(context.Background())
+	defer stopImportRetention()
+	member_import.StartRetentionJob(importRetentionCtx, db, log)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -197,6 +212,12 @@ func startApplication(
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown: " + err.Error())
 	}
+
+	// Drain in-flight member-import workers before the DB closes so their
+	// UserImport rows reach a terminal state. Bounded by the same 30s
+	// ctx deadline above; stragglers are recovered by StartupReset on the
+	// next boot after a 5-min grace.
+	memberImport.Wait(ctx)
 
 	if err := cache.Close(); err != nil {
 		log.Error("Error closing cache: " + err.Error())

@@ -19,8 +19,9 @@ import (
 	vitrine2 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
-	"github.com/memberclass-backend-golang/internal/features/activity_summary"
-	"github.com/memberclass-backend-golang/internal/features/user_activities"
+	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
+	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -35,6 +36,7 @@ func createTestRouter(t *testing.T) *Router {
 	mockUserInformationsHandler := &user.UserInformationsHandler{}
 	mockSocialCommentHandler := &comment.SocialCommentHandler{}
 	mockActivitySummary := activity_summary.New(nil, nil, nil)
+	mockMemberImport := member_import.New(nil, nil, nil)
 	mockLessonsCompletedHandler := &lesson.LessonsCompletedHandler{}
 	mockStudentReportHandler := &student.StudentReportHandler{}
 	mockSwaggerHandler := httpHandlers.NewSwaggerHandler()
@@ -60,8 +62,9 @@ func createTestRouter(t *testing.T) *Router {
 	rateLimitIPMiddleware := rate_limit.NewRateLimitIPMiddleware(mockRateLimiterIP, mockLogger)
 	authMiddleware := auth2.NewAuthMiddleware(mockLogger, mockSessionValidator)
 	authExternalMiddleware := auth2.NewAuthExternalMiddleware(mockApiTokenUseCase)
+	bearerMiddleware := auth2.NewBearerMiddleware(mockLogger)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivities, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummary, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, mockVitrineHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivities, mockUserPurchaseHandler, mockUserInformationsHandler, mockSocialCommentHandler, mockActivitySummary, mockMemberImport, mockLessonsCompletedHandler, mockStudentReportHandler, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, mockVitrineHandler, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {

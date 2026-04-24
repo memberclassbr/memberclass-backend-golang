@@ -19,8 +19,9 @@ import (
 	vitrine2 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
-	"github.com/memberclass-backend-golang/internal/features/activity_summary"
-	"github.com/memberclass-backend-golang/internal/features/user_activities"
+	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
+	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 )
 
 type Router struct {
@@ -33,6 +34,7 @@ type Router struct {
 	userInformationsHandler   *user.UserInformationsHandler
 	socialCommentHandler      *comment.SocialCommentHandler
 	activitySummary           *activity_summary.Feature
+	memberImport              *member_import.Feature
 	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
 	studentReportHandler      *student.StudentReportHandler
 	swaggerHandler            *internalhttp.SwaggerHandler
@@ -46,6 +48,7 @@ type Router struct {
 	rateLimitIPMiddleware     *rate_limit.RateLimitIPMiddleware
 	authMiddleware            *auth2.AuthMiddleware
 	authExternalMiddleware    *auth2.AuthExternalMiddleware
+	bearerMiddleware          *auth2.BearerMiddleware
 }
 
 func NewRouter(
@@ -57,6 +60,7 @@ func NewRouter(
 	userInformationsHandler *user.UserInformationsHandler,
 	socialCommentHandler *comment.SocialCommentHandler,
 	activitySummary *activity_summary.Feature,
+	memberImport *member_import.Feature,
 	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
 	studentReportHandler *student.StudentReportHandler,
 	swaggerHandler *internalhttp.SwaggerHandler,
@@ -70,6 +74,7 @@ func NewRouter(
 	rateLimitIPMiddleware *rate_limit.RateLimitIPMiddleware,
 	authMiddleware *auth2.AuthMiddleware,
 	authExternalMiddleware *auth2.AuthExternalMiddleware,
+	bearerMiddleware *auth2.BearerMiddleware,
 ) *Router {
 	router := chi.NewRouter()
 
@@ -77,6 +82,11 @@ func NewRouter(
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
+
+	// Wildcard CORS works for every route now: public API uses `mc-api-key`
+	// and the frontend-only routes (/imports, future /admin/*) use a
+	// bearer JWT in `Authorization`. Nothing relies on cookies, so
+	// AllowCredentials stays false and `*` is valid.
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -95,6 +105,7 @@ func NewRouter(
 		userInformationsHandler:   userInformationsHandler,
 		socialCommentHandler:      socialCommentHandler,
 		activitySummary:           activitySummary,
+		memberImport:              memberImport,
 		lessonsCompletedHandler:   lessonsCompletedHandler,
 		studentReportHandler:      studentReportHandler,
 		swaggerHandler:            swaggerHandler,
@@ -108,6 +119,7 @@ func NewRouter(
 		rateLimitIPMiddleware:     rateLimitIPMiddleware,
 		authMiddleware:            authMiddleware,
 		authExternalMiddleware:    authExternalMiddleware,
+		bearerMiddleware:          bearerMiddleware,
 	}
 }
 
@@ -257,5 +269,18 @@ func (r *Router) SetupRoutes() {
 				r.authMiddleware.Authenticate).Get("/", r.commentHandler.GetComments)
 		})
 
+	})
+
+	// /imports/* — admin endpoints called from the Next.js frontend using
+	// a short-lived Bearer JWT minted by `/api/auth/go-token` on the Next
+	// side (same secret: NEXTAUTH_SECRET). Stateless, no cookies.
+	// LimitByIP caps abuse of the bulk endpoint when a token leaks or an
+	// admin account is compromised — the bearer token alone would otherwise
+	// allow unbounded submission of 10k-user batches.
+	r.Route("/imports", func(router chi.Router) {
+		router.Use(r.rateLimitIPMiddleware.LimitByIP)
+		r.memberImport.Register(router, member_import.MiddlewareSet{
+			SessionAuth: r.bearerMiddleware.RequireAuth,
+		})
 	})
 }
