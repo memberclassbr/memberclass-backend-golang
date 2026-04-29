@@ -45,6 +45,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
+	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
@@ -108,6 +109,7 @@ func main() {
 			activity_summary.New,
 			user_activities.New,
 			member_import.New,
+			notificationsworker.New,
 			lessons.NewLessonsCompletedUseCase,
 			student.NewStudentReportUseCase,
 			auth.NewAuthUseCase,
@@ -163,6 +165,7 @@ func startApplication(
 	scheduler *jobs.Scheduler,
 	transcriptionJob *transcription.TranscriptionJob,
 	memberImport *member_import.Feature,
+	notifWorker *notificationsworker.Feature,
 ) {
 	router.SetupRoutes()
 
@@ -178,6 +181,14 @@ func startApplication(
 	importRetentionCtx, stopImportRetention := context.WithCancel(context.Background())
 	defer stopImportRetention()
 	member_import.StartRetentionJob(importRetentionCtx, db, log)
+
+	// Notifications worker: poll the Notification table, dispatch FCM pushes,
+	// run daily cleanup. Started here so push delivery is live as soon as
+	// the HTTP server is.
+	notifCtx, stopNotifWorker := context.WithCancel(context.Background())
+	defer stopNotifWorker()
+	notifWorker.Start(notifCtx)
+	notifWorker.StartCleanupJob(notifCtx)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -208,6 +219,7 @@ func startApplication(
 	defer cancel()
 
 	scheduler.Stop()
+	notifWorker.Stop(10 * time.Second)
 
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown: " + err.Error())
