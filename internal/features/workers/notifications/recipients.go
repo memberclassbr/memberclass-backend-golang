@@ -18,6 +18,12 @@ type recipient struct {
 //
 // All variants filter UsersOnTenants.pushDisabledTypes against n.Type so a
 // user who muted a category does not receive the push.
+//
+// Ordering MATTERS: dispatch resumes from `lastBatchIndex` after a crash by
+// re-running this query and skipping the first N batches. If the order
+// shifts between calls (e.g. the planner picks a different join), resumed
+// runs target a different slice of users — duplicate sends to some and
+// missed sends to others. The ORDER BY in each query keeps the slice stable.
 func (f *Feature) resolveRecipients(ctx context.Context, n Notification) ([]recipient, error) {
 	switch {
 	case n.Fanout == FanoutWrite:
@@ -31,7 +37,8 @@ func (f *Feature) resolveRecipients(ctx context.Context, n Notification) ([]reci
 			JOIN "NotificationDevice" nd
 			  ON nd."userId" = un."userId" AND nd."tenantId" = un."tenantId"
 			WHERE un."notificationId" = $1
-			  AND NOT ($2 = ANY(uot."pushDisabledTypes"))
+			  AND NOT COALESCE($2::text = ANY(uot."pushDisabledTypes"), FALSE)
+			ORDER BY un.id
 		`
 		return f.queryRecipients(ctx, q, n.ID, string(n.Type))
 
@@ -44,7 +51,8 @@ func (f *Feature) resolveRecipients(ctx context.Context, n Notification) ([]reci
 			JOIN "NotificationDevice" nd
 			  ON nd."userId" = mod."memberId" AND nd."tenantId" = mod."tenantId"
 			WHERE mod."deliveryId" = $1 AND mod."tenantId" = $2
-			  AND NOT ($3 = ANY(uot."pushDisabledTypes"))
+			  AND NOT COALESCE($3::text = ANY(uot."pushDisabledTypes"), FALSE)
+			ORDER BY mod."memberId", nd.id
 		`
 		return f.queryRecipients(ctx, q, deref(n.AudienceID), n.TenantID, string(n.Type))
 

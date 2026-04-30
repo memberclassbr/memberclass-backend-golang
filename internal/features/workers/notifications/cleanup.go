@@ -52,20 +52,45 @@ func (f *Feature) runCleanup(parent context.Context) {
 // pruneOldNotifications deletes Notification rows older than 30 days. The
 // schema's ON DELETE CASCADE on UserNotification.notificationId removes
 // the inbox rows for free.
+//
+// Chunked at 10k rows per statement to keep the transaction small — on
+// CockroachDB an unbounded DELETE on the first run after a long backlog
+// can blow the raft command limit.
 func (f *Feature) pruneOldNotifications(ctx context.Context) (int64, error) {
-	res, err := f.db.ExecContext(ctx, `
+	const chunk = 10000
+	const q = `
 		DELETE FROM "Notification"
-		WHERE "createdAt" < NOW() - INTERVAL '30 days'
-	`)
-	if err != nil {
-		return 0, err
+		WHERE id IN (
+			SELECT id FROM "Notification"
+			WHERE "createdAt" < NOW() - INTERVAL '30 days'
+			LIMIT $1
+		)
+	`
+	var total int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+		res, err := f.db.ExecContext(ctx, q, chunk)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+		if n < chunk {
+			return total, nil
+		}
 	}
-	return res.RowsAffected()
 }
 
 // trimUserInbox keeps only the 100 newest UserNotification rows per
 // (userId, tenantId). Anything older is dropped — we don't surface deep
 // history in the inbox UI.
+//
+// The window function is restricted to inboxes that received a row in the
+// last 2 days. Inboxes that didn't grow have nothing past index 100 to
+// trim anyway, so partition-pruning the scan there is a multi-order-of-
+// magnitude win on a tenant with millions of inbox rows.
 func (f *Feature) trimUserInbox(ctx context.Context) (int64, error) {
 	res, err := f.db.ExecContext(ctx, `
 		DELETE FROM "UserNotification"
@@ -76,6 +101,11 @@ func (f *Feature) trimUserInbox(ctx context.Context) (int64, error) {
 					ORDER BY "createdAt" DESC
 				) AS rn
 				FROM "UserNotification"
+				WHERE ("userId", "tenantId") IN (
+					SELECT DISTINCT "userId", "tenantId"
+					FROM "UserNotification"
+					WHERE "createdAt" > NOW() - INTERVAL '2 days'
+				)
 			) sub
 			WHERE rn > 100
 		)

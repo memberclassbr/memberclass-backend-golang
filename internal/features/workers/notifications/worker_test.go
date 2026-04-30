@@ -2,7 +2,6 @@ package notifications
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"sync"
 	"testing"
@@ -195,6 +194,117 @@ func TestSendMulticast_NoRecipients_MarksSentZero(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+// ---------- sendMulticast: resume-from-lastBatchIndex ----------
+
+// TestSendMulticast_ResumesAfterLastBatchIndex verifies that when a row was
+// already partially sent (LastBatchIndex set, SentCount > 0), the resumed
+// run skips the already-finished batches, keeps the running counters, and
+// only dispatches the remaining slice.
+func TestSendMulticast_ResumesAfterLastBatchIndex(t *testing.T) {
+	sender := &fakeSender{}
+	f, mock, cleanup := newTestFeature(t, sender)
+	defer cleanup()
+
+	// Build a recipient list of 1200 tokens — 3 chunks of 500/500/200.
+	const total = 1200
+	rows := sqlmock.NewRows([]string{"userId", "token"})
+	for i := range total {
+		rows.AddRow("u", "tok-"+string(rune('a'+i%26)))
+	}
+	at := string(AudienceDelivery)
+	aid := "d1"
+
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT mod."memberId", nd.token`)).
+		WithArgs("d1", "t1", string(TypeAdminBroadcast)).
+		WillReturnRows(rows)
+
+	// Crash happened after batch 0 (first 500 sent). LastBatchIndex=0
+	// means "batch 0 was the last finished one" — resume at batch 1.
+	// Two more progress UPDATEs (batches 1 and 2) and one final markSent.
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
+		SET "sentCount" = $2, "failedCount" = $3, "lastBatchIndex" = $4`)).
+		WithArgs("nResume", 1000, 0, 1).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
+		SET "sentCount" = $2, "failedCount" = $3, "lastBatchIndex" = $4`)).
+		WithArgs("nResume", 1200, 0, 2).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
+		SET status = 'sent'`)).
+		WithArgs("nResume", 1200, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	rc := total
+	lbi := 0
+	n := Notification{
+		ID: "nResume", TenantID: "t1",
+		Type: TypeAdminBroadcast, Fanout: FanoutRead,
+		Title: ptr("hi"), Body: ptr("there"),
+		AudienceType: &at, AudienceID: &aid,
+		// State as if a previous run completed batch 0 and crashed.
+		SentCount:      500,
+		FailedCount:    0,
+		RecipientCount: &rc,
+		LastBatchIndex: &lbi,
+	}
+
+	require.NoError(t, f.sendMulticast(context.Background(), sender, n, "hi", "there"))
+
+	// Two batches should have been dispatched on this run, not three.
+	require.Len(t, sender.multi, 2)
+	require.Len(t, sender.multi[0].Tokens, 500) // batch index 1
+	require.Len(t, sender.multi[1].Tokens, 200) // batch index 2 (tail)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestSendMulticast_AllFailed_ReturnsError verifies that when every FCM
+// response was a failure, sendMulticast returns an error so the caller
+// (tick) marks the row as 'failed' instead of 'sent'.
+func TestSendMulticast_AllFailed_ReturnsError(t *testing.T) {
+	sender := &fakeSender{
+		multiResp: func(m *messaging.MulticastMessage) *messaging.BatchResponse {
+			resp := &messaging.BatchResponse{
+				FailureCount: len(m.Tokens),
+				Responses:    make([]*messaging.SendResponse, len(m.Tokens)),
+			}
+			for i := range resp.Responses {
+				resp.Responses[i] = &messaging.SendResponse{Success: false}
+			}
+			return resp
+		},
+	}
+	f, mock, cleanup := newTestFeature(t, sender)
+	defer cleanup()
+
+	at := string(AudienceDelivery)
+	aid := "d1"
+
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT mod."memberId", nd.token`)).
+		WithArgs("d1", "t1", string(TypeAdminBroadcast)).
+		WillReturnRows(sqlmock.NewRows([]string{"userId", "token"}).
+			AddRow("u1", "t1").AddRow("u2", "t2"))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
+		SET "recipientCount"`)).
+		WithArgs("nFail", 2).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
+		SET "sentCount" = $2, "failedCount" = $3, "lastBatchIndex" = $4`)).
+		WithArgs("nFail", 0, 2, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	n := Notification{
+		ID: "nFail", TenantID: "t1",
+		Type: TypeAdminBroadcast, Fanout: FanoutRead,
+		Title: ptr("hi"), Body: ptr("there"),
+		AudienceType: &at, AudienceID: &aid,
+	}
+
+	err := f.sendMulticast(context.Background(), sender, n, "hi", "there")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "all 2 FCM sends failed")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 // ---------- markFailed propagates error from caller ----------
 
 func TestMarkFailed_PersistsReason(t *testing.T) {
@@ -242,6 +352,5 @@ func TestSelectFirebaseKey_BadJSON(t *testing.T) {
 	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY", "not json")
 	_, _, err := selectFirebaseKey("")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, err)) // sanity: comparable error
 }
 

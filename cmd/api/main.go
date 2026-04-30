@@ -219,7 +219,11 @@ func startApplication(
 	defer cancel()
 
 	scheduler.Stop()
+	// Order matters: stop the worker run loop, then cancel notifCtx so the
+	// long-lived cleanup goroutine bails out — both must finish BEFORE
+	// dbMap.CloseAll() below or an in-flight cleanup query hits a closed *sql.DB.
 	notifWorker.Stop(10 * time.Second)
+	stopNotifWorker()
 
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown: " + err.Error())

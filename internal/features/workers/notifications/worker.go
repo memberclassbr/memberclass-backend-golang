@@ -49,8 +49,11 @@ func (f *Feature) Start(parent context.Context) {
 	}()
 }
 
-// Stop signals the worker to drain and waits up to `timeout` for the
-// current tick to finish. Call from graceful shutdown BEFORE closing the DB.
+// Stop signals the worker to drain and waits for the run loop to exit.
+// `timeout` only bounds how long we *log* about a slow shutdown — we always
+// block until the goroutine has actually returned, otherwise a subsequent
+// Start could spin up a second loop racing the still-alive one against the
+// same DB and the same Notification rows.
 func (f *Feature) Stop(timeout time.Duration) {
 	f.mu.Lock()
 	if !f.running {
@@ -58,15 +61,22 @@ func (f *Feature) Stop(timeout time.Duration) {
 		return
 	}
 	cancel, done := f.cancel, f.done
-	f.running = false
 	f.mu.Unlock()
 
 	cancel()
+
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		f.log.Warn("notifications.worker: shutdown timed out; in-flight rows recovered by orphan reset on next boot")
+		f.log.Warn("notifications.worker: shutdown is taking longer than expected; still waiting for run loop to exit",
+			"timeout", timeout.String())
+		<-done
 	}
+
+	// Goroutine has exited — only now is it safe to allow another Start().
+	f.mu.Lock()
+	f.running = false
+	f.mu.Unlock()
 }
 
 func (f *Feature) run(ctx context.Context) {
@@ -102,7 +112,15 @@ func (f *Feature) tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if len(notifs) == 0 {
+		return nil
+	}
+	f.log.Info("notifications.worker.claimed", "count", len(notifs))
 	for _, n := range notifs {
+		f.log.Info("notifications.worker.dispatching",
+			"id", n.ID, "tenant_id", n.TenantID,
+			"type", string(n.Type), "fanout", string(n.Fanout),
+			"audience_type", deref(n.AudienceType))
 		if err := f.dispatch(ctx, n); err != nil {
 			f.log.Error("notifications.worker.dispatch_failed",
 				"id", n.ID, "tenant_id", n.TenantID, "error", err.Error())
@@ -149,6 +167,7 @@ func (f *Feature) sendTopic(ctx context.Context, sender fcmSender, n Notificatio
 	}); err != nil {
 		return fmt.Errorf("fcm topic send: %w", err)
 	}
+	f.log.Info("notifications.worker.topic_sent", "id", n.ID, "topic", topic)
 
 	if n.RecipientCount == nil {
 		if rc, err := f.countTenantMembers(ctx, n.TenantID); err == nil {
@@ -173,11 +192,16 @@ func (f *Feature) sendMulticast(ctx context.Context, sender fcmSender, n Notific
 		// Nothing to send — could be a broadcast for a delivery with no
 		// members, or a personal notification for a user with no devices.
 		// Mark as sent with 0/0 so admins see the row is closed.
+		f.log.Warn("notifications.worker.no_recipients",
+			"id", n.ID, "tenant_id", n.TenantID,
+			"fanout", string(n.Fanout), "audience_type", deref(n.AudienceType))
 		if n.RecipientCount == nil {
 			_ = f.setRecipientCount(ctx, n.ID, 0)
 		}
 		return f.markSent(ctx, n.ID, 0, 0)
 	}
+	f.log.Info("notifications.worker.recipients_resolved",
+		"id", n.ID, "count", len(recipients))
 
 	if n.RecipientCount == nil {
 		if err := f.setRecipientCount(ctx, n.ID, len(recipients)); err != nil {
@@ -237,5 +261,8 @@ func (f *Feature) sendMulticast(ctx context.Context, sender fcmSender, n Notific
 	if sent == 0 && failed > 0 {
 		return fmt.Errorf("all %d FCM sends failed", failed)
 	}
+	f.log.Info("notifications.worker.multicast_sent",
+		"id", n.ID, "sent", sent, "failed", failed,
+		"recipients", len(recipients))
 	return f.markSent(ctx, n.ID, sent, failed)
 }
