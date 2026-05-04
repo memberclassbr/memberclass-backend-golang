@@ -42,6 +42,26 @@ func (f *Feature) resolveRecipients(ctx context.Context, n Notification) ([]reci
 		`
 		return f.queryRecipients(ctx, q, n.ID, string(n.Type))
 
+	case n.Fanout == FanoutRead && deref(n.AudienceType) == string(AudienceTenant):
+		// Tenant-wide broadcast. Enumerate NotificationDevice rows for the
+		// tenant directly — devices may exist without a UsersOnTenants row
+		// because the user has not logged in yet to bind the device. Those
+		// anonymous devices ALWAYS receive (no preference to honor); logged-in
+		// devices apply the pushDisabledTypes filter.
+		const q = `
+			SELECT COALESCE(nd."userId", ''), nd.token
+			FROM "NotificationDevice" nd
+			LEFT JOIN "UsersOnTenants" uot
+			  ON uot."userId" = nd."userId" AND uot."tenantId" = nd."tenantId"
+			WHERE nd."tenantId" = $1
+			  AND (
+			    uot."userId" IS NULL
+			    OR NOT COALESCE($2::text = ANY(uot."pushDisabledTypes"), FALSE)
+			  )
+			ORDER BY nd.id
+		`
+		return f.queryRecipients(ctx, q, n.TenantID, string(n.Type))
+
 	case n.Fanout == FanoutRead && deref(n.AudienceType) == string(AudienceDelivery):
 		const q = `
 			SELECT mod."memberId", nd.token
@@ -57,7 +77,6 @@ func (f *Feature) resolveRecipients(ctx context.Context, n Notification) ([]reci
 		return f.queryRecipients(ctx, q, deref(n.AudienceID), n.TenantID, string(n.Type))
 
 	default:
-		// audience=tenant (or unknown) is not enumerable — caller uses topic.
 		return nil, nil
 	}
 }

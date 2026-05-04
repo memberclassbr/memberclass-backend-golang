@@ -126,23 +126,15 @@ func (f *Feature) getTenantInstance(ctx context.Context, tenantID string) (strin
 	return instance.String, nil
 }
 
-// countTenantMembers returns how many users belong to the tenant — used as
-// an estimated recipientCount for topic broadcasts (FCM doesn't return
-// per-recipient stats for topics).
-func (f *Feature) countTenantMembers(ctx context.Context, tenantID string) (int, error) {
-	var n int
-	err := f.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM "UsersOnTenants" WHERE "tenantId" = $1`, tenantID,
-	).Scan(&n)
-	return n, err
-}
-
 // deleteDevice removes a stale FCM token (FCM returned
-// "registration-token-not-registered"). Best-effort cleanup.
-func (f *Feature) deleteDevice(ctx context.Context, userID, tenantID, token string) error {
+// "registration-token-not-registered"). Keyed by (tenantId, token) — token
+// is effectively unique and the userId column may be NULL for anonymous
+// devices that haven't bound to a logged-in user yet, so a userId-based
+// WHERE would skip those rows.
+func (f *Feature) deleteDevice(ctx context.Context, tenantID, token string) error {
 	_, err := f.db.ExecContext(ctx, `
 		DELETE FROM "NotificationDevice"
-		WHERE "userId" = $1 AND "tenantId" = $2 AND token = $3
-	`, userID, tenantID, token)
+		WHERE "tenantId" = $1 AND token = $2
+	`, tenantID, token)
 	return err
 }

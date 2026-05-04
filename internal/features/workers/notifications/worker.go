@@ -149,37 +149,7 @@ func (f *Feature) dispatch(ctx context.Context, dlog *dispatchLog, n Notificatio
 		"notifications_instance", instance)
 
 	title, body := renderForPush(n)
-
-	if n.Fanout == FanoutRead && deref(n.AudienceType) == string(AudienceTenant) {
-		return f.sendTopic(ctx, dlog, sender, n, title, body)
-	}
 	return f.sendMulticast(ctx, dlog, sender, n, title, body)
-}
-
-// sendTopic publishes one FCM message to the tenant_<tenantId> topic. The
-// app subscribes/unsubscribes devices to this topic on its end. We don't
-// get per-recipient stats — sentCount/failedCount stay at 0 and
-// recipientCount is set to the UsersOnTenants count as an estimate.
-func (f *Feature) sendTopic(ctx context.Context, dlog *dispatchLog, sender fcmSender, n Notification, title, body string) error {
-	topic := "tenant_" + n.TenantID
-	dlog.Info("notifications.worker.topic_send_started", "topic", topic)
-	msgID, err := sender.Send(ctx, &messaging.Message{
-		Topic:        topic,
-		Notification: &messaging.Notification{Title: title, Body: body},
-	})
-	if err != nil {
-		return fmt.Errorf("fcm topic send: %w", err)
-	}
-	dlog.Info("notifications.worker.topic_sent", "topic", topic, "fcm_message_id", msgID)
-
-	if n.RecipientCount == nil {
-		if rc, err := f.countTenantMembers(ctx, n.TenantID); err == nil {
-			if err := f.setRecipientCount(ctx, n.ID, rc); err != nil {
-				dlog.Warn("notifications.worker.set_recipient_count_failed", "error", err.Error())
-			}
-		}
-	}
-	return f.markSent(ctx, n.ID, 0, 0)
 }
 
 // sendMulticast resolves the recipient list, chunks at 500 tokens, and
@@ -254,7 +224,7 @@ func (f *Feature) sendMulticast(ctx context.Context, dlog *dispatchLog, sender f
 		for k, r := range resp.Responses {
 			if r.Error != nil && messaging.IsUnregistered(r.Error) {
 				deadTokens++
-				if dErr := f.deleteDevice(ctx, chunk[k].userID, n.TenantID, tokens[k]); dErr != nil {
+				if dErr := f.deleteDevice(ctx, n.TenantID, tokens[k]); dErr != nil {
 					dlog.Warn("notifications.worker.delete_device_failed",
 						"user_id", chunk[k].userID, "error", dErr.Error())
 				}

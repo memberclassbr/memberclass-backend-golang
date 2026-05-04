@@ -116,36 +116,45 @@ func TestClaimPending_TransitionsToSending(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-// ---------- dispatch: tenant audience → topic ----------
+// ---------- dispatch: tenant audience → multicast over NotificationDevice ----------
 
-func TestDispatch_TenantAudience_PublishesTopic(t *testing.T) {
+// TestDispatch_TenantAudience_MulticastsAllDevices verifies that an
+// audience=tenant broadcast enumerates NotificationDevice rows for the
+// tenant (NOT a Firebase topic) and applies the anonymous-device exception
+// — devices without a UsersOnTenants row always receive, regardless of
+// pushDisabledTypes.
+func TestDispatch_TenantAudience_MulticastsAllDevices(t *testing.T) {
 	sender := &fakeSender{}
 	f, mock, cleanup := newTestFeature(t, sender)
 	defer cleanup()
 
+	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY", `{"type":"service_account"}`)
+
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT "notificationsInstance" FROM "Tenant"`)).
 		WithArgs("t1").
 		WillReturnRows(sqlmock.NewRows([]string{"notificationsInstance"}).AddRow(nil))
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM "UsersOnTenants" WHERE "tenantId"`)).
-		WithArgs("t1").
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(42))
+
+	// Three devices: anonymous (userId=null), logged-in user-A, logged-in
+	// user-B. All returned by the query because the disabled-types filter
+	// was satisfied for B and bypassed for the anonymous row.
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT COALESCE(nd."userId", ''), nd.token`)).
+		WithArgs("t1", string(TypeAdminBroadcast)).
+		WillReturnRows(sqlmock.NewRows([]string{"userId", "token"}).
+			AddRow("", "anon-tok").
+			AddRow("uA", "tokA").
+			AddRow("uB", "tokB"))
 	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
 		SET "recipientCount"`)).
-		WithArgs("n1", 42).
+		WithArgs("n1", 3).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
+		SET "sentCount" = $2, "failedCount" = $3, "lastBatchIndex" = $4`)).
+		WithArgs("n1", 3, 0, 0).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta(`UPDATE "Notification"
 		SET status = 'sent'`)).
-		WithArgs("n1", 0, 0).
+		WithArgs("n1", 3, 0).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	// Need a Firebase app present in cache for the default project. But
-	// the default project key needs FIREBASE_SERVICE_ACCOUNT_KEY env var
-	// set with valid JSON for selectFirebaseKey to succeed. Pre-seed the
-	// cache instead — we need to bypass selectFirebaseKey entirely. Easiest:
-	// extend fcmClient with a directly-pluggable send path. For MVP the
-	// integration test below covers messaging path, here we test by setting
-	// the env var.
-	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY", `{"type":"service_account"}`)
 
 	at := string(AudienceTenant)
 	n := Notification{
@@ -156,8 +165,9 @@ func TestDispatch_TenantAudience_PublishesTopic(t *testing.T) {
 	}
 	require.NoError(t, f.dispatch(context.Background(), newDispatchLog(f.log, n), n))
 
-	require.Len(t, sender.topicMsgs, 1)
-	require.Equal(t, "tenant_t1", sender.topicMsgs[0].Topic)
+	require.Len(t, sender.topicMsgs, 0, "must not publish to topic anymore")
+	require.Len(t, sender.multi, 1)
+	require.ElementsMatch(t, []string{"anon-tok", "tokA", "tokB"}, sender.multi[0].Tokens)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
