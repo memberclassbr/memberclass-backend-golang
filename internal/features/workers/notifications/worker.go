@@ -117,18 +117,16 @@ func (f *Feature) tick(ctx context.Context) error {
 	}
 	f.log.Info("notifications.worker.claimed", "count", len(notifs))
 	for _, n := range notifs {
-		f.log.Info("notifications.worker.dispatching",
-			"id", n.ID, "tenant_id", n.TenantID,
-			"type", string(n.Type), "fanout", string(n.Fanout),
-			"audience_type", deref(n.AudienceType))
-		if err := f.dispatch(ctx, n); err != nil {
-			f.log.Error("notifications.worker.dispatch_failed",
-				"id", n.ID, "tenant_id", n.TenantID, "error", err.Error())
+		dlog := newDispatchLog(f.log, n)
+		dlog.Info("notifications.worker.dispatch_started")
+		if err := f.dispatch(ctx, dlog, n); err != nil {
+			dlog.Error("notifications.worker.dispatch_failed", "error", err.Error())
 			if mErr := f.markFailed(ctx, n.ID, err.Error()); mErr != nil {
-				f.log.Error("notifications.worker.mark_failed_failed",
-					"id", n.ID, "error", mErr.Error())
+				dlog.Error("notifications.worker.mark_failed_failed", "error", mErr.Error())
 			}
+			continue
 		}
+		dlog.Info("notifications.worker.dispatch_completed")
 	}
 	return nil
 }
@@ -136,44 +134,48 @@ func (f *Feature) tick(ctx context.Context) error {
 // dispatch routes one Notification to FCM topic or multicast based on
 // fanout/audience. It never returns nil for "I tried but the row is now
 // failed" — the caller checks error and writes the failed row itself.
-func (f *Feature) dispatch(ctx context.Context, n Notification) error {
+func (f *Feature) dispatch(ctx context.Context, dlog *dispatchLog, n Notification) error {
 	instance, err := f.getTenantInstance(ctx, n.TenantID)
 	if err != nil {
 		return fmt.Errorf("get tenant instance: %w", err)
 	}
 
-	sender, _, err := f.fcm.messaging(ctx, instance)
+	sender, projectID, err := f.fcm.messaging(ctx, instance)
 	if err != nil {
 		return fmt.Errorf("fcm client: %w", err)
 	}
+	dlog.Info("notifications.worker.fcm_client_resolved",
+		"firebase_project_id", projectID,
+		"notifications_instance", instance)
 
 	title, body := renderForPush(n)
 
 	if n.Fanout == FanoutRead && deref(n.AudienceType) == string(AudienceTenant) {
-		return f.sendTopic(ctx, sender, n, title, body)
+		return f.sendTopic(ctx, dlog, sender, n, title, body)
 	}
-	return f.sendMulticast(ctx, sender, n, title, body)
+	return f.sendMulticast(ctx, dlog, sender, n, title, body)
 }
 
 // sendTopic publishes one FCM message to the tenant_<tenantId> topic. The
 // app subscribes/unsubscribes devices to this topic on its end. We don't
 // get per-recipient stats — sentCount/failedCount stay at 0 and
 // recipientCount is set to the UsersOnTenants count as an estimate.
-func (f *Feature) sendTopic(ctx context.Context, sender fcmSender, n Notification, title, body string) error {
+func (f *Feature) sendTopic(ctx context.Context, dlog *dispatchLog, sender fcmSender, n Notification, title, body string) error {
 	topic := "tenant_" + n.TenantID
-	if _, err := sender.Send(ctx, &messaging.Message{
+	dlog.Info("notifications.worker.topic_send_started", "topic", topic)
+	msgID, err := sender.Send(ctx, &messaging.Message{
 		Topic:        topic,
 		Notification: &messaging.Notification{Title: title, Body: body},
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("fcm topic send: %w", err)
 	}
-	f.log.Info("notifications.worker.topic_sent", "id", n.ID, "topic", topic)
+	dlog.Info("notifications.worker.topic_sent", "topic", topic, "fcm_message_id", msgID)
 
 	if n.RecipientCount == nil {
 		if rc, err := f.countTenantMembers(ctx, n.TenantID); err == nil {
 			if err := f.setRecipientCount(ctx, n.ID, rc); err != nil {
-				f.log.Warn("notifications.worker.set_recipient_count_failed",
-					"id", n.ID, "error", err.Error())
+				dlog.Warn("notifications.worker.set_recipient_count_failed", "error", err.Error())
 			}
 		}
 	}
@@ -183,7 +185,7 @@ func (f *Feature) sendTopic(ctx context.Context, sender fcmSender, n Notificatio
 // sendMulticast resolves the recipient list, chunks at 500 tokens, and
 // updates lastBatchIndex after each chunk so a crash mid-broadcast resumes
 // without duplicating sends.
-func (f *Feature) sendMulticast(ctx context.Context, sender fcmSender, n Notification, title, body string) error {
+func (f *Feature) sendMulticast(ctx context.Context, dlog *dispatchLog, sender fcmSender, n Notification, title, body string) error {
 	recipients, err := f.resolveRecipients(ctx, n)
 	if err != nil {
 		return fmt.Errorf("resolve recipients: %w", err)
@@ -192,21 +194,22 @@ func (f *Feature) sendMulticast(ctx context.Context, sender fcmSender, n Notific
 		// Nothing to send — could be a broadcast for a delivery with no
 		// members, or a personal notification for a user with no devices.
 		// Mark as sent with 0/0 so admins see the row is closed.
-		f.log.Warn("notifications.worker.no_recipients",
-			"id", n.ID, "tenant_id", n.TenantID,
-			"fanout", string(n.Fanout), "audience_type", deref(n.AudienceType))
+		dlog.Warn("notifications.worker.no_recipients")
 		if n.RecipientCount == nil {
 			_ = f.setRecipientCount(ctx, n.ID, 0)
 		}
 		return f.markSent(ctx, n.ID, 0, 0)
 	}
-	f.log.Info("notifications.worker.recipients_resolved",
-		"id", n.ID, "count", len(recipients))
+
+	totalBatches := (len(recipients) + batchSize - 1) / batchSize
+	dlog.Info("notifications.worker.recipients_resolved",
+		"recipients", len(recipients),
+		"batches", totalBatches,
+		"batch_size", batchSize)
 
 	if n.RecipientCount == nil {
 		if err := f.setRecipientCount(ctx, n.ID, len(recipients)); err != nil {
-			f.log.Warn("notifications.worker.set_recipient_count_failed",
-				"id", n.ID, "error", err.Error())
+			dlog.Warn("notifications.worker.set_recipient_count_failed", "error", err.Error())
 		}
 	}
 
@@ -216,10 +219,15 @@ func (f *Feature) sendMulticast(ctx context.Context, sender fcmSender, n Notific
 	startBatch := 0
 	if n.LastBatchIndex != nil {
 		startBatch = *n.LastBatchIndex + 1
+		dlog.Info("notifications.worker.multicast_resuming",
+			"start_batch", startBatch,
+			"prior_sent", n.SentCount,
+			"prior_failed", n.FailedCount)
 	}
 
 	sent := n.SentCount
 	failed := n.FailedCount
+	deadTokens := 0
 
 	for batchIdx, i := startBatch, startBatch*batchSize; i < len(recipients); batchIdx, i = batchIdx+1, i+batchSize {
 		end := min(i+batchSize, len(recipients))
@@ -245,24 +253,33 @@ func (f *Feature) sendMulticast(ctx context.Context, sender fcmSender, n Notific
 		// the app it'll register a new token via NotificationDevice anyway.
 		for k, r := range resp.Responses {
 			if r.Error != nil && messaging.IsUnregistered(r.Error) {
+				deadTokens++
 				if dErr := f.deleteDevice(ctx, chunk[k].userID, n.TenantID, tokens[k]); dErr != nil {
-					f.log.Warn("notifications.worker.delete_device_failed",
+					dlog.Warn("notifications.worker.delete_device_failed",
 						"user_id", chunk[k].userID, "error", dErr.Error())
 				}
 			}
 		}
 
+		dlog.Info("notifications.worker.multicast_batch_sent",
+			"batch_index", batchIdx,
+			"batch_size", len(chunk),
+			"batch_success", resp.SuccessCount,
+			"batch_failure", resp.FailureCount,
+			"running_sent", sent,
+			"running_failed", failed)
+
 		if err := f.updateProgress(ctx, n.ID, sent, failed, batchIdx); err != nil {
-			f.log.Warn("notifications.worker.progress_update_failed",
-				"id", n.ID, "error", err.Error())
+			dlog.Warn("notifications.worker.progress_update_failed", "error", err.Error())
 		}
 	}
 
 	if sent == 0 && failed > 0 {
 		return fmt.Errorf("all %d FCM sends failed", failed)
 	}
-	f.log.Info("notifications.worker.multicast_sent",
-		"id", n.ID, "sent", sent, "failed", failed,
-		"recipients", len(recipients))
+	dlog.Info("notifications.worker.multicast_sent",
+		"sent", sent, "failed", failed,
+		"recipients", len(recipients),
+		"dead_tokens_dropped", deadTokens)
 	return f.markSent(ctx, n.ID, sent, failed)
 }

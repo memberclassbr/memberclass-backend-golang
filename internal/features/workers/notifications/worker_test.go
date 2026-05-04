@@ -154,7 +154,7 @@ func TestDispatch_TenantAudience_PublishesTopic(t *testing.T) {
 		Title: ptr("hi"), Body: ptr("there"),
 		AudienceType: &at,
 	}
-	require.NoError(t, f.dispatch(context.Background(), n))
+	require.NoError(t, f.dispatch(context.Background(), newDispatchLog(f.log, n), n))
 
 	require.Len(t, sender.topicMsgs, 1)
 	require.Equal(t, "tenant_t1", sender.topicMsgs[0].Topic)
@@ -189,7 +189,7 @@ func TestSendMulticast_NoRecipients_MarksSentZero(t *testing.T) {
 		WithArgs("n2", 0, 0).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	require.NoError(t, f.sendMulticast(context.Background(), sender, n, "hi", "there"))
+	require.NoError(t, f.sendMulticast(context.Background(), newDispatchLog(f.log, n), sender, n, "hi", "there"))
 	require.Len(t, sender.multi, 0)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -248,7 +248,7 @@ func TestSendMulticast_ResumesAfterLastBatchIndex(t *testing.T) {
 		LastBatchIndex: &lbi,
 	}
 
-	require.NoError(t, f.sendMulticast(context.Background(), sender, n, "hi", "there"))
+	require.NoError(t, f.sendMulticast(context.Background(), newDispatchLog(f.log, n), sender, n, "hi", "there"))
 
 	// Two batches should have been dispatched on this run, not three.
 	require.Len(t, sender.multi, 2)
@@ -299,7 +299,7 @@ func TestSendMulticast_AllFailed_ReturnsError(t *testing.T) {
 		AudienceType: &at, AudienceID: &aid,
 	}
 
-	err := f.sendMulticast(context.Background(), sender, n, "hi", "there")
+	err := f.sendMulticast(context.Background(), newDispatchLog(f.log, n), sender, n, "hi", "there")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "all 2 FCM sends failed")
 	require.NoError(t, mock.ExpectationsWereMet())
