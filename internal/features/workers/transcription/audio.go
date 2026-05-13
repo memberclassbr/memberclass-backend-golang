@@ -11,15 +11,29 @@ import (
 	"strings"
 )
 
+// bunnyIframeReferer is what Bunny's CDN edge checks for before serving
+// HLS playlists, even when AllowedReferrers/BlockedReferrers are empty
+// and AllowDirectPlay=true. Empirically, requests without this Referer
+// header come back as 403 Forbidden. The iframe player normally sets it
+// automatically; ffmpeg has to be told.
+const bunnyIframeReferer = "https://iframe.mediadelivery.net/"
+
 // extractAudioMP3 invokes ffmpeg to read an HLS playlist URL, MP4 URL, or
 // local file from `input` and produce a mono 16 kHz MP3 at 64 kbps in
 // outPath. Mono + 16 kHz are Whisper's sweet spot — same recognition
 // quality as 44.1 kHz stereo at ~10% the bandwidth. Returns outPath on
 // success.
+//
+// For http/https inputs the iframe.mediadelivery.net Referer header is
+// added — Bunny's CDN edge returns 403 without it even when the pull
+// zone's referrer allowlist is empty. The flag is omitted for local
+// inputs because the file demuxer rejects unknown HTTP options.
 func extractAudioMP3(ctx context.Context, input, outPath string) (string, error) {
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-y",
-		"-loglevel", "error",
+	args := []string{"-y", "-loglevel", "error"}
+	if isHTTPURL(input) {
+		args = append(args, "-referer", bunnyIframeReferer)
+	}
+	args = append(args,
 		"-i", input,
 		"-vn",
 		"-ac", "1",
@@ -28,10 +42,15 @@ func extractAudioMP3(ctx context.Context, input, outPath string) (string, error)
 		"-ab", "64k",
 		outPath,
 	)
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("ffmpeg extract: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return outPath, nil
+}
+
+func isHTTPURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 // splitAudioByDuration slices `src` into N parts of `segSeconds` seconds
