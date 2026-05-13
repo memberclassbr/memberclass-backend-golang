@@ -16,8 +16,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/api
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates tzdata
+# ca-certificates for HTTPS; tzdata for cron schedules.
+# ffmpeg is required by the transcription slice — it extracts audio from
+# Bunny HLS playlists and splits long files for Whisper. Without it the
+# slice logs a warning at startup and refuses to run jobs.
+RUN apk --no-cache add ca-certificates tzdata ffmpeg
 
 # Create non-root user
 RUN addgroup -g 1000 appuser && \
