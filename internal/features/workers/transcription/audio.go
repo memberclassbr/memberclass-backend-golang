@@ -18,6 +18,14 @@ import (
 // automatically; ffmpeg has to be told.
 const bunnyIframeReferer = "https://iframe.mediadelivery.net/"
 
+// ffmpegProtocolWhitelist locks ffmpeg's URL handlers down to the
+// protocols this pipeline actually needs. Without it, ffmpeg accepts
+// `file://`, `concat:`, `rtmp:`, `srtp:`, `sftp:`, etc., which would be
+// a serious SSRF / local-file-read primitive if the input string ever
+// became attacker-influenced. Today the input is built from Bunny API
+// responses, but constraining the surface is cheap defense-in-depth.
+const ffmpegProtocolWhitelist = "file,http,https,tls,tcp,crypto,hls,rtp,udp"
+
 // extractAudioMP3 invokes ffmpeg to read an HLS playlist URL, MP4 URL, or
 // local file from `input` and produce a mono 16 kHz MP3 at 64 kbps in
 // outPath. Mono + 16 kHz are Whisper's sweet spot — same recognition
@@ -29,7 +37,11 @@ const bunnyIframeReferer = "https://iframe.mediadelivery.net/"
 // zone's referrer allowlist is empty. The flag is omitted for local
 // inputs because the file demuxer rejects unknown HTTP options.
 func extractAudioMP3(ctx context.Context, input, outPath string) (string, error) {
-	args := []string{"-y", "-loglevel", "error"}
+	args := []string{
+		"-y",
+		"-loglevel", "error",
+		"-protocol_whitelist", ffmpegProtocolWhitelist,
+	}
 	if isHTTPURL(input) {
 		args = append(args, "-referer", bunnyIframeReferer)
 	}
@@ -70,6 +82,7 @@ func splitAudioByDuration(ctx context.Context, src, outDir string, segSeconds in
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-y",
 		"-loglevel", "error",
+		"-protocol_whitelist", ffmpegProtocolWhitelist,
 		"-i", src,
 		"-f", "segment",
 		"-segment_time", strconv.Itoa(segSeconds),

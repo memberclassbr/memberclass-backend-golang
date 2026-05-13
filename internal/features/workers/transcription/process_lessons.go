@@ -73,6 +73,7 @@ func (f *Feature) ProcessLessonsTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limitBody(w, r)
 	var req processLessonsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeCustomError(w, http.StatusBadRequest, "JSON inválido", "INVALID_REQUEST")
@@ -80,6 +81,12 @@ func (f *Feature) ProcessLessonsTenant(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.TenantID == "" {
 		writeCustomError(w, http.StatusBadRequest, "tenantId é obrigatório", "MISSING_TENANT_ID")
+		return
+	}
+	if len(req.LessonIDs) > maxLessonIDsPerRequest {
+		writeCustomError(w, http.StatusBadRequest,
+			fmt.Sprintf("lessonIds excede o limite de %d por chamada", maxLessonIDsPerRequest),
+			"TOO_MANY_LESSON_IDS")
 		return
 	}
 

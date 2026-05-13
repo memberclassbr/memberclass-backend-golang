@@ -88,6 +88,7 @@ func (f *Feature) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limitBody(w, r)
 	var req searchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeCustomError(w, http.StatusBadRequest, "JSON inválido", "INVALID_REQUEST")

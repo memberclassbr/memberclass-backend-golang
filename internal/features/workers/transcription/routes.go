@@ -1,6 +1,7 @@
 package transcription
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -32,14 +33,37 @@ func (f *Feature) Register(r chi.Router, _ MiddlewareSet) {
 // requireInternalAPIKey validates x-internal-api-key against the
 // INTERNAL_AI_API_KEY env var. Returns false (and writes 401) when the
 // caller is unauthorized — handlers should `return` immediately on false.
+//
+// Uses crypto/subtle.ConstantTimeCompare to avoid leaking the key one
+// byte at a time through response-timing differences. The empty-want
+// short-circuit is fine because an attacker can't influence it; we only
+// need constant-time comparison once both sides are non-empty.
 func (f *Feature) requireInternalAPIKey(w http.ResponseWriter, r *http.Request) bool {
 	got := r.Header.Get("x-internal-api-key")
 	want := os.Getenv("INTERNAL_AI_API_KEY")
-	if want == "" || got != want {
+	if want == "" || subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
 		writeCustomError(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório", "UNAUTHORIZED")
 		return false
 	}
 	return true
+}
+
+// maxRequestBodyBytes caps the size of any JSON body the slice's handlers
+// will read. The largest legitimate payload is the LessonIDs array sent to
+// process-lessons (a few hundred CUIDs ~= a few KB). 1 MB leaves ample
+// headroom while preventing OOM-style DoS from a misbehaving — or
+// compromised — admin caller.
+const maxRequestBodyBytes = 1 << 20 // 1 MiB
+
+// maxLessonIDsPerRequest bounds the number of lessons a single enqueue
+// call can target. The admin UI ships a hand-picked list; multi-thousand
+// arrays signal either a bug or abuse.
+const maxLessonIDsPerRequest = 1000
+
+// limitBody wraps r.Body with http.MaxBytesReader so subsequent decodes
+// bail out with an error instead of allocating unbounded memory.
+func limitBody(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 }
 
 // ---------- HTTP helpers (kept local — the slice mirrors the legacy

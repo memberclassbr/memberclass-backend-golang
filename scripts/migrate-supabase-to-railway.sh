@@ -27,6 +27,12 @@
 
 set -euo pipefail
 
+# Restrictive umask so the dump file is created mode 0600. The dump
+# carries every chunk / transcript / video metadata row in the source
+# database — leaving it world-readable in /tmp would expose tenant
+# content to any local user on the host.
+umask 077
+
 DUMP_FILE="${DUMP_FILE:-/tmp/supabase_transcription_$(date +%Y%m%d_%H%M%S).dump}"
 TABLES=(videos transcripts chunks jobs token_usage memberclass_tenant_mappings webhook_subscriptions webhook_deliveries queries analytics)
 SCHEMA_ONLY=0

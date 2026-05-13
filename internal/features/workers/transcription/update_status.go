@@ -41,6 +41,7 @@ func (f *Feature) UpdateLessonTranscription(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	limitBody(w, r)
 	var req updateLessonTranscriptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeCustomError(w, http.StatusBadRequest, "JSON inválido", "INVALID_REQUEST")
