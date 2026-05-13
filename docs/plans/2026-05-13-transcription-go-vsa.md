@@ -45,11 +45,22 @@
 
 ### Schema pgvector (já existe — migrado para Railway, não recriar)
 
-Enums (USER-DEFINED): `event`, `job_type`, `job_status`, `video_status`, `source_type`, `webhook_delivery_status`. Valores assumidos a confirmar **na Task 0**:
-- `job_status`: `PENDING | RUNNING | COMPLETED | FAILED`
-- `job_type`: contém `TRANSCRIPTION` (valor exato a verificar)
-- `video_status`: `PENDING | DOWNLOADING | TRANSCRIBING | EMBEDDING | COMPLETED | FAILED`
-- `source_type`: `BUNNY | URL` (provavel — verificar)
+Enums confirmados via Task 0 (2026-05-13):
+- `job_status`: `PENDING | RUNNING | COMPLETED | FAILED | CANCELLED`
+- `job_type`: `VIDEO_PROCESSING | EMBEDDING_GENERATION | CLEANUP | ANALYTICS`
+  (sem valor `TRANSCRIPTION` — o pipeline de transcrição usa `VIDEO_PROCESSING`)
+- `video_status`: `PENDING | DOWNLOADING | EXTRACTING_AUDIO | TRANSCRIBING | CHUNKING | GENERATING_EMBEDDINGS | COMPLETED | FAILED`
+- `video_source_type` (não "source_type"): `BUNNY_CDN` (único valor presente em 343 rows)
+- Outros enums no DB que não usamos: `lesson_status`, `analytics_event`, `webhook_delivery_status`
+
+Índices pgvector legados já existem (`idx_chunks_embedding_hnsw`,
+`idx_chunks_tenant_similarity`). Task 1 adiciona quatro mais
+(`chunks_embedding_hnsw_cosine`, `videos_unique_tenant_source`,
+`jobs_pending_priority`, `jobs_running_started_at`) — todos com IF NOT
+EXISTS, idempotentes.
+
+Pré-requisito do UNIQUE em videos: 6 rows duplicadas (cron retentando
+falhas) foram removidas via `migrations/transcription/000_dedupe_videos.sql`.
 
 ### Lacuna chave
 
@@ -253,16 +264,23 @@ const (
     JobStatusRunning   = "RUNNING"
     JobStatusCompleted = "COMPLETED"
     JobStatusFailed    = "FAILED"
+    JobStatusCancelled = "CANCELLED"
 
-    JobTypeTranscription = "TRANSCRIPTION" // verify exact case
+    // The transcription pipeline as a whole runs under VIDEO_PROCESSING.
+    // EMBEDDING_GENERATION is reserved for embedding-only reprocessing.
+    JobTypeVideoProcessing      = "VIDEO_PROCESSING"
+    JobTypeEmbeddingGeneration  = "EMBEDDING_GENERATION"
 
-    VideoStatusPending      = "PENDING"
-    VideoStatusTranscribing = "TRANSCRIBING"
-    VideoStatusEmbedding    = "EMBEDDING"
-    VideoStatusCompleted    = "COMPLETED"
-    VideoStatusFailed       = "FAILED"
+    VideoStatusPending               = "PENDING"
+    VideoStatusDownloading           = "DOWNLOADING"
+    VideoStatusExtractingAudio       = "EXTRACTING_AUDIO"
+    VideoStatusTranscribing          = "TRANSCRIBING"
+    VideoStatusChunking              = "CHUNKING"
+    VideoStatusGeneratingEmbeddings  = "GENERATING_EMBEDDINGS"
+    VideoStatusCompleted             = "COMPLETED"
+    VideoStatusFailed                = "FAILED"
 
-    SourceTypeBunny = "BUNNY"
+    SourceTypeBunnyCDN = "BUNNY_CDN"
 )
 ```
 
