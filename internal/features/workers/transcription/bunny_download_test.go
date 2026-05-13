@@ -2,11 +2,15 @@ package transcription
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGuidFromEmbedURL_HappyPath(t *testing.T) {
@@ -43,21 +47,48 @@ func TestGuidFromEmbedURL_RejectsMalformedPath(t *testing.T) {
 	}
 }
 
-func TestBuildHLSURL(t *testing.T) {
+func TestBuildHLSURL_NoTokenAuth(t *testing.T) {
 	guid := "4e8da26a-754a-4ba7-9df7-02a0e8f2f396"
 	want := "https://vz-abc12345.b-cdn.net/" + guid + "/playlist.m3u8"
 
-	// Plain hostname
-	if got := buildHLSURL("vz-abc12345.b-cdn.net", guid); got != want {
-		t.Fatalf("plain hostname: got %q, want %q", got, want)
+	pb := &bunnyPlayback{Hostname: "vz-abc12345.b-cdn.net"}
+	if got := buildHLSURL(pb, guid, time.Unix(0, 0), time.Hour); got != want {
+		t.Fatalf("plain: got %q, want %q", got, want)
 	}
-	// With https:// prefix (operator pasted the CDN URL from Bunny dashboard)
-	if got := buildHLSURL("https://vz-abc12345.b-cdn.net", guid); got != want {
-		t.Fatalf("with scheme: got %q, want %q", got, want)
+	// Tolerant of scheme/trailing slash on the hostname input.
+	if got := buildHLSURL(&bunnyPlayback{Hostname: "https://vz-abc12345.b-cdn.net/"}, guid, time.Unix(0, 0), time.Hour); got != want {
+		t.Fatalf("scheme+slash: got %q, want %q", got, want)
 	}
-	// Trailing slash
-	if got := buildHLSURL("vz-abc12345.b-cdn.net/", guid); got != want {
-		t.Fatalf("trailing slash: got %q, want %q", got, want)
+}
+
+func TestBuildHLSURL_WithTokenAuth(t *testing.T) {
+	guid := "abc"
+	pb := &bunnyPlayback{
+		Hostname:        "vz-x.b-cdn.net",
+		SecurityKey:     "secret",
+		SecurityEnabled: true,
+	}
+	// Fixed time so the token is deterministic.
+	now := time.Unix(1700000000, 0)
+	got := buildHLSURL(pb, guid, now, time.Hour)
+
+	// Verify shape: contains token, token_path, expires.
+	if !strings.Contains(got, "?token=") {
+		t.Fatalf("missing ?token= in %q", got)
+	}
+	if !strings.Contains(got, "token_path=") {
+		t.Fatalf("missing token_path= in %q", got)
+	}
+	expires := strconv.FormatInt(now.Add(time.Hour).Unix(), 10)
+	if !strings.Contains(got, "expires="+expires) {
+		t.Fatalf("missing expires in %q", got)
+	}
+	// Re-derive token and assert exact value.
+	tokenPath := "/" + guid + "/"
+	sum := sha256.Sum256([]byte("secret" + tokenPath + expires))
+	wantToken := strings.TrimRight(base64.URLEncoding.EncodeToString(sum[:]), "=")
+	if !strings.Contains(got, "token="+wantToken+"&") {
+		t.Fatalf("token mismatch in %q (want %q)", got, wantToken)
 	}
 }
 

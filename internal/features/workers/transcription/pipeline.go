@@ -308,11 +308,13 @@ func (f *Feature) resolveAudio(ctx context.Context, libID, guid, accessKey, tmpD
 	if err != nil {
 		return nil, 0, err
 	}
-	cdnHostname, err := f.resolveBunnyCDNHostname(ctx, libID)
+	playback, err := f.resolveBunnyPlayback(ctx, libID)
 	if err != nil {
-		return nil, 0, fmt.Errorf("resolve CDN hostname for library %s: %w", libID, err)
+		return nil, 0, fmt.Errorf("resolve CDN playback for library %s: %w", libID, err)
 	}
-	hlsURL := buildHLSURL(cdnHostname, guid)
+	// 1h TTL covers download of a 4-hour aula at minimum bitrate; tokens
+	// only need to be valid long enough for ffmpeg to finish pulling.
+	hlsURL := buildHLSURL(playback, guid, time.Now(), time.Hour)
 
 	full := filepath.Join(tmpDir, "audio.mp3")
 	if _, err := extractAudioMP3(ctx, hlsURL, full); err != nil {

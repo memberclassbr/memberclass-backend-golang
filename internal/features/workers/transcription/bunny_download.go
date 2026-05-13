@@ -2,12 +2,16 @@ package transcription
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Bunny Stream API base URL. Owned by the slice (the existing BunnyService
@@ -102,21 +106,40 @@ func (f *Feature) fetchBunnyVideoMeta(ctx context.Context, libraryID, guid, acce
 	return &meta, nil
 }
 
-// buildHLSURL returns the HLS playlist URL for a Bunny video.
+// buildHLSURL returns the HLS playlist URL for a Bunny video, signed
+// with a Bunny CDN token when the pull zone has Token Authentication
+// enabled. Bunny does NOT serve playlists from iframe.mediadelivery.net —
+// that hostname only hosts the embed player HTML.
 //
-// Bunny does NOT serve playlists from iframe.mediadelivery.net — that
-// hostname only hosts the embed player HTML. The actual stream lives at
-// `https://{cdnHostname}/{videoGuid}/playlist.m3u8`, where `cdnHostname`
-// is the per-library "CDN Hostname" visible in the Bunny dashboard
-// (e.g. `vz-abc12345.b-cdn.net`).
+// Without token auth:
 //
-// For now we accept this hostname via the `BUNNY_CDN_HOSTNAME` env var
-// (single-library smoke). The proper long-term fix is a per-tenant
-// column on `Tenant`; without that we can't service more than one library
-// in production.
-func buildHLSURL(cdnHostname, guid string) string {
-	cdnHostname = strings.TrimPrefix(cdnHostname, "https://")
-	cdnHostname = strings.TrimPrefix(cdnHostname, "http://")
-	cdnHostname = strings.TrimRight(cdnHostname, "/")
-	return fmt.Sprintf("https://%s/%s/playlist.m3u8", cdnHostname, guid)
+//	https://{hostname}/{guid}/playlist.m3u8
+//
+// With token auth:
+//
+//	https://{hostname}/{guid}/playlist.m3u8?token={t}&token_path={p}&expires={u}
+//
+// where:
+//
+//	token_path = "/{guid}/"  (so segments under that prefix inherit the token)
+//	expires    = unix timestamp (now + ttl)
+//	token      = base64url(sha256(securityKey + token_path + expires)), padding stripped
+//
+// `now` is supplied for deterministic testing; production callers pass
+// `time.Now()`.
+func buildHLSURL(pb *bunnyPlayback, guid string, now time.Time, ttl time.Duration) string {
+	host := strings.TrimPrefix(pb.Hostname, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimRight(host, "/")
+
+	if !pb.SecurityEnabled {
+		return fmt.Sprintf("https://%s/%s/playlist.m3u8", host, guid)
+	}
+	tokenPath := "/" + guid + "/"
+	expires := strconv.FormatInt(now.Add(ttl).Unix(), 10)
+	sum := sha256.Sum256([]byte(pb.SecurityKey + tokenPath + expires))
+	token := base64.URLEncoding.EncodeToString(sum[:])
+	token = strings.TrimRight(token, "=")
+	return fmt.Sprintf("https://%s/%s/playlist.m3u8?token=%s&token_path=%s&expires=%s",
+		host, guid, token, url.QueryEscape(tokenPath), expires)
 }

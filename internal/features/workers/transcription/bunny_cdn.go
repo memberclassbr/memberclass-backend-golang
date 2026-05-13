@@ -16,45 +16,59 @@ import (
 // cannot reach.
 const bunnyAccountAPIBase = "https://api.bunny.net"
 
-// cdnHostnameCache memoizes (libraryID -> b-cdn.net hostname) so we hit
-// the Bunny account API at most once per library per process lifetime.
-// CDN hostnames are immutable once a library is created.
-var cdnHostnameCache sync.Map
+// bunnyPlayback bundles everything needed to build an HLS URL the CDN
+// will actually serve: the system hostname, plus the pull zone's
+// security settings used to sign URLs when token auth is enabled.
+type bunnyPlayback struct {
+	Hostname        string
+	SecurityKey     string
+	SecurityEnabled bool
+}
 
-// resolveBunnyCDNHostname turns a Stream `libraryID` into the public CDN
-// hostname Bunny serves HLS playlists from. Resolution chain:
+// bunnyPlaybackCache memoizes (libraryID -> bunnyPlayback) so we hit
+// the Bunny account API at most once per library per process lifetime.
+// These attributes are immutable enough in practice that caching for the
+// binary's lifetime is fine; restart the worker after rotating the zone
+// security key in the Bunny dashboard.
+var bunnyPlaybackCache sync.Map
+
+// resolveBunnyPlayback turns a Stream `libraryID` into the public CDN
+// hostname Bunny serves HLS playlists from + the security key needed to
+// sign requests when token authentication is enabled on the pull zone.
+//
+// Resolution chain (both calls use the account-level BUNNY_API_KEY):
 //
 //	1. GET /videolibrary/{libraryID}  → PullZoneId
-//	2. GET /pullzone/{pullZoneId}     → Hostnames[]
-//	3. Pick the first system hostname (or any *.b-cdn.net entry);
-//	   custom domains tied to the pullzone are skipped because they may
-//	   not have a TLS cert that ffmpeg trusts.
+//	2. GET /pullzone/{pullZoneId}     → Hostnames[] + ZoneSecurityKey + ZoneSecurityEnabled
+//	3. Pick the first IsSystemHostname entry (fallback: any *.b-cdn.net).
+//	   Custom domains attached to the pull zone are skipped — their TLS
+//	   cert may not be trusted by ffmpeg.
 //
-// Both calls authenticate with the account-level API key in BUNNY_API_KEY
-// (single key org-wide; the per-tenant `bunnyLibraryApiKey` cannot reach
-// these endpoints).
-func (f *Feature) resolveBunnyCDNHostname(ctx context.Context, libraryID string) (string, error) {
+// The per-tenant Stream API key (`Tenant.bunnyLibraryApiKey`) cannot
+// reach these endpoints; they live on a different host (api.bunny.net)
+// and require the account key.
+func (f *Feature) resolveBunnyPlayback(ctx context.Context, libraryID string) (*bunnyPlayback, error) {
 	if libraryID == "" {
-		return "", fmt.Errorf("libraryID is required")
+		return nil, fmt.Errorf("libraryID is required")
 	}
-	if v, ok := cdnHostnameCache.Load(libraryID); ok {
-		return v.(string), nil
+	if v, ok := bunnyPlaybackCache.Load(libraryID); ok {
+		return v.(*bunnyPlayback), nil
 	}
 	if f.bunnyAccountAPIKey == "" {
-		return "", fmt.Errorf("BUNNY_API_KEY not configured — required to resolve CDN hostname for library %s", libraryID)
+		return nil, fmt.Errorf("BUNNY_API_KEY not configured — required to resolve playback for library %s", libraryID)
 	}
 
 	pullZoneID, err := f.fetchPullZoneID(ctx, libraryID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	hostname, err := f.fetchPullZoneHostname(ctx, pullZoneID)
+	pb, err := f.fetchPullZonePlayback(ctx, pullZoneID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	cdnHostnameCache.Store(libraryID, hostname)
-	return hostname, nil
+	bunnyPlaybackCache.Store(libraryID, pb)
+	return pb, nil
 }
 
 type bunnyVideoLibrary struct {
@@ -98,47 +112,65 @@ type bunnyPullZoneHostname struct {
 }
 
 type bunnyPullZone struct {
-	ID        int                     `json:"Id"`
-	Hostnames []bunnyPullZoneHostname `json:"Hostnames"`
+	ID                  int                     `json:"Id"`
+	Hostnames           []bunnyPullZoneHostname `json:"Hostnames"`
+	ZoneSecurityEnabled bool                    `json:"ZoneSecurityEnabled"`
+	ZoneSecurityKey     string                  `json:"ZoneSecurityKey"`
 }
 
-func (f *Feature) fetchPullZoneHostname(ctx context.Context, pullZoneID int) (string, error) {
+func (f *Feature) fetchPullZonePlayback(ctx context.Context, pullZoneID int) (*bunnyPlayback, error) {
 	endpoint := fmt.Sprintf("%s/pullzone/%d", bunnyAccountAPIBase, pullZoneID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", fmt.Errorf("build pullzone request: %w", err)
+		return nil, fmt.Errorf("build pullzone request: %w", err)
 	}
 	req.Header.Set("AccessKey", f.bunnyAccountAPIKey)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := f.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("bunny pullzone http: %w", err)
+		return nil, fmt.Errorf("bunny pullzone http: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("bunny pullzone status=%d body=%s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("bunny pullzone status=%d body=%s", resp.StatusCode, string(body))
 	}
 
 	var pz bunnyPullZone
 	if err := json.NewDecoder(resp.Body).Decode(&pz); err != nil {
-		return "", fmt.Errorf("decode pullzone: %w", err)
+		return nil, fmt.Errorf("decode pullzone: %w", err)
 	}
 	if len(pz.Hostnames) == 0 {
-		return "", fmt.Errorf("pullzone %d has no Hostnames in response", pullZoneID)
+		return nil, fmt.Errorf("pullzone %d has no Hostnames in response", pullZoneID)
 	}
+
 	// Prefer the system hostname Bunny provisions automatically; falls back
-	// to any *.b-cdn.net entry if the IsSystemHostname flag is missing.
+	// to any *.b-cdn.net entry if IsSystemHostname is missing/false.
+	var host string
 	for _, h := range pz.Hostnames {
 		if h.IsSystemHostname && h.Value != "" {
-			return h.Value, nil
+			host = h.Value
+			break
 		}
 	}
-	for _, h := range pz.Hostnames {
-		if strings.HasSuffix(h.Value, ".b-cdn.net") {
-			return h.Value, nil
+	if host == "" {
+		for _, h := range pz.Hostnames {
+			if strings.HasSuffix(h.Value, ".b-cdn.net") {
+				host = h.Value
+				break
+			}
 		}
 	}
-	return "", fmt.Errorf("pullzone %d has no system / b-cdn.net hostname (got %+v)", pullZoneID, pz.Hostnames)
+	if host == "" {
+		return nil, fmt.Errorf("pullzone %d has no system / b-cdn.net hostname (got %+v)", pullZoneID, pz.Hostnames)
+	}
+	if pz.ZoneSecurityEnabled && pz.ZoneSecurityKey == "" {
+		return nil, fmt.Errorf("pullzone %d has ZoneSecurityEnabled=true but ZoneSecurityKey is empty", pullZoneID)
+	}
+	return &bunnyPlayback{
+		Hostname:        host,
+		SecurityKey:     pz.ZoneSecurityKey,
+		SecurityEnabled: pz.ZoneSecurityEnabled,
+	}, nil
 }

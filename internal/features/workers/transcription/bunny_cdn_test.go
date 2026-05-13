@@ -10,11 +10,9 @@ import (
 	"testing"
 )
 
-// withBunnyAccountAPI spins an httptest server that responds to both
-// /videolibrary/{id} and /pullzone/{id}, then redirects the
-// `bunnyAccountAPIBase` constant via the f.httpClient transport. We
-// can't override the constant at runtime, so the test uses a Transport
-// that rewrites the URL.
+// rewriteTransport is a tiny http.RoundTripper that redirects requests
+// hitting bunnyAccountAPIBase to a local httptest server. We can't override
+// the constant at runtime, so we intercept and rewrite per request.
 type rewriteTransport struct {
 	base    string
 	wrapped http.RoundTripper
@@ -23,9 +21,6 @@ type rewriteTransport struct {
 func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if strings.HasPrefix(req.URL.String(), bunnyAccountAPIBase) {
 		newURL := rt.base + strings.TrimPrefix(req.URL.String(), bunnyAccountAPIBase)
-		req.URL.Host = ""
-		req.URL.Scheme = ""
-		// Re-parse via NewRequest so URL fields are valid.
 		fresh, err := http.NewRequestWithContext(req.Context(), req.Method, newURL, req.Body)
 		if err != nil {
 			return nil, err
@@ -36,10 +31,8 @@ func (rt *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return rt.wrapped.RoundTrip(req)
 }
 
-func TestResolveBunnyCDNHostname_HappyPath(t *testing.T) {
-	// Reset cache between tests.
-	cdnHostnameCache = sync.Map{}
-
+func TestResolveBunnyPlayback_HappyPath_TokenAuthOff(t *testing.T) {
+	bunnyPlaybackCache = sync.Map{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("AccessKey") != "account-key" {
 			t.Fatalf("AccessKey = %q", r.Header.Get("AccessKey"))
@@ -54,6 +47,7 @@ func TestResolveBunnyCDNHostname_HappyPath(t *testing.T) {
 					{Value: "custom.tenant.com", IsSystemHostname: false},
 					{Value: "vz-abc12345.b-cdn.net", IsSystemHostname: true},
 				},
+				ZoneSecurityEnabled: false,
 			})
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -65,35 +59,33 @@ func TestResolveBunnyCDNHostname_HappyPath(t *testing.T) {
 		bunnyAccountAPIKey: "account-key",
 		httpClient:         &http.Client{Transport: &rewriteTransport{base: server.URL, wrapped: server.Client().Transport}},
 	}
-	host, err := f.resolveBunnyCDNHostname(context.Background(), "378335")
+	pb, err := f.resolveBunnyPlayback(context.Background(), "378335")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if host != "vz-abc12345.b-cdn.net" {
-		t.Fatalf("got %q, want vz-abc12345.b-cdn.net", host)
+	if pb.Hostname != "vz-abc12345.b-cdn.net" || pb.SecurityEnabled {
+		t.Fatalf("unexpected playback: %+v", pb)
 	}
-
-	// Second call must come from cache (server would 404 if we hit it again
-	// since the handler isn't re-armed). Use Hit count by counting server.Hits — easier: just call again, it'd panic otherwise.
-	if cached, err := f.resolveBunnyCDNHostname(context.Background(), "378335"); err != nil || cached != host {
-		t.Fatalf("cached lookup failed: %v / %q", err, cached)
+	// Cached on second call.
+	if cached, err := f.resolveBunnyPlayback(context.Background(), "378335"); err != nil || cached != pb {
+		t.Fatalf("cached lookup failed: %v / %+v", err, cached)
 	}
 }
 
-func TestResolveBunnyCDNHostname_FallsBackToBCDNNet(t *testing.T) {
-	cdnHostnameCache = sync.Map{}
+func TestResolveBunnyPlayback_HappyPath_TokenAuthOn(t *testing.T) {
+	bunnyPlaybackCache = sync.Map{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/videolibrary/lib":
-			_ = json.NewEncoder(w).Encode(bunnyVideoLibrary{ID: 1, PullZoneID: 42})
-		case "/pullzone/42":
-			// No IsSystemHostname flag set — fall back to suffix match.
+		case "/videolibrary/378335":
+			_ = json.NewEncoder(w).Encode(bunnyVideoLibrary{ID: 378335, PullZoneID: 999})
+		case "/pullzone/999":
 			_ = json.NewEncoder(w).Encode(bunnyPullZone{
-				ID: 42,
+				ID: 999,
 				Hostnames: []bunnyPullZoneHostname{
-					{Value: "custom.tenant.com"},
-					{Value: "vz-fallback.b-cdn.net"},
+					{Value: "vz-x.b-cdn.net", IsSystemHostname: true},
 				},
+				ZoneSecurityEnabled: true,
+				ZoneSecurityKey:     "super-secret",
 			})
 		}
 	}))
@@ -103,26 +95,82 @@ func TestResolveBunnyCDNHostname_FallsBackToBCDNNet(t *testing.T) {
 		bunnyAccountAPIKey: "k",
 		httpClient:         &http.Client{Transport: &rewriteTransport{base: server.URL, wrapped: server.Client().Transport}},
 	}
-	host, err := f.resolveBunnyCDNHostname(context.Background(), "lib")
+	pb, err := f.resolveBunnyPlayback(context.Background(), "378335")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if host != "vz-fallback.b-cdn.net" {
-		t.Fatalf("got %q", host)
+	if !pb.SecurityEnabled || pb.SecurityKey != "super-secret" {
+		t.Fatalf("expected security enabled w/ key, got %+v", pb)
 	}
 }
 
-func TestResolveBunnyCDNHostname_ErrorsWithoutKey(t *testing.T) {
-	cdnHostnameCache = sync.Map{}
+func TestResolveBunnyPlayback_RejectsSecurityEnabledWithoutKey(t *testing.T) {
+	bunnyPlaybackCache = sync.Map{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/videolibrary/lib":
+			_ = json.NewEncoder(w).Encode(bunnyVideoLibrary{ID: 1, PullZoneID: 42})
+		case "/pullzone/42":
+			_ = json.NewEncoder(w).Encode(bunnyPullZone{
+				ID:                  42,
+				Hostnames:           []bunnyPullZoneHostname{{Value: "vz-x.b-cdn.net", IsSystemHostname: true}},
+				ZoneSecurityEnabled: true,
+				ZoneSecurityKey:     "", // misconfigured
+			})
+		}
+	}))
+	defer server.Close()
+	f := &Feature{
+		bunnyAccountAPIKey: "k",
+		httpClient:         &http.Client{Transport: &rewriteTransport{base: server.URL, wrapped: server.Client().Transport}},
+	}
+	_, err := f.resolveBunnyPlayback(context.Background(), "lib")
+	if err == nil || !strings.Contains(err.Error(), "ZoneSecurityEnabled=true but ZoneSecurityKey is empty") {
+		t.Fatalf("expected ZoneSecurityKey error, got %v", err)
+	}
+}
+
+func TestResolveBunnyPlayback_FallsBackToBCDNNet(t *testing.T) {
+	bunnyPlaybackCache = sync.Map{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/videolibrary/lib":
+			_ = json.NewEncoder(w).Encode(bunnyVideoLibrary{ID: 1, PullZoneID: 42})
+		case "/pullzone/42":
+			_ = json.NewEncoder(w).Encode(bunnyPullZone{
+				ID: 42,
+				Hostnames: []bunnyPullZoneHostname{
+					{Value: "custom.tenant.com"}, // no IsSystemHostname flag
+					{Value: "vz-fallback.b-cdn.net"},
+				},
+			})
+		}
+	}))
+	defer server.Close()
+	f := &Feature{
+		bunnyAccountAPIKey: "k",
+		httpClient:         &http.Client{Transport: &rewriteTransport{base: server.URL, wrapped: server.Client().Transport}},
+	}
+	pb, err := f.resolveBunnyPlayback(context.Background(), "lib")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pb.Hostname != "vz-fallback.b-cdn.net" {
+		t.Fatalf("got %q", pb.Hostname)
+	}
+}
+
+func TestResolveBunnyPlayback_ErrorsWithoutKey(t *testing.T) {
+	bunnyPlaybackCache = sync.Map{}
 	f := &Feature{httpClient: http.DefaultClient}
-	_, err := f.resolveBunnyCDNHostname(context.Background(), "lib")
+	_, err := f.resolveBunnyPlayback(context.Background(), "lib")
 	if err == nil || !strings.Contains(err.Error(), "BUNNY_API_KEY") {
 		t.Fatalf("expected BUNNY_API_KEY error, got %v", err)
 	}
 }
 
-func TestResolveBunnyCDNHostname_PropagatesVideoLibraryStatus(t *testing.T) {
-	cdnHostnameCache = sync.Map{}
+func TestResolveBunnyPlayback_PropagatesVideoLibraryStatus(t *testing.T) {
+	bunnyPlaybackCache = sync.Map{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "library not found", http.StatusNotFound)
 	}))
@@ -131,9 +179,8 @@ func TestResolveBunnyCDNHostname_PropagatesVideoLibraryStatus(t *testing.T) {
 		bunnyAccountAPIKey: "k",
 		httpClient:         &http.Client{Transport: &rewriteTransport{base: server.URL, wrapped: server.Client().Transport}},
 	}
-	_, err := f.resolveBunnyCDNHostname(context.Background(), "missing")
+	_, err := f.resolveBunnyPlayback(context.Background(), "missing")
 	if err == nil || !strings.Contains(err.Error(), "404") {
 		t.Fatalf("expected 404 in error, got %v", err)
 	}
 }
-
