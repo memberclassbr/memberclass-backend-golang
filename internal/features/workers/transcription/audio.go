@@ -61,10 +61,21 @@ func extractAudioMP3(ctx context.Context, input, outPath string) (string, error)
 		"-protocol_whitelist", ffmpegProtocolWhitelist,
 	}
 	if isHTTPURL(input) {
+		// Three flags work together to make Bunny's audio-only HLS
+		// variants playable on the alpine ffmpeg 8 build:
+		//   -referer:                  Bunny CDN edge requires it (403 otherwise)
+		//   -allowed_*extensions:      whitelists `.dts` segments at the HLS demuxer
+		//   -extension_picky 0:        disables the new content-vs-extension match
+		//                              ffmpeg 8 introduced; Bunny serves mpegts
+		//                              packets inside `.dts`-suffixed segment URLs
+		//                              ("detected format mpegts extension none
+		//                              mismatches allowed extensions") which
+		//                              picky=true rejects.
 		args = append(args,
 			"-referer", bunnyIframeReferer,
 			"-allowed_extensions", hlsAllowedExtensions,
 			"-allowed_segment_extensions", hlsAllowedExtensions,
+			"-extension_picky", "0",
 		)
 	}
 	args = append(args,
