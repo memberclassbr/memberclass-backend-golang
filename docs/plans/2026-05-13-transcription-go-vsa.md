@@ -209,7 +209,7 @@ No dashboard Railway → projeto existente → **+ New → Database → Add Post
 
 ```bash
 export DB_SUPABASE_DSN="postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres?sslmode=require"
-export DB_RAILWAY_DSN="postgresql://postgres:...@<host>.proxy.rlwy.net:<port>/railway?sslmode=require"  # external for one-shot
+export DB_RAILWAY_DSN="postgresql://postgres:...@<host>.proxy.rlwy.net:<port>/railway?sslmode=disable"  # external for one-shot; Railway's pgvector template doesn't terminate TLS at the Postgres layer
 chmod +x scripts/migrate-supabase-to-railway.sh
 ./scripts/migrate-supabase-to-railway.sh                # dump + restore + verify
 ./scripts/migrate-supabase-to-railway.sh --verify       # later sanity diff
@@ -394,7 +394,7 @@ Adicionar `.env.example`:
 # videos, transcripts, chunks, jobs, token_usage. Schema documentado em
 # docs/plans/2026-05-13-transcription-go-vsa.md; migração one-shot a partir
 # do Supabase via scripts/migrate-supabase-to-railway.sh.
-DB_TRANSCRIPTION_DSN=postgresql://postgres:<password>@<host>.proxy.rlwy.net:<port>/railway?sslmode=require
+DB_TRANSCRIPTION_DSN=postgresql://postgres:<password>@<host>.proxy.rlwy.net:<port>/railway?sslmode=disable
 ```
 
 Remover linha 55 antiga `TRANSCRIPTION_API_URL=` (será deletada no cleanup; deixar agora gera lint warning desnecessário, mas adiar para Task 14).

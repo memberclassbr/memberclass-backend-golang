@@ -53,9 +53,6 @@ const (
 	// crashed and pushed back to PENDING (within max_attempts).
 	orphanStaleThreshold = 30 * time.Minute
 
-	// cronSchedule mirrors the legacy daily cadence: 22:00 UTC.
-	cronSchedule = "0 0 22 * * *"
-
 	// whisperMaxAudioBytes is Whisper's 25 MB upload limit, minus a 1 MB
 	// safety margin for multipart overhead.
 	whisperMaxAudioBytes = 24 * 1024 * 1024
@@ -74,10 +71,11 @@ type Feature struct {
 	log             ports.Logger
 	bunny           bunnyport.BunnyService
 
-	openaiAPIKey  string
-	openaiBaseURL string
-	bunnyBaseURL  string
-	httpClient    *http.Client
+	openaiAPIKey       string
+	openaiBaseURL      string
+	bunnyBaseURL       string
+	bunnyAccountAPIKey string // account-level key (BUNNY_API_KEY); resolves CDN hostname per library
+	httpClient         *http.Client
 
 	pollInterval time.Duration
 	workers      int
@@ -131,10 +129,11 @@ func New(
 		memberclassDB:   memberclassDB,
 		log:             log,
 		bunny:           bunny,
-		openaiAPIKey:    apiKey,
-		openaiBaseURL:   defaultOpenAIBase,
-		bunnyBaseURL:    defaultBunnyBaseURL,
-		httpClient:      &http.Client{Timeout: 5 * time.Minute},
+		openaiAPIKey:       apiKey,
+		openaiBaseURL:      defaultOpenAIBase,
+		bunnyBaseURL:       defaultBunnyBaseURL,
+		bunnyAccountAPIKey: os.Getenv("BUNNY_API_KEY"),
+		httpClient:         &http.Client{Timeout: 5 * time.Minute},
 		pollInterval:    poll,
 		workers:         workers,
 	}

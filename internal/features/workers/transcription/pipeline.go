@@ -308,7 +308,11 @@ func (f *Feature) resolveAudio(ctx context.Context, libID, guid, accessKey, tmpD
 	if err != nil {
 		return nil, 0, err
 	}
-	hlsURL := buildHLSURL(libID, guid)
+	cdnHostname, err := f.resolveBunnyCDNHostname(ctx, libID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("resolve CDN hostname for library %s: %w", libID, err)
+	}
+	hlsURL := buildHLSURL(cdnHostname, guid)
 
 	full := filepath.Join(tmpDir, "audio.mp3")
 	if _, err := extractAudioMP3(ctx, hlsURL, full); err != nil {

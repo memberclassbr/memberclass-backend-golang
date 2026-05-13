@@ -11,7 +11,10 @@
 #
 # Usage:
 #   export DB_SUPABASE_DSN="postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres?sslmode=require"
-#   export DB_RAILWAY_DSN="postgresql://postgres:...@autorack.proxy.rlwy.net:PORT/railway?sslmode=require"
+#   export DB_RAILWAY_DSN="postgresql://postgres:...@autorack.proxy.rlwy.net:PORT/railway?sslmode=disable"
+#       Railway's pgvector template does NOT terminate TLS at the Postgres
+#       layer (the public proxy already encrypts the TCP tunnel), so
+#       sslmode=require errors out with "SSL is not enabled on the server".
 #   ./scripts/migrate-supabase-to-railway.sh                 # full migrate
 #   ./scripts/migrate-supabase-to-railway.sh --schema-only   # schema first, no data
 #   ./scripts/migrate-supabase-to-railway.sh --verify        # only compare row counts

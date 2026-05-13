@@ -102,13 +102,21 @@ func (f *Feature) fetchBunnyVideoMeta(ctx context.Context, libraryID, guid, acce
 	return &meta, nil
 }
 
-// buildHLSURL returns the publicly-readable HLS playlist URL for a Bunny
-// video. We rely on the iframe.mediadelivery.net direct-playlist pattern,
-// which works for any library that has not enabled token authentication.
-// Libraries with token auth need a different code path (signed URLs); the
-// pipeline surfaces the resulting ffmpeg 401 in jobs.error so the operator
-// can disable token auth or extend this resolver.
-func buildHLSURL(libraryID, guid string) string {
-	return fmt.Sprintf("https://%s/%s/%s/playlist.m3u8",
-		iframeMediaDeliveryDomain, libraryID, guid)
+// buildHLSURL returns the HLS playlist URL for a Bunny video.
+//
+// Bunny does NOT serve playlists from iframe.mediadelivery.net — that
+// hostname only hosts the embed player HTML. The actual stream lives at
+// `https://{cdnHostname}/{videoGuid}/playlist.m3u8`, where `cdnHostname`
+// is the per-library "CDN Hostname" visible in the Bunny dashboard
+// (e.g. `vz-abc12345.b-cdn.net`).
+//
+// For now we accept this hostname via the `BUNNY_CDN_HOSTNAME` env var
+// (single-library smoke). The proper long-term fix is a per-tenant
+// column on `Tenant`; without that we can't service more than one library
+// in production.
+func buildHLSURL(cdnHostname, guid string) string {
+	cdnHostname = strings.TrimPrefix(cdnHostname, "https://")
+	cdnHostname = strings.TrimPrefix(cdnHostname, "http://")
+	cdnHostname = strings.TrimRight(cdnHostname, "/")
+	return fmt.Sprintf("https://%s/%s/playlist.m3u8", cdnHostname, guid)
 }

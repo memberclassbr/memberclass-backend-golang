@@ -44,10 +44,20 @@ func TestGuidFromEmbedURL_RejectsMalformedPath(t *testing.T) {
 }
 
 func TestBuildHLSURL(t *testing.T) {
-	got := buildHLSURL("383534", "4e8da26a-754a-4ba7-9df7-02a0e8f2f396")
-	want := "https://iframe.mediadelivery.net/383534/4e8da26a-754a-4ba7-9df7-02a0e8f2f396/playlist.m3u8"
-	if got != want {
-		t.Fatalf("buildHLSURL = %q, want %q", got, want)
+	guid := "4e8da26a-754a-4ba7-9df7-02a0e8f2f396"
+	want := "https://vz-abc12345.b-cdn.net/" + guid + "/playlist.m3u8"
+
+	// Plain hostname
+	if got := buildHLSURL("vz-abc12345.b-cdn.net", guid); got != want {
+		t.Fatalf("plain hostname: got %q, want %q", got, want)
+	}
+	// With https:// prefix (operator pasted the CDN URL from Bunny dashboard)
+	if got := buildHLSURL("https://vz-abc12345.b-cdn.net", guid); got != want {
+		t.Fatalf("with scheme: got %q, want %q", got, want)
+	}
+	// Trailing slash
+	if got := buildHLSURL("vz-abc12345.b-cdn.net/", guid); got != want {
+		t.Fatalf("trailing slash: got %q, want %q", got, want)
 	}
 }
 

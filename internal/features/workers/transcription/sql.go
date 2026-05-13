@@ -70,9 +70,14 @@ const sqlMarkJobCompleted = `
 // sqlMarkJobFailed bumps a job back to PENDING if it has retries left;
 // otherwise terminates it as FAILED. RETURNING lets the caller log the
 // transition.
+//
+// The ::job_status casts are required: Postgres cannot infer the column's
+// enum type through a CASE WHEN whose branches are bare text literals.
+// Without the cast you get "column status is of type job_status but
+// expression is of type text".
 const sqlMarkJobFailed = `
     UPDATE jobs
-       SET status     = CASE WHEN attempts >= max_attempts THEN 'FAILED' ELSE 'PENDING' END,
+       SET status     = (CASE WHEN attempts >= max_attempts THEN 'FAILED' ELSE 'PENDING' END)::job_status,
            failed_at  = CASE WHEN attempts >= max_attempts THEN now() ELSE failed_at END,
            error      = $2,
            updated_at = now()
