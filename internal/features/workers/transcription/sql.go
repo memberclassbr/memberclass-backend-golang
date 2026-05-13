@@ -199,6 +199,22 @@ const sqlSelectTenantBunnyCreds = `
 // keeps non-Bunny rows (PDF, text) out of the transcription path.
 //
 // $1 = tenantId, $2 = lesson id array (pq.Array(ids)).
+// sqlLessonsByModule resolves a memberclass moduleId into the set of
+// lessonIds under it. The transcription slice needs this when an admin
+// scopes a RAG search to a module (chunks table only carries lesson_id /
+// course_id, not module_id).
+const sqlLessonsByModule = `
+    SELECT id FROM "Lesson" WHERE "moduleId" = $1
+`
+
+// sqlLessonsBySection is the equivalent two-hop lookup for a section.
+const sqlLessonsBySection = `
+    SELECT l.id
+      FROM "Lesson" l
+      JOIN "Module" m ON l."moduleId" = m.id
+     WHERE m."sectionId" = $1
+`
+
 const sqlSelectLessonsByIDs = `
     SELECT l.id,
            l.name,
