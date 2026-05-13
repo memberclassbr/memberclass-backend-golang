@@ -26,17 +26,23 @@ const bunnyIframeReferer = "https://iframe.mediadelivery.net/"
 // responses, but constraining the surface is cheap defense-in-depth.
 const ffmpegProtocolWhitelist = "file,http,https,tls,tcp,crypto,hls,rtp,udp"
 
-// hlsAllowedExtensions = the upstream Alpine ffmpeg default list,
-// plus `dts`. Bunny serves some libraries' audio-only HLS streams as
-// `.dts` (DTS Coherent Acoustics) segments which are NOT in ffmpeg's
-// stock allowlist on alpine (verified with `ffmpeg -h demuxer=hls`).
-// Without `dts` here, prod fails with:
-//   "URL ... .dts is not in allowed_segment_extensions"
+// hlsAllowedExtensions is the upstream alpine ffmpeg 8 default list +
+// `dts`. ffmpeg 7 split the single legacy `-allowed_extensions` option
+// into two separate ones — `-allowed_extensions` for sub-playlists,
+// and `-allowed_segment_extensions` for the actual media segments.
+// The production error specifically references the segment list
+// ("is not in allowed_segment_extensions"), so we pass BOTH flags
+// with the same value to keep them in sync.
 //
-// The rest of the list is copied verbatim from the alpine default so
-// we don't accidentally regress libraries that ship .m3u8 sub-playlists,
-// .mpegts segments, fragmented MP4, etc.
-const hlsAllowedExtensions = "3gp,aac,avi,ac3,eac3,flac,mkv,m3u8,m4a,m4s,m4v,mpg,mov,mp2,mp3,mp4,mpeg,mpegts,ogg,ogv,oga,ts,vob,wav,dts"
+// Bunny serves some libraries' audio-only HLS variants as `.dts` (DTS
+// Coherent Acoustics) segments. The stock ffmpeg 8 default doesn't
+// include `dts`, hence the explicit add.
+//
+// The list is the alpine ffmpeg 8 default merged with `dts`; lifting
+// the upstream defaults verbatim avoids regressing libraries that ship
+// .m3u8 sub-playlists, .mpegts, fragmented mp4 (.cmfv/.cmfa/.fmp4),
+// subtitle tracks (.vtt/.webvtt), etc.
+const hlsAllowedExtensions = "3gp,aac,avi,ac3,eac3,flac,mkv,m3u8,m4a,m4s,m4v,mpg,mov,mp2,mp3,mp4,mpeg,mpegts,ogg,ogv,oga,ts,vob,vtt,wav,webvtt,cmfv,cmfa,ec3,fmp4,dts"
 
 // extractAudioMP3 invokes ffmpeg to read an HLS playlist URL, MP4 URL, or
 // local file from `input` and produce a mono 16 kHz MP3 at 64 kbps in
@@ -58,6 +64,7 @@ func extractAudioMP3(ctx context.Context, input, outPath string) (string, error)
 		args = append(args,
 			"-referer", bunnyIframeReferer,
 			"-allowed_extensions", hlsAllowedExtensions,
+			"-allowed_segment_extensions", hlsAllowedExtensions,
 		)
 	}
 	args = append(args,
