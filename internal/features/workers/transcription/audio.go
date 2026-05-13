@@ -1,0 +1,83 @@
+package transcription
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// extractAudioMP3 invokes ffmpeg to read an HLS playlist URL, MP4 URL, or
+// local file from `input` and produce a mono 16 kHz MP3 at 64 kbps in
+// outPath. Mono + 16 kHz are Whisper's sweet spot — same recognition
+// quality as 44.1 kHz stereo at ~10% the bandwidth. Returns outPath on
+// success.
+func extractAudioMP3(ctx context.Context, input, outPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-y",
+		"-loglevel", "error",
+		"-i", input,
+		"-vn",
+		"-ac", "1",
+		"-ar", "16000",
+		"-acodec", "libmp3lame",
+		"-ab", "64k",
+		outPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("ffmpeg extract: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	return outPath, nil
+}
+
+// splitAudioByDuration slices `src` into N parts of `segSeconds` seconds
+// each using ffmpeg's segment muxer. `-c copy` re-uses the existing MP3
+// frames, so the operation is fast (no re-encode). The output filenames
+// are deterministic — `<outDir>/seg-NNN.mp3` — and returned sorted.
+//
+// Whisper's API caps uploads at 25 MB; the pipeline uses this when total
+// audio exceeds the safety bytes threshold. For a 64 kbps mono MP3, 10
+// minutes is ~4.7 MB — five 10-minute parts comfortably fit five Whisper
+// calls without hitting the cap.
+func splitAudioByDuration(ctx context.Context, src, outDir string, segSeconds int) ([]string, error) {
+	if segSeconds <= 0 {
+		return nil, fmt.Errorf("segSeconds must be > 0, got %d", segSeconds)
+	}
+	pattern := filepath.Join(outDir, "seg-%03d.mp3")
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-y",
+		"-loglevel", "error",
+		"-i", src,
+		"-f", "segment",
+		"-segment_time", strconv.Itoa(segSeconds),
+		"-c", "copy",
+		pattern,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg split: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return nil, fmt.Errorf("read split outdir: %w", err)
+	}
+	var parts []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, "seg-") || !strings.HasSuffix(name, ".mp3") {
+			continue
+		}
+		parts = append(parts, filepath.Join(outDir, name))
+	}
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("ffmpeg segment muxer produced no parts")
+	}
+	// ReadDir order is unspecified across filesystems; sort to keep the
+	// transcribed-text concatenation deterministic.
+	sort.Strings(parts)
+	return parts, nil
+}
