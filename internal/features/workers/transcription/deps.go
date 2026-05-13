@@ -76,6 +76,7 @@ type Feature struct {
 
 	openaiAPIKey  string
 	openaiBaseURL string
+	bunnyBaseURL  string
 	httpClient    *http.Client
 
 	pollInterval time.Duration
@@ -127,6 +128,7 @@ func New(
 		bunny:           bunny,
 		openaiAPIKey:    apiKey,
 		openaiBaseURL:   defaultOpenAIBase,
+		bunnyBaseURL:    defaultBunnyBaseURL,
 		httpClient:      &http.Client{Timeout: 5 * time.Minute},
 		pollInterval:    poll,
 		workers:         workers,
