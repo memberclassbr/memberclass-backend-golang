@@ -1,8 +1,11 @@
--- Migration for the Supabase pgvector database (DB_TRANSCRIPTION_DSN).
+-- Migration for the Railway pgvector database (DB_TRANSCRIPTION_DSN).
 -- This DB is NOT managed by the in-app MigrationService (which targets the
 -- memberclass DB). Run manually before deploying the transcription slice:
 --
 --     psql "$DB_TRANSCRIPTION_DSN" -f migrations/transcription/001_pgvector_index.sql
+--
+-- Prereq: the Railway service must be created from the "PostgreSQL pgvector"
+-- template; the vanilla Postgres image does not ship the vector binary.
 --
 -- All statements are idempotent.
 

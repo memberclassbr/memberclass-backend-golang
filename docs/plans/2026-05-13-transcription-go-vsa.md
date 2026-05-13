@@ -4,12 +4,14 @@
 
 **Goal:** Substituir o serviço externo de transcrição (ai-transcriber.9ho8ul.easypanel.host) por uma slice VSA `internal/features/workers/transcription/` que executa todo o pipeline (download Bunny → áudio → Whisper → chunk → embed → pgvector) dentro do próprio binário Go, eliminando dependência de microsserviço externo.
 
-**Architecture:** Slice VSA (`internal/features/workers/transcription/`) que: (1) expõe rotas `/api/v1/ai/...` herdando das atuais; (2) enfileira jobs em `public.jobs` no Supabase pgvector dedicado; (3) roda worker pool in-process que polleia `jobs` e executa o pipeline; (4) reutiliza schema legado Supabase intacto (`videos`/`transcripts`/`chunks`/`jobs`/`token_usage`); (5) é registrado no FX em `cmd/api/main.go` e `startApplication` igual ao `notifications` worker.
+**Architecture:** Slice VSA (`internal/features/workers/transcription/`) que: (1) expõe rotas `/api/v1/ai/...` herdando das atuais; (2) enfileira jobs em `public.jobs` no Railway pgvector dedicado; (3) roda worker pool in-process que polleia `jobs` e executa o pipeline; (4) reutiliza schema legado intacto (`videos`/`transcripts`/`chunks`/`jobs`/`token_usage`), migrado one-shot do Supabase para Railway via `scripts/migrate-supabase-to-railway.sh`; (5) é registrado no FX em `cmd/api/main.go` e `startApplication` igual ao `notifications` worker.
+
+**Storage decision (2026-05-13):** Originalmente o schema vivia no Supabase, mas o tier free do Supabase limita storage a 0.5 GB e 1M chunks (1536-dim float32) saturam isso em ~6 GB. Como já pagamos Railway Hobby ($20/mo, 8 GB Postgres incluso), migramos para o template **"PostgreSQL pgvector"** do Railway. A imagem padrão Postgres do Railway **não inclui o binário pgvector** — é obrigatório usar o template pgvector ao criar o service. Confirmar com `SELECT * FROM pg_available_extensions WHERE name='vector';` antes de rodar a migration SQL.
 
 **Tech Stack:**
 - Go 1.25 + chi + `database/sql` + `lib/pq` + `github.com/google/uuid`
 - OpenAI HTTP API direto (`/v1/audio/transcriptions` whisper-1, `/v1/embeddings` text-embedding-3-small)
-- pgvector (Supabase legado; extensão `vector` já existente)
+- pgvector no Railway Postgres (template oficial "PostgreSQL pgvector")
 - ffmpeg como dependência runtime do container (para HLS→MP3 e fatiamento >25MB)
 - Bunny CDN (HLS/MP4 download via library API)
 - `tiktoken-go` (cl100k_base) para contagem de tokens
@@ -41,7 +43,7 @@
 - **Slice "admin"** (`internal/features/admin/member_import/`): híbrido — handler HTTP + worker em goroutines + retention job.
 - **Registração**: FX em `cmd/api/main.go` (lista de `fx.Provide`) + `startApplication` puxa o `*Feature`, chama `.Start(ctx)`, e o router chama `feature.Register(...)` em `router.go`.
 
-### Schema Supabase (já existe — não criar)
+### Schema pgvector (já existe — migrado para Railway, não recriar)
 
 Enums (USER-DEFINED): `event`, `job_type`, `job_status`, `video_status`, `source_type`, `webhook_delivery_status`. Valores assumidos a confirmar **na Task 0**:
 - `job_status`: `PENDING | RUNNING | COMPLETED | FAILED`
@@ -51,7 +53,7 @@ Enums (USER-DEFINED): `event`, `job_type`, `job_status`, `video_status`, `source
 
 ### Lacuna chave
 
-`lesson.mediaUrl` é o **iframe** Bunny (`https://iframe.mediadelivery.net/embed/{libraryId}/{guid}`). Para baixar o vídeo real, precisamos da URL HLS ou MP4 fallback do Bunny — extraída via `GET https://video.bunnycdn.com/library/{libraryId}/videos/{guid}` com `AccessKey`. As credentials do tenant já estão em `tenant.BunnyLibraryID/BunnyLibraryApiKey` (e em `memberclass_tenant_mappings` no Supabase, mas não vamos usar essa tabela — single source of truth = DB memberclass).
+`lesson.mediaUrl` é o **iframe** Bunny (`https://iframe.mediadelivery.net/embed/{libraryId}/{guid}`). Para baixar o vídeo real, precisamos da URL HLS ou MP4 fallback do Bunny — extraída via `GET https://video.bunnycdn.com/library/{libraryId}/videos/{guid}` com `AccessKey`. As credentials do tenant já estão em `tenant.BunnyLibraryID/BunnyLibraryApiKey` (e em `memberclass_tenant_mappings` no Railway pgvector, mas não vamos usar essa tabela — single source of truth = DB memberclass).
 
 ---
 
@@ -115,7 +117,7 @@ OpenAI Whisper limita upload a 25MB. MP3 64kbps mono 16kHz = ~480KB/min → ~52m
 
 **Escolha:** A. ffmpeg é dependência aceitável (universal, single static binary). Dockerfile adiciona `apk add --no-cache ffmpeg` (alpine) ou `apt-get install -y ffmpeg` (debian-slim).
 
-### Decisão 9: Storage da conexão Supabase
+### Decisão 9: Storage da conexão pgvector
 
 - **A. Bucket novo `transcription`** em `multi_db.go` (`DB_TRANSCRIPTION_DSN`).
 - **B. *sql.DB separado fora do MultiDB**.
@@ -138,7 +140,7 @@ OpenAI Whisper limita upload a 25MB. MP3 64kbps mono 16kHz = ~480KB/min → ~52m
 | Crash mid-pipeline | Job tem `status=RUNNING`, `started_at`, `attempts`. Orphan reset a cada 5min (status=RUNNING + started_at < now-30min → PENDING, attempts++). Igual `notifications` worker. |
 | Bunny MP4 não habilitado para library | Detectar 404 no HLS → fallback `/videos/{guid}/play_720p.mp4` → última opção: erro "MP4 fallback disabled" no job. |
 | ffmpeg ausente no container | Smoke test no startup: `exec.LookPath("ffmpeg")` em `Feature.New`; log fatal se faltar. |
-| Falha parcial (chunks gravados, embed falha) | Transação **única por lesson** no Supabase: `BEGIN; INSERT video; INSERT transcript; INSERT chunks…; UPDATE job COMPLETED; COMMIT`. Update lesson.transcriptionCompleted em DB memberclass **após COMMIT supabase** (eventual consistency). |
+| Falha parcial (chunks gravados, embed falha) | Transação **única por lesson** no Railway pgvector: `BEGIN; INSERT video; INSERT transcript; INSERT chunks…; UPDATE job COMPLETED; COMMIT`. Update lesson.transcriptionCompleted em DB memberclass **após o COMMIT pgvector** (eventual consistency). |
 | Schema enum mismatch | Task 0 confirma valores reais antes de codar. |
 | URL Whisper retorna 401/quota | Erro grava em `jobs.error`, status=FAILED, attempts++. Sem retry automático em 401 (não vai resolver). |
 | pgvector index ausente | Task 1 cria índice HNSW (melhor que IVFFlat para volumes <1M chunks). Idempotente: `CREATE INDEX IF NOT EXISTS`. |
@@ -170,7 +172,7 @@ internal/features/workers/transcription/
   chunker.go           # SplitIntoChunks(segments, maxTokens=500, overlap=50)
   cron.go              # daily cron 22:00 — enfileira jobs de todos tenants AI-enabled
   cost.go              # CalcCostCents(model, tokens) + WriteTokenUsage
-  sql.go               # SQL constants (Supabase + memberclass)
+  sql.go               # SQL constants (Railway pgvector + memberclass)
   pipeline_test.go     # go-sqlmock end-to-end
   chunker_test.go      # table-driven
   openai_test.go       # httptest server fake
@@ -183,11 +185,47 @@ Tasks em sequência. Cada task: TDD (test → fail → impl → pass → commit)
 
 ---
 
-### Task 0: Verificação do schema Supabase (sem código)
+### Task 0a: Migração Supabase → Railway (script `scripts/migrate-supabase-to-railway.sh`)
+
+**Files:**
+- Create: `scripts/migrate-supabase-to-railway.sh`
+
+**Step 1: Provisionar Railway pgvector**
+
+No dashboard Railway → projeto existente → **+ New → Database → Add PostgreSQL pgvector** (NÃO o template Postgres vanilla — esse não inclui o binário `vector` e o `CREATE EXTENSION` falha). Pegar a Connection URL **interna** (`postgres.railway.internal`) — é a que o backend usa.
+
+**Step 2: Rodar migração one-shot**
+
+```bash
+export DB_SUPABASE_DSN="postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres?sslmode=require"
+export DB_RAILWAY_DSN="postgresql://postgres:...@<host>.proxy.rlwy.net:<port>/railway?sslmode=require"  # external for one-shot
+chmod +x scripts/migrate-supabase-to-railway.sh
+./scripts/migrate-supabase-to-railway.sh                # dump + restore + verify
+./scripts/migrate-supabase-to-railway.sh --verify       # later sanity diff
+```
+
+O script aborta se: pgvector não está disponível no target, target já tem `chunks` (sem `--force`), ou se contagens divergem post-restore. Faz `vector_dims` sample na chunks table — alerta se dimensão != 1536.
+
+**Step 3: Apontar app para Railway**
+
+Setar `DB_TRANSCRIPTION_DSN` (no Railway envs do backend service) para a URL **interna** Railway. Não usar a `proxy.rlwy.net` em produção — egress fee.
+
+**Step 4: Commit do script**
+
+```bash
+git add scripts/migrate-supabase-to-railway.sh
+git commit -m "feat(transcription): script one-shot Supabase->Railway pgvector"
+```
+
+---
+
+### Task 0: Verificação do schema Railway pgvector (sem código)
 
 **Files:** nenhum
 
-**Step 1: Conectar ao Supabase e listar enums**
+**Step 1: Conectar ao Railway pgvector e listar enums**
+
+Antes: rodar `scripts/migrate-supabase-to-railway.sh` para popular o Railway com o schema + dados legados do Supabase (one-shot, idempotente). Depois:
 
 ```bash
 psql "$DB_TRANSCRIPTION_DSN" -c "\dT+"
@@ -283,7 +321,7 @@ git commit -m "feat(transcription): add pgvector index + idempotency unique on v
 
 ---
 
-### Task 2: Bucket Supabase no MultiDB
+### Task 2: Bucket Railway pgvector no MultiDB
 
 **Files:**
 - Modify: `internal/infrastructure/adapters/database/multi_db.go:16-20`
@@ -334,9 +372,11 @@ return nil, fmt.Errorf("no database connections configured, check environment va
 Adicionar `.env.example`:
 
 ```
-# Supabase dedicado para transcrições (pgvector). Tabelas: videos, transcripts,
-# chunks, jobs, token_usage. Schema documentado em docs/plans/2026-05-13-transcription-go-vsa.md
-DB_TRANSCRIPTION_DSN=postgresql://postgres:...@db.<project>.supabase.co:5432/postgres?sslmode=require
+# Railway Postgres (pgvector template) dedicado a transcrições. Tabelas:
+# videos, transcripts, chunks, jobs, token_usage. Schema documentado em
+# docs/plans/2026-05-13-transcription-go-vsa.md; migração one-shot a partir
+# do Supabase via scripts/migrate-supabase-to-railway.sh.
+DB_TRANSCRIPTION_DSN=postgresql://postgres:<password>@<host>.proxy.rlwy.net:<port>/railway?sslmode=require
 ```
 
 Remover linha 55 antiga `TRANSCRIPTION_API_URL=` (será deletada no cleanup; deixar agora gera lint warning desnecessário, mas adiar para Task 14).
@@ -352,7 +392,7 @@ Expected: PASS.
 
 ```bash
 git add internal/infrastructure/adapters/database/ .env.example
-git commit -m "feat(db): add transcription bucket for Supabase pgvector"
+git commit -m "feat(db): add transcription bucket for Railway pgvector"
 ```
 
 ---
@@ -393,7 +433,7 @@ Expected: FAIL (package doesn't exist).
 // Package transcription is a vertical slice that owns the full
 // video transcription + embedding pipeline. It exposes HTTP routes
 // to enqueue jobs and runs an in-process worker pool that polls the
-// Supabase `jobs` table and processes lessons end-to-end.
+// Railway pgvector `jobs` table and processes lessons end-to-end.
 //
 // Pipeline per lesson:
 //   1. Resolve Bunny playback URL (HLS) from lesson.mediaUrl + tenant creds
@@ -402,7 +442,7 @@ Expected: FAIL (package doesn't exist).
 //   4. Transcribe each window via OpenAI Whisper API
 //   5. Chunk transcript (~500 tokens, 50 overlap, aligned to segments)
 //   6. Embed chunks via OpenAI text-embedding-3-small (batched)
-//   7. UPSERT video + INSERT transcript + INSERT chunks (single tx, Supabase)
+//   7. UPSERT video + INSERT transcript + INSERT chunks (single tx, Railway pgvector)
 //   8. UPDATE lesson.transcriptionCompleted=true (memberclass DB)
 //
 // See CLAUDE.md ("Architecture migration in progress") for VSA rules.
@@ -435,7 +475,7 @@ const (
 )
 
 type Feature struct {
-    transcriptionDB *sql.DB // Supabase pgvector
+    transcriptionDB *sql.DB // Railway pgvector
     memberclassDB   *sql.DB // for lesson.transcriptionCompleted UPDATE + tenant lookup
     log             ports.Logger
     bunny           bunnyport.BunnyService
@@ -535,7 +575,7 @@ git commit -m "feat(transcription): scaffold VSA slice (Feature + deps)"
 ```go
 package transcription
 
-// ---------------- Supabase (transcription bucket) ----------------
+// ---------------- Railway pgvector (transcription bucket) ----------------
 
 const sqlClaimJobs = `
     UPDATE jobs
@@ -697,7 +737,7 @@ Expected: PASS.
 
 ```bash
 git add internal/features/workers/transcription/sql.go
-git commit -m "feat(transcription): SQL constants for Supabase + memberclass"
+git commit -m "feat(transcription): SQL constants for Railway pgvector + memberclass"
 ```
 
 ---
@@ -1588,7 +1628,7 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
         costCents += embedCostCents(tokens)
     }
 
-    // 8. Single Supabase transaction.
+    // 8. Single Railway pgvector transaction.
     tx, err := f.transcriptionDB.BeginTx(ctx, nil)
     if err != nil {
         return err
@@ -1658,7 +1698,7 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
         return err
     }
 
-    // 9. Mark lesson.transcriptionCompleted in memberclass DB (after Supabase commit).
+    // 9. Mark lesson.transcriptionCompleted in memberclass DB (after pgvector commit).
     if _, err := f.memberclassDB.ExecContext(ctx, sqlMarkLessonTranscribed, p.LessonID); err != nil {
         // log but don't fail: chunks are in. Re-sync later.
         f.log.Error("transcription: mark lesson failed", "error", err.Error(), "lessonId", p.LessonID)
@@ -1918,7 +1958,7 @@ Expected: tudo passa; coverage ≥70% no slice novo.
 **Step 2: Smoke local**
 
 ```bash
-# Subir API com env do Supabase de staging + OpenAI dev key
+# Subir API com env do Railway pgvector de staging + OpenAI dev key
 make run
 
 # Em outro terminal — enfileirar processamento
@@ -1935,7 +1975,7 @@ curl http://localhost:8181/api/v1/ai/jobs/<jobId> \
 # Status migra PENDING → RUNNING → COMPLETED em alguns minutos
 ```
 
-Verificar no Supabase:
+Verificar no Railway pgvector:
 ```sql
 SELECT id, status, started_at, completed_at, error FROM jobs ORDER BY created_at DESC LIMIT 5;
 SELECT id, status, duration FROM videos ORDER BY created_at DESC LIMIT 5;
@@ -1965,14 +2005,15 @@ Substitui o serviço externo de transcrição (`ai-transcriber.9ho8ul.easypanel.
 por uma implementação 100% Go nativa sob a arquitetura VSA. O slice novo em
 `internal/features/workers/transcription/` orquestra todo o pipeline:
 Bunny HLS → ffmpeg (MP3 16kHz mono) → OpenAI Whisper → chunking →
-OpenAI embeddings (text-embedding-3-small) → pgvector (Supabase dedicado).
+OpenAI embeddings (text-embedding-3-small) → pgvector (Railway dedicado).
 
 ## Decisão técnica
 
 - Slice VSA worker (mesmo padrão do `notifications/`).
-- Job-por-lesson em `public.jobs` (Supabase), worker pool de 2 goroutines com
-  polling 30s + orphan reset 5min.
-- Schema Supabase legado reaproveitado intacto.
+- Job-por-lesson em `public.jobs` (Railway pgvector), worker pool de 2
+  goroutines com polling 30s + orphan reset 5min.
+- Schema pgvector legado reaproveitado intacto (migrado one-shot do Supabase
+  para o Railway via `scripts/migrate-supabase-to-railway.sh`).
 - ffmpeg como dependência runtime (Dockerfile atualizado).
 - Custo rastreado em `public.token_usage` por chamada.
 

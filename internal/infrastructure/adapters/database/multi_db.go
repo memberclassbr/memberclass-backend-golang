@@ -14,8 +14,10 @@ type DBMap map[string]*sql.DB
 
 // bucketDSNMapping maps bucket names to environment variable names containing DSNs.
 //   - memberclass / ephra / celetusclass: tenant data buckets (CockroachDB-compatible).
-//   - transcription: dedicated Supabase Postgres with pgvector. Owned by the
-//     transcription slice (internal/features/workers/transcription).
+//   - transcription: dedicated Railway Postgres (pgvector template) used by
+//     the transcription slice (internal/features/workers/transcription). The
+//     pgvector binary must be available on the instance; create the service
+//     from Railway's "PostgreSQL pgvector" template, not the vanilla one.
 var bucketDSNMapping = map[string]string{
 	"memberclass":   "DB_DSN",
 	"ephra":         "DB_EPHRA_DSN",
