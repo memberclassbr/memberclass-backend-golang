@@ -88,6 +88,11 @@ type Feature struct {
 	running bool
 	cancel  context.CancelFunc
 	done    chan struct{}
+
+	// testHookResolveAudio, when non-nil, replaces the Bunny meta + HLS
+	// download + ffmpeg split chain with a caller-supplied resolver that
+	// produces local audio files. Production keeps this nil.
+	testHookResolveAudio resolveAudioFunc
 }
 
 // New builds the slice. Resolves env-driven tunables and warns (does not
