@@ -199,6 +199,64 @@ const sqlSelectTenantBunnyCreds = `
 // keeps non-Bunny rows (PDF, text) out of the transcription path.
 //
 // $1 = tenantId, $2 = lesson id array (pq.Array(ids)).
+// sqlSelectUnprocessedLessons returns every Bunny-backed, unprocessed
+// lesson under a tenant. Used by the enqueue handler when the caller
+// did not pass an explicit lessonIds list (i.e. "process all pending").
+const sqlSelectUnprocessedLessons = `
+    SELECT l.id,
+           l.name,
+           l.slug,
+           l.type,
+           l."mediaUrl",
+           l.thumbnail,
+           l.content,
+           m.id   AS module_id,
+           m.name AS module_name,
+           s.id   AS section_id,
+           s.name AS section_name,
+           c.id   AS course_id,
+           c.name AS course_name,
+           v.id   AS vitrine_id,
+           v.name AS vitrine_name
+      FROM "Lesson" l
+      JOIN "Module"  m ON l."moduleId"  = m.id
+      JOIN "Section" s ON m."sectionId" = s.id
+      JOIN "Course"  c ON s."courseId"  = c.id
+      JOIN "Vitrine" v ON c."vitrineId" = v.id
+     WHERE v."tenantId" = $1
+       AND l.published  = true
+       AND COALESCE(l."transcriptionCompleted", false) = false
+       AND l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+     ORDER BY COALESCE(v."order", 0) ASC,
+              COALESCE(c."order", 0) ASC,
+              COALESCE(s."order", 0) ASC,
+              COALESCE(m."order", 0) ASC,
+              COALESCE(l."order", 0) ASC
+`
+
+// sqlTranscriptionStats reports per-tenant (and optionally per-course /
+// per-module) counts of lessons split by transcriptionCompleted. Bunny-
+// only filter mirrors the enqueue queries so the stats line up with what
+// the pipeline can actually process.
+//
+// $1 tenantId, $2 courseId or '' (empty disables the filter), $3 moduleId or ''.
+const sqlTranscriptionStats = `
+    SELECT
+        COUNT(*)                                                          AS total,
+        COUNT(*) FILTER (WHERE COALESCE(l."transcriptionCompleted", false))      AS transcribed,
+        COUNT(*) FILTER (WHERE NOT COALESCE(l."transcriptionCompleted", false))  AS pending
+      FROM "Lesson" l
+      JOIN "Module"  m ON l."moduleId"  = m.id
+      JOIN "Section" s ON m."sectionId" = s.id
+      JOIN "Course"  c ON s."courseId"  = c.id
+      JOIN "Vitrine" v ON c."vitrineId" = v.id
+     WHERE v."tenantId" = $1
+       AND l.published  = true
+       AND l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+       AND ($2 = '' OR c.id = $2)
+       AND ($3 = '' OR m.id = $3)
+`
+
 // sqlLessonsByModule resolves a memberclass moduleId into the set of
 // lessonIds under it. The transcription slice needs this when an admin
 // scopes a RAG search to a module (chunks table only carries lesson_id /
