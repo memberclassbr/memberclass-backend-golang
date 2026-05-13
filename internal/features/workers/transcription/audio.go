@@ -26,13 +26,17 @@ const bunnyIframeReferer = "https://iframe.mediadelivery.net/"
 // responses, but constraining the surface is cheap defense-in-depth.
 const ffmpegProtocolWhitelist = "file,http,https,tls,tcp,crypto,hls,rtp,udp"
 
-// hlsAllowedExtensions extends ffmpeg's HLS-demuxer segment whitelist
-// with `dts`. Bunny serves some libraries' audio-only HLS streams as
+// hlsAllowedExtensions = the upstream Alpine ffmpeg default list,
+// plus `dts`. Bunny serves some libraries' audio-only HLS streams as
 // `.dts` (DTS Coherent Acoustics) segments which are NOT in ffmpeg's
-// default allowlist (default: ts,aac,mp4,m4s,m4v,m4a,fmp4,ac3,eac3,
-// mp3,wav). Without this option ffmpeg fails with:
+// stock allowlist on alpine (verified with `ffmpeg -h demuxer=hls`).
+// Without `dts` here, prod fails with:
 //   "URL ... .dts is not in allowed_segment_extensions"
-const hlsAllowedExtensions = "ts,aac,mp4,m4s,m4v,m4a,fmp4,ac3,eac3,mp3,wav,dts"
+//
+// The rest of the list is copied verbatim from the alpine default so
+// we don't accidentally regress libraries that ship .m3u8 sub-playlists,
+// .mpegts segments, fragmented MP4, etc.
+const hlsAllowedExtensions = "3gp,aac,avi,ac3,eac3,flac,mkv,m3u8,m4a,m4s,m4v,mpg,mov,mp2,mp3,mp4,mpeg,mpegts,ogg,ogv,oga,ts,vob,wav,dts"
 
 // extractAudioMP3 invokes ffmpeg to read an HLS playlist URL, MP4 URL, or
 // local file from `input` and produce a mono 16 kHz MP3 at 64 kbps in
