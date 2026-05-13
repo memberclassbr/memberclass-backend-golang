@@ -128,11 +128,16 @@ const sqlUpsertVideo = `
     RETURNING id
 `
 
+// $2 is referenced twice — once as the SET target (video_status enum) and
+// once in the CASE comparison (where Postgres would otherwise infer text).
+// Casting both occurrences to video_status forces consistent type
+// inference; without the casts pq errors with "inconsistent types
+// deduced for parameter $2".
 const sqlUpdateVideoStatus = `
     UPDATE videos
-       SET status       = $2,
+       SET status       = $2::video_status,
            updated_at   = now(),
-           processed_at = CASE WHEN $2 = 'COMPLETED' THEN now() ELSE processed_at END,
+           processed_at = CASE WHEN $2::video_status = 'COMPLETED'::video_status THEN now() ELSE processed_at END,
            error        = NULLIF($3, '')
      WHERE id = $1
 `
