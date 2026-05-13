@@ -15,12 +15,9 @@ import (
 
 func TestNewAITenantUseCase(t *testing.T) {
 	mockTenantRepo := mocks.NewMockTenantRepository(t)
-	mockAILessonUseCase := mocks.NewMockAILessonUseCase(t)
 	mockLogger := mocks.NewMockLogger(t)
 
-	mockLogger.EXPECT().Warn("TRANSCRIPTION_API_URL not configured").Maybe()
-
-	useCase := NewAITenantUseCase(mockTenantRepo, mockAILessonUseCase, mockLogger)
+	useCase := NewAITenantUseCase(mockTenantRepo, mockLogger)
 
 	assert.NotNil(t, useCase)
 }
@@ -161,14 +158,11 @@ func TestAITenantUseCase_GetTenantsWithAIEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockTenantRepo := mocks.NewMockTenantRepository(t)
-			mockAILessonUseCase := mocks.NewMockAILessonUseCase(t)
 			mockLogger := mocks.NewMockLogger(t)
-
-			mockLogger.EXPECT().Warn("TRANSCRIPTION_API_URL not configured").Maybe()
 
 			tt.mockSetup(mockTenantRepo, mockLogger)
 
-			useCase := NewAITenantUseCase(mockTenantRepo, mockAILessonUseCase, mockLogger)
+			useCase := NewAITenantUseCase(mockTenantRepo, mockLogger)
 
 			result, err := useCase.GetTenantsWithAIEnabled(context.Background())
 

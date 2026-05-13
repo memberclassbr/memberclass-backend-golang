@@ -135,8 +135,11 @@ DUMP_ARGS=(--no-owner --no-acl --format=custom --file="$DUMP_FILE")
 if [[ "$SCHEMA_ONLY" == "1" ]]; then
     DUMP_ARGS+=(--schema-only)
 fi
-# Avoid trying to dump _prisma_migrations (it's a Prisma-managed bookkeeping
-# table; if Prisma is not used on Railway, restoring it just adds noise).
+# Restrict to the application schema. Supabase clusters carry vault.* +
+# graphql.* + extensions.* objects we cannot recreate on a vanilla pgvector
+# image (pg_net, pg_graphql, supabase_vault are Supabase-only extensions).
+DUMP_ARGS+=(--schema=public)
+# Avoid dumping _prisma_migrations (Prisma bookkeeping; not used on Railway).
 DUMP_ARGS+=(--exclude-table=public._prisma_migrations)
 
 log "Dumping source -> $DUMP_FILE ..."
@@ -153,7 +156,17 @@ fi
 log "Restoring into Railway target ..."
 # Don't pass -1 (single transaction) because pg_restore needs to keep going
 # past benign "extension already exists" notices that abort a single tx.
+# pg_restore exits non-zero whenever ANY statement errors, even when the
+# remainder succeeded (e.g. Supabase-only extensions in a legacy dump).
+# Capture status, log it, then defer the go/no-go to the row-count diff
+# below so the verification path is reachable.
+set +e
 pg_restore "${RESTORE_ARGS[@]}" "$DUMP_FILE"
+RESTORE_RC=$?
+set -e
+if [[ "$RESTORE_RC" != "0" ]]; then
+    log "pg_restore exited $RESTORE_RC (likely Supabase-only extensions/objects); continuing to row-count verify."
+fi
 
 # ---------- 6. Post-restore verification ----------
 

@@ -5,9 +5,7 @@ import (
 	"errors"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/ai"
-	"github.com/memberclass-backend-golang/internal/domain/dto/request/lesson"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/dto/response/ai"
-	lesson2 "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	ai3 "github.com/memberclass-backend-golang/internal/domain/ports/ai"
@@ -15,6 +13,11 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 )
 
+// AILessonUseCaseImpl exposes the AI-dashboard lesson listing. The old
+// UpdateTranscriptionStatus method moved into the transcription slice
+// (it now writes the flag directly via raw SQL after the pgvector tx
+// commits, and the manual PATCH endpoint lives on the slice for
+// backwards compat).
 type AILessonUseCaseImpl struct {
 	lessonRepository lesson3.LessonRepository
 	tenantRepository tenant.TenantRepository
@@ -31,52 +34,6 @@ func NewAILessonUseCase(
 		tenantRepository: tenantRepository,
 		logger:           logger,
 	}
-}
-
-func (uc *AILessonUseCaseImpl) UpdateTranscriptionStatus(ctx context.Context, lessonID string, req lesson.UpdateLessonTranscriptionRequest) (*lesson2.LessonTranscriptionResponse, error) {
-	if lessonID == "" {
-		return nil, &memberclasserrors.MemberClassError{
-			Code:    400,
-			Message: "lessonId é obrigatório",
-		}
-	}
-
-	lesson, tenant, err := uc.lessonRepository.GetByIDWithTenant(ctx, lessonID)
-	if err != nil {
-		var memberClassErr *memberclasserrors.MemberClassError
-		if errors.As(err, &memberClassErr) && memberClassErr.Code == 404 {
-			return nil, &memberclasserrors.MemberClassError{
-				Code:    404,
-				Message: "Aula não encontrada",
-			}
-		}
-		return nil, err
-	}
-
-	if !tenant.AIEnabled {
-		return nil, &memberclasserrors.MemberClassError{
-			Code:    403,
-			Message: "IA não está habilitada para este tenant",
-		}
-	}
-
-	err = uc.lessonRepository.UpdateTranscriptionStatus(ctx, lessonID, req.TranscriptionCompleted)
-	if err != nil {
-		return nil, err
-	}
-
-	lesson.TranscriptionCompleted = req.TranscriptionCompleted
-
-	return &lesson2.LessonTranscriptionResponse{
-		Lesson: lesson2.LessonTranscriptionData{
-			ID:                     *lesson.ID,
-			Name:                   *lesson.Name,
-			Slug:                   *lesson.Slug,
-			TranscriptionCompleted: lesson.TranscriptionCompleted,
-			UpdatedAt:              lesson.UpdatedAt,
-		},
-		Message: "Status de transcrição atualizado com sucesso",
-	}, nil
 }
 
 func (uc *AILessonUseCaseImpl) GetLessons(ctx context.Context, req ai.GetAILessonsRequest) (*ai2.AILessonsResponse, error) {

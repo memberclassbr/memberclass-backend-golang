@@ -859,24 +859,6 @@ func (l *LessonRepository) GetByIDWithTenant(ctx context.Context, lessonID strin
 	return &lesson, &tenant, nil
 }
 
-func (l *LessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
-	query := `
-		UPDATE "Lesson"
-		SET "transcriptionCompleted" = $1, "updatedAt" = NOW()
-		WHERE id = $2
-	`
-
-	_, err := l.db.ExecContext(ctx, query, transcriptionCompleted, lessonID)
-	if err != nil {
-		l.log.Error("Error updating transcription status: " + err.Error())
-		return &memberclasserrors.MemberClassError{
-			Code:    500,
-			Message: "error updating transcription status",
-		}
-	}
-
-	return nil
-}
 
 func (l *LessonRepository) GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]lessonports.AILessonWithHierarchy, error) {
 	query := `
