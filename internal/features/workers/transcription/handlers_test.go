@@ -49,7 +49,33 @@ func TestProcessLessonsTenant_MissingTenantID(t *testing.T) {
 	}
 }
 
-func TestProcessLessonsTenant_EnqueuesLessons(t *testing.T) {
+func TestProcessLessonsTenant_RequiresLessonIDs(t *testing.T) {
+	setEnvKey(t, "k")
+	transcriptionDB, _, _ := sqlmock.New()
+	memberclassDB, _, _ := sqlmock.New()
+	defer transcriptionDB.Close()
+	defer memberclassDB.Close()
+
+	f := &Feature{
+		transcriptionDB: transcriptionDB,
+		memberclassDB:   memberclassDB,
+		openaiAPIKey:    "x",
+		log:             logger.NewLogger(),
+	}
+	body, _ := json.Marshal(processLessonsRequest{TenantID: "t"})
+	req := httptest.NewRequest(http.MethodPost, "/tenants/process-lessons", bytes.NewReader(body))
+	req.Header.Set("x-internal-api-key", "k")
+	w := httptest.NewRecorder()
+	f.ProcessLessonsTenant(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "MISSING_LESSON_IDS") {
+		t.Fatalf("expected MISSING_LESSON_IDS errorCode, got %s", w.Body.String())
+	}
+}
+
+func TestProcessLessonsTenant_EnqueuesSelectedLessons(t *testing.T) {
 	setEnvKey(t, "k")
 	transcriptionDB, txMock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	memberclassDB, mcMock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
@@ -68,23 +94,39 @@ func TestProcessLessonsTenant_EnqueuesLessons(t *testing.T) {
 		WithArgs(tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "aiEnabled", "bunnyLibraryId", "bunnyLibraryApiKey"}).
 			AddRow(tenantID, "T", true, "lib", "key"))
+
+	// Two requested lessons. Mock returns:
+	//   l1 — eligible (transcriptionCompleted=false, Bunny mediaUrl)
+	//   l2 — already transcribed (skipped reason: already transcribed)
+	// l3 (third id in request) is not returned by the query -> skipped reason: not found.
 	mcMock.ExpectQuery(`FROM "Lesson"`).
-		WithArgs(tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "name", "slug", "type", "mediaUrl", "thumbnail", "content",
 			"module_id", "module_name", "section_id", "section_name",
 			"course_id", "course_name", "vitrine_id", "vitrine_name",
+			"transcription_completed",
 		}).AddRow(
 			"l1", "Aula 1", "aula-1", nil,
 			"https://iframe.mediadelivery.net/embed/lib/g1?x=1",
 			nil, nil,
 			"m1", "Mod", "s1", "Sec", "c1", "Curso", "v1", "Vit",
+			false,
+		).AddRow(
+			"l2", "Aula 2", "aula-2", nil,
+			"https://iframe.mediadelivery.net/embed/lib/g2",
+			nil, nil,
+			"m1", "Mod", "s1", "Sec", "c1", "Curso", "v1", "Vit",
+			true, // already transcribed -> skipped
 		))
 
+	// Only l1 produces an INSERT INTO jobs.
 	txMock.ExpectExec(`INSERT INTO jobs`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	body, _ := json.Marshal(processLessonsRequest{TenantID: tenantID})
+	body, _ := json.Marshal(processLessonsRequest{
+		TenantID:  tenantID,
+		LessonIDs: []string{"l1", "l2", "l3"},
+	})
 	req := httptest.NewRequest(http.MethodPost, "/tenants/process-lessons", bytes.NewReader(body))
 	req.Header.Set("x-internal-api-key", "k")
 	w := httptest.NewRecorder()
@@ -97,8 +139,11 @@ func TestProcessLessonsTenant_EnqueuesLessons(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.LessonsCount != 1 || len(resp.JobIDs) != 1 {
-		t.Fatalf("unexpected response: %+v", resp)
+	if resp.EnqueuedCount != 1 || len(resp.Enqueued) != 1 || resp.Enqueued[0].LessonID != "l1" {
+		t.Fatalf("unexpected enqueued: %+v", resp)
+	}
+	if len(resp.Skipped) != 2 {
+		t.Fatalf("expected 2 skipped (l2 transcribed, l3 not found), got %+v", resp.Skipped)
 	}
 	if err := txMock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

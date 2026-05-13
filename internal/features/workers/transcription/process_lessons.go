@@ -7,30 +7,56 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // ---------- DTOs ----------
 
+// processLessonsRequest is what the internal admin UI POSTs to start
+// transcription for a hand-picked set of lessons. We deliberately do
+// NOT support a "transcribe everything unprocessed" mode here — that
+// used to be a daily cron and burned OpenAI credit on lessons no one
+// asked for. The operator must select the rows in the admin and the
+// frontend ships the explicit id list.
 type processLessonsRequest struct {
-	TenantID string `json:"tenantId"`
+	TenantID  string   `json:"tenantId"`
+	LessonIDs []string `json:"lessonIds"`
+}
+
+type enqueuedLesson struct {
+	LessonID string `json:"lessonId"`
+	JobID    string `json:"jobId"`
+}
+
+type skippedLesson struct {
+	LessonID string `json:"lessonId"`
+	Reason   string `json:"reason"`
 }
 
 type processLessonsResponse struct {
-	Success      bool     `json:"success"`
-	Message      string   `json:"message"`
-	TenantID     string   `json:"tenantId"`
-	LessonsCount int      `json:"lessonsCount"`
-	JobIDs       []string `json:"jobIds,omitempty"`
+	Success      bool             `json:"success"`
+	Message      string           `json:"message"`
+	TenantID     string           `json:"tenantId"`
+	Enqueued     []enqueuedLesson `json:"enqueued"`
+	Skipped      []skippedLesson  `json:"skipped,omitempty"`
+	EnqueuedCount int             `json:"enqueuedCount"`
 }
 
 // ---------- 1. HTTP handler ----------
 
 // ProcessLessonsTenant handles `POST /api/v1/ai/tenants/process-lessons`.
-// Body: { tenantId }. Behavior mirrors the legacy handler: validates the
-// tenant has aiEnabled, lists unprocessed lessons, then INSERTs one
-// VIDEO_PROCESSING job per lesson into the Railway pgvector jobs table
-// and returns 202 with the list of jobIds. The worker pool picks them up
-// asynchronously from there.
+//
+// Body: { tenantId, lessonIds: []string }
+//
+// Behavior:
+//   - Validates the tenant exists and has aiEnabled.
+//   - For each lessonId, looks up the row (joined through Vitrine for
+//     tenant ownership) and either enqueues a VIDEO_PROCESSING job on
+//     the Railway pgvector jobs table OR records a `skipped` entry
+//     with a reason (wrong tenant, already transcribed, non-Bunny URL,
+//     unknown id).
+//   - Returns 202 with the split lists so the admin UI can surface a
+//     summary instead of guessing.
 func (f *Feature) ProcessLessonsTenant(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed), "")
@@ -53,8 +79,14 @@ func (f *Feature) ProcessLessonsTenant(w http.ResponseWriter, r *http.Request) {
 		writeCustomError(w, http.StatusBadRequest, "tenantId é obrigatório", "MISSING_TENANT_ID")
 		return
 	}
+	if len(req.LessonIDs) == 0 {
+		writeCustomError(w, http.StatusBadRequest,
+			"lessonIds é obrigatório (selecione ao menos uma aula no administrativo)",
+			"MISSING_LESSON_IDS")
+		return
+	}
 
-	resp, status, err := f.enqueueLessonsForTenant(r.Context(), req.TenantID)
+	resp, status, err := f.enqueueSelectedLessons(r.Context(), req.TenantID, req.LessonIDs)
 	if err != nil {
 		writeError(w, status, http.StatusText(status), err.Error())
 		return
@@ -64,9 +96,9 @@ func (f *Feature) ProcessLessonsTenant(w http.ResponseWriter, r *http.Request) {
 
 // ---------- 2. Business rule ----------
 
-func (f *Feature) enqueueLessonsForTenant(ctx context.Context, tenantID string) (*processLessonsResponse, int, error) {
-	// Reuse the same tenant lookup the pipeline uses so errors stay
-	// consistent (404 vs 403 vs missing Bunny credentials).
+func (f *Feature) enqueueSelectedLessons(ctx context.Context, tenantID string, lessonIDs []string) (*processLessonsResponse, int, error) {
+	// Validate the tenant has aiEnabled. The same query the pipeline
+	// runs is reused so error codes stay consistent.
 	var (
 		tID, tName              string
 		aiEnabled               bool
@@ -74,61 +106,73 @@ func (f *Feature) enqueueLessonsForTenant(ctx context.Context, tenantID string) 
 	)
 	row := f.memberclassDB.QueryRowContext(ctx, sqlSelectTenantBunnyCreds, tenantID)
 	if err := row.Scan(&tID, &tName, &aiEnabled, &bunnyLibID, &bunnyAPIKey); err != nil {
-		// sql.ErrNoRows reads identically as a Scan error here; treat any
-		// scan failure for an unknown tenant as 404.
 		return nil, http.StatusNotFound, fmt.Errorf("tenant não encontrado")
 	}
 	if !aiEnabled {
 		return nil, http.StatusForbidden, fmt.Errorf("IA não está habilitada para este tenant")
 	}
 
-	// List unprocessed lessons.
-	rows, err := f.memberclassDB.QueryContext(ctx, sqlSelectUnprocessedLessons, tenantID)
+	// Pull lessons that match the id set AND belong to this tenant
+	// (the Vitrine join enforces ownership).
+	rows, err := f.memberclassDB.QueryContext(ctx, sqlSelectLessonsByIDs, tenantID, pq.Array(lessonIDs))
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error listing lessons: %w", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("listar lessons: %w", err)
 	}
 	defer rows.Close()
 
 	type lessonRow struct {
-		ID       string
-		Name     string
-		MediaURL string
-		CourseID string
+		ID                     string
+		Name                   string
+		MediaURL               string
+		CourseID               string
+		TranscriptionCompleted bool
 	}
-	var lessons []lessonRow
+	found := make(map[string]lessonRow, len(lessonIDs))
 	for rows.Next() {
 		var (
-			l                                                                                           lessonRow
-			slug                                                                                        string
-			lessonType, thumbnail, content                                                              *string
-			moduleID, moduleName, sectionID, sectionName, courseName, vitrineID, vitrineName            string
+			l                                                                                  lessonRow
+			slug                                                                               string
+			lessonType, thumbnail, content                                                     *string
+			moduleID, moduleName, sectionID, sectionName, courseName, vitrineID, vitrineName   string
 		)
 		if err := rows.Scan(
 			&l.ID, &l.Name, &slug,
 			&lessonType, &l.MediaURL, &thumbnail, &content,
 			&moduleID, &moduleName, &sectionID, &sectionName,
 			&l.CourseID, &courseName, &vitrineID, &vitrineName,
+			&l.TranscriptionCompleted,
 		); err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("scan lesson: %w", err)
 		}
-		lessons = append(lessons, l)
+		found[l.ID] = l
 	}
 	if err := rows.Err(); err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("iterate lessons: %w", err)
 	}
 
-	if len(lessons) == 0 {
-		return &processLessonsResponse{
-			Success:      false,
-			Message:      "Nenhuma lesson não processada encontrada para este tenant",
-			TenantID:     tenantID,
-			LessonsCount: 0,
-		}, http.StatusOK, nil
+	resp := &processLessonsResponse{
+		TenantID: tenantID,
+		Enqueued: make([]enqueuedLesson, 0, len(lessonIDs)),
+		Skipped:  make([]skippedLesson, 0),
 	}
 
-	// Insert one job per lesson on the Railway pgvector jobs table.
-	jobIDs := make([]string, 0, len(lessons))
-	for _, l := range lessons {
+	for _, id := range lessonIDs {
+		l, ok := found[id]
+		if !ok {
+			resp.Skipped = append(resp.Skipped, skippedLesson{
+				LessonID: id,
+				Reason:   "lesson não encontrada para este tenant ou mediaUrl não é Bunny",
+			})
+			continue
+		}
+		if l.TranscriptionCompleted {
+			resp.Skipped = append(resp.Skipped, skippedLesson{
+				LessonID: id,
+				Reason:   "já transcrita (transcriptionCompleted=true)",
+			})
+			continue
+		}
+
 		payload, err := json.Marshal(jobPayload{
 			LessonID: l.ID,
 			TenantID: tenantID,
@@ -138,6 +182,7 @@ func (f *Feature) enqueueLessonsForTenant(ctx context.Context, tenantID string) 
 		})
 		if err != nil {
 			f.log.Error("transcription.enqueue.marshal_failed", "lesson", l.ID, "error", err.Error())
+			resp.Skipped = append(resp.Skipped, skippedLesson{LessonID: id, Reason: "erro interno ao serializar payload"})
 			continue
 		}
 		jobID := uuid.NewString()
@@ -146,16 +191,19 @@ func (f *Feature) enqueueLessonsForTenant(ctx context.Context, tenantID string) 
 		); err != nil {
 			f.log.Error("transcription.enqueue.insert_failed",
 				"tenant", tenantID, "lesson", l.ID, "error", err.Error())
+			resp.Skipped = append(resp.Skipped, skippedLesson{LessonID: id, Reason: "erro ao gravar job"})
 			continue
 		}
-		jobIDs = append(jobIDs, jobID)
+		resp.Enqueued = append(resp.Enqueued, enqueuedLesson{LessonID: id, JobID: jobID})
 	}
 
-	return &processLessonsResponse{
-		Success:      true,
-		Message:      "Jobs de transcrição enfileirados com sucesso",
-		TenantID:     tenantID,
-		LessonsCount: len(jobIDs),
-		JobIDs:       jobIDs,
-	}, http.StatusAccepted, nil
+	resp.EnqueuedCount = len(resp.Enqueued)
+	if resp.EnqueuedCount == 0 {
+		resp.Success = false
+		resp.Message = "nenhuma lesson elegível foi enfileirada"
+	} else {
+		resp.Success = true
+		resp.Message = fmt.Sprintf("%d job(s) de transcrição enfileirado(s)", resp.EnqueuedCount)
+	}
+	return resp, http.StatusAccepted, nil
 }

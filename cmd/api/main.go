@@ -114,17 +114,14 @@ func main() {
 			// Transcription slice owns the entire pipeline (Bunny → Whisper →
 			// chunk → embed → Railway pgvector). Pulls its own *sql.DB out
 			// of the DBMap (transcription bucket) + memberclass DefaultDB.
+			// No cron — the internal admin UI POSTs to the slice with the
+			// explicit list of lessonIds it wants transcribed.
 			func(dbMap database.DBMap, defaultDB *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
 				txDB := dbMap["transcription"]
 				if txDB == nil {
 					log.Warn("transcription slice will be inert: DB_TRANSCRIPTION_DSN not configured")
 				}
 				return transcriptionworker.New(txDB, defaultDB, log, bunnySvc)
-			},
-			// Wrap the slice as a ports.Job so the existing Scheduler can
-			// drive RunCronEnqueue at the daily cadence ("0 0 22 * * *").
-			func(f *transcriptionworker.Feature) ports.Job {
-				return transcriptionworker.NewScheduledJob(f)
 			},
 			lessons.NewLessonsCompletedUseCase,
 			student.NewStudentReportUseCase,
@@ -178,17 +175,15 @@ func startApplication(
 	migrationService *database.MigrationService,
 	router *router.Router,
 	scheduler *jobs.Scheduler,
-	transcriptionCronJob ports.Job,
 	transcriptionFeat *transcriptionworker.Feature,
 	memberImport *member_import.Feature,
 	notifWorker *notificationsworker.Feature,
 ) {
 	router.SetupRoutes()
 
-	if err := jobs.InitJobs(scheduler, transcriptionCronJob); err != nil {
-		log.Error("Error initializing jobs: " + err.Error())
-	}
-
+	// Scheduler is kept running for future ports.Job entries; today every
+	// transcription enqueue flows through the HTTP route the internal
+	// admin UI calls, so no Job is registered here.
 	scheduler.Start()
 
 	// Member-import slice: clear orphaned "processing" imports on startup,

@@ -181,11 +181,15 @@ const sqlSelectTenantBunnyCreds = `
      WHERE id = $1
 `
 
-// sqlSelectUnprocessedLessons walks the Vitrine → Course → Section → Module
-// → Lesson hierarchy (Lesson has no direct tenantId — the relationship is
-// owned by Vitrine). Filters mirror the legacy lesson_repository.go pattern
-// so the cron picks the same population the old service did.
-const sqlSelectUnprocessedLessons = `
+// sqlSelectLessonsByIDs walks the Vitrine → Course → Section → Module →
+// Lesson hierarchy (Lesson has no direct tenantId — the relationship is
+// owned by Vitrine), filtered to the explicit set of lessonIds the admin
+// UI selected. The Vitrine tenantId predicate prevents one tenant from
+// enqueueing lessons that belong to another. The `mediaUrl LIKE` clause
+// keeps non-Bunny rows (PDF, text) out of the transcription path.
+//
+// $1 = tenantId, $2 = lesson id array (pq.Array(ids)).
+const sqlSelectLessonsByIDs = `
     SELECT l.id,
            l.name,
            l.slug,
@@ -200,21 +204,16 @@ const sqlSelectUnprocessedLessons = `
            c.id   AS course_id,
            c.name AS course_name,
            v.id   AS vitrine_id,
-           v.name AS vitrine_name
+           v.name AS vitrine_name,
+           COALESCE(l."transcriptionCompleted", false) AS transcription_completed
       FROM "Lesson" l
       JOIN "Module"  m ON l."moduleId"  = m.id
       JOIN "Section" s ON m."sectionId" = s.id
       JOIN "Course"  c ON s."courseId"  = c.id
       JOIN "Vitrine" v ON c."vitrineId" = v.id
-     WHERE v."tenantId"               = $1
-       AND l.published                 = true
-       AND COALESCE(l."transcriptionCompleted", false) = false
+     WHERE l.id = ANY($2)
+       AND v."tenantId" = $1
        AND l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
-     ORDER BY COALESCE(v."order", 0) ASC,
-              COALESCE(c."order", 0) ASC,
-              COALESCE(s."order", 0) ASC,
-              COALESCE(m."order", 0) ASC,
-              COALESCE(l."order", 0) ASC
 `
 
 const sqlMarkLessonTranscribed = `
@@ -231,8 +230,3 @@ const sqlMarkLessonTranscriptionStatus = `
      WHERE id = $1
 `
 
-const sqlSelectAITenants = `
-    SELECT id, name, "bunnyLibraryId", "bunnyLibraryApiKey"
-      FROM "Tenant"
-     WHERE "aiEnabled" = true
-`
