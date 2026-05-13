@@ -26,16 +26,24 @@ const bunnyIframeReferer = "https://iframe.mediadelivery.net/"
 // responses, but constraining the surface is cheap defense-in-depth.
 const ffmpegProtocolWhitelist = "file,http,https,tls,tcp,crypto,hls,rtp,udp"
 
+// hlsAllowedExtensions extends ffmpeg's HLS-demuxer segment whitelist
+// with `dts`. Bunny serves some libraries' audio-only HLS streams as
+// `.dts` (DTS Coherent Acoustics) segments which are NOT in ffmpeg's
+// default allowlist (default: ts,aac,mp4,m4s,m4v,m4a,fmp4,ac3,eac3,
+// mp3,wav). Without this option ffmpeg fails with:
+//   "URL ... .dts is not in allowed_segment_extensions"
+const hlsAllowedExtensions = "ts,aac,mp4,m4s,m4v,m4a,fmp4,ac3,eac3,mp3,wav,dts"
+
 // extractAudioMP3 invokes ffmpeg to read an HLS playlist URL, MP4 URL, or
 // local file from `input` and produce a mono 16 kHz MP3 at 64 kbps in
 // outPath. Mono + 16 kHz are Whisper's sweet spot — same recognition
 // quality as 44.1 kHz stereo at ~10% the bandwidth. Returns outPath on
 // success.
 //
-// For http/https inputs the iframe.mediadelivery.net Referer header is
-// added — Bunny's CDN edge returns 403 without it even when the pull
-// zone's referrer allowlist is empty. The flag is omitted for local
-// inputs because the file demuxer rejects unknown HTTP options.
+// For http/https inputs the iframe.mediadelivery.net Referer header and
+// the HLS segment-extension whitelist are added. Both flags are HLS-
+// demuxer options that the file demuxer rejects, so they're gated on
+// isHTTPURL.
 func extractAudioMP3(ctx context.Context, input, outPath string) (string, error) {
 	args := []string{
 		"-y",
@@ -43,7 +51,10 @@ func extractAudioMP3(ctx context.Context, input, outPath string) (string, error)
 		"-protocol_whitelist", ffmpegProtocolWhitelist,
 	}
 	if isHTTPURL(input) {
-		args = append(args, "-referer", bunnyIframeReferer)
+		args = append(args,
+			"-referer", bunnyIframeReferer,
+			"-allowed_extensions", hlsAllowedExtensions,
+		)
 	}
 	args = append(args,
 		"-i", input,
