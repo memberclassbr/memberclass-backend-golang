@@ -13,10 +13,16 @@ import (
 type DBMap map[string]*sql.DB
 
 // bucketDSNMapping maps bucket names to environment variable names containing DSNs.
+//   - memberclass / ephra / celetusclass: tenant data buckets (CockroachDB-compatible).
+//   - transcription: dedicated Railway Postgres (pgvector template) used by
+//     the transcription slice (internal/features/workers/transcription). The
+//     pgvector binary must be available on the instance; create the service
+//     from Railway's "PostgreSQL pgvector" template, not the vanilla one.
 var bucketDSNMapping = map[string]string{
-	"memberclass":  "DB_DSN",
-	"ephra":        "DB_EPHRA_DSN",
-	"celetusclass": "DB_CELETUS_DSN",
+	"memberclass":   "DB_DSN",
+	"ephra":         "DB_EPHRA_DSN",
+	"celetusclass":  "DB_CELETUS_DSN",
+	"transcription": "DB_TRANSCRIPTION_DSN",
 }
 
 const defaultBucket = "memberclass"
@@ -60,7 +66,7 @@ func NewMultiDB(logger ports.Logger) (DBMap, error) {
 	}
 
 	if len(dbs) == 0 {
-		return nil, fmt.Errorf("no database connections configured, check environment variables: DB_DSN, DB_EPHRA_DSN, DB_CELETUS_DSN")
+		return nil, fmt.Errorf("no database connections configured, check environment variables: DB_DSN, DB_EPHRA_DSN, DB_CELETUS_DSN, DB_TRANSCRIPTION_DSN")
 	}
 
 	return dbs, nil

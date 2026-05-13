@@ -207,9 +207,12 @@ ILOVEPDF_API_KEYS=
 INTERNAL_AI_API_KEY=
 PUBLIC_ROOT_DOMAIN=localhost:8181
 
-#Memberclass Transcription
-
-TRANSCRIPTION_API_URL=
+# Memberclass Transcription (Railway pgvector + OpenAI)
+# See docs/plans/2026-05-13-transcription-go-vsa.md for setup details.
+DB_TRANSCRIPTION_DSN=
+OPENAI_API_KEY=
+TRANSCRIPTION_WORKER_CONCURRENCY=2
+TRANSCRIPTION_POLL_INTERVAL_SECONDS=30
 
 ```
 
@@ -272,7 +275,12 @@ The application uses the following environment variables:
 - `INTERNAL_AI_API_KEY` - Internal API key for AI endpoints validation
 - `PUBLIC_ROOT_DOMAIN` - Public root domain for magic links generation (default: localhost:8181)
 
-**Memberclass Transcription** -`TRANSCRIPTION_API_URL`- Url to app memberclass transcription
+**Memberclass Transcription (Railway pgvector + OpenAI):**
+
+- `DB_TRANSCRIPTION_DSN` - Railway Postgres (pgvector template) connection string; required for the transcription slice to claim and process jobs
+- `OPENAI_API_KEY` - OpenAI key used for whisper-1 (transcription) and text-embedding-3-small (embeddings)
+- `TRANSCRIPTION_WORKER_CONCURRENCY` - goroutines processing transcription jobs in parallel (default 2)
+- `TRANSCRIPTION_POLL_INTERVAL_SECONDS` - how often the worker polls the jobs table (default 30)
 
 ## 🏃‍♂️ Running the Application
 

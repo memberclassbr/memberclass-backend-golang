@@ -6,9 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/ai"
-	"github.com/memberclass-backend-golang/internal/domain/dto/request/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/ports/ai"
@@ -24,40 +22,6 @@ func NewAILessonHandler(useCase ai2.AILessonUseCase, logger ports.Logger) *AILes
 		useCase: useCase,
 		logger:  logger,
 	}
-}
-
-func (h *AILessonHandler) UpdateTranscriptionStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPatch {
-		h.sendErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	apiKey := r.Header.Get("x-internal-api-key")
-	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
-	if apiKey == "" || apiKey != expectedKey {
-		h.sendCustomErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório", "UNAUTHORIZED")
-		return
-	}
-
-	lessonID := chi.URLParam(r, "lessonId")
-	if lessonID == "" {
-		h.sendCustomErrorResponse(w, http.StatusBadRequest, "lessonId é obrigatório", "INVALID_REQUEST")
-		return
-	}
-
-	var req lesson.UpdateLessonTranscriptionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.sendCustomErrorResponse(w, http.StatusBadRequest, "transcriptionCompleted deve ser um booleano", "INVALID_REQUEST")
-		return
-	}
-
-	response, err := h.useCase.UpdateTranscriptionStatus(r.Context(), lessonID, req)
-	if err != nil {
-		h.handleUseCaseError(w, err)
-		return
-	}
-
-	h.sendJSONResponse(w, http.StatusOK, response)
 }
 
 func (h *AILessonHandler) GetLessons(w http.ResponseWriter, r *http.Request) {

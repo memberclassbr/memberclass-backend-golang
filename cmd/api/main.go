@@ -22,12 +22,12 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	vitrine4 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
-	"github.com/memberclass-backend-golang/internal/application/jobs/transcription"
 	auth3 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/ai"
+	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
 	comment2 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
 	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
@@ -46,6 +46,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
+	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
@@ -110,12 +111,24 @@ func main() {
 			user_activities.New,
 			member_import.New,
 			notificationsworker.New,
+			// Transcription slice owns the entire pipeline (Bunny → Whisper →
+			// chunk → embed → Railway pgvector). Pulls its own *sql.DB out
+			// of the DBMap (transcription bucket) + memberclass DefaultDB.
+			// No cron — the internal admin UI POSTs to the slice with the
+			// explicit list of lessonIds it wants transcribed.
+			func(dbMap database.DBMap, defaultDB *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
+				txDB := dbMap["transcription"]
+				if txDB == nil {
+					log.Warn("transcription slice will be inert: DB_TRANSCRIPTION_DSN not configured")
+				}
+				return transcriptionworker.New(txDB, defaultDB, log, bunnySvc)
+			},
 			lessons.NewLessonsCompletedUseCase,
 			student.NewStudentReportUseCase,
 			auth.NewAuthUseCase,
 			ai2.NewAILessonUseCase,
-			func(tenantRepo tenant2.TenantRepository, aiLessonUseCase ai.AILessonUseCase, logger ports.Logger) ai.AITenantUseCase {
-				return ai2.NewAITenantUseCase(tenantRepo, aiLessonUseCase, logger)
+			func(tenantRepo tenant2.TenantRepository, logger ports.Logger) ai.AITenantUseCase {
+				return ai2.NewAITenantUseCase(tenantRepo, logger)
 			},
 			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
 				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
@@ -148,7 +161,6 @@ func main() {
 
 			router.NewRouter,
 			jobs.NewScheduler,
-			transcription.NewTranscriptionJob,
 		),
 		fx.Invoke(startApplication),
 	)
@@ -163,16 +175,15 @@ func startApplication(
 	migrationService *database.MigrationService,
 	router *router.Router,
 	scheduler *jobs.Scheduler,
-	transcriptionJob *transcription.TranscriptionJob,
+	transcriptionFeat *transcriptionworker.Feature,
 	memberImport *member_import.Feature,
 	notifWorker *notificationsworker.Feature,
 ) {
 	router.SetupRoutes()
 
-	if err := jobs.InitJobs(scheduler, transcriptionJob); err != nil {
-		log.Error("Error initializing jobs: " + err.Error())
-	}
-
+	// Scheduler is kept running for future ports.Job entries; today every
+	// transcription enqueue flows through the HTTP route the internal
+	// admin UI calls, so no Job is registered here.
 	scheduler.Start()
 
 	// Member-import slice: clear orphaned "processing" imports on startup,
@@ -189,6 +200,14 @@ func startApplication(
 	defer stopNotifWorker()
 	notifWorker.Start(notifCtx)
 	notifWorker.StartCleanupJob(notifCtx)
+
+	// Transcription worker: poll the Railway pgvector jobs table, process
+	// VIDEO_PROCESSING jobs end-to-end (Bunny → Whisper → chunk → embed →
+	// pgvector). Started here so freshly enqueued lessons begin processing
+	// as soon as the HTTP server is up.
+	txCtx, stopTxWorker := context.WithCancel(context.Background())
+	defer stopTxWorker()
+	transcriptionFeat.Start(txCtx)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -219,11 +238,13 @@ func startApplication(
 	defer cancel()
 
 	scheduler.Stop()
-	// Order matters: stop the worker run loop, then cancel notifCtx so the
-	// long-lived cleanup goroutine bails out — both must finish BEFORE
-	// dbMap.CloseAll() below or an in-flight cleanup query hits a closed *sql.DB.
+	// Order matters: stop every worker that owns a goroutine pool BEFORE
+	// dbMap.CloseAll() runs — an in-flight query against a closed *sql.DB
+	// panics.
 	notifWorker.Stop(10 * time.Second)
 	stopNotifWorker()
+	transcriptionFeat.Stop(15 * time.Second)
+	stopTxWorker()
 
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown: " + err.Error())

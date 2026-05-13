@@ -28,7 +28,6 @@ type LessonRepository interface {
 	DeletePDFPagesByAssetID(ctx context.Context, assetID string) error
 	FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]lesson.CompletedLesson, int64, error)
 	GetByIDWithTenant(ctx context.Context, lessonID string) (*lessons.Lesson, *tenant.Tenant, error)
-	UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error
 	GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]AILessonWithHierarchy, error)
 }
 

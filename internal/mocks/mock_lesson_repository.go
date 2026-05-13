@@ -976,54 +976,6 @@ func (_c *MockLessonRepository_UpdatePDFAssetStatus_Call) RunAndReturn(run func(
 	return _c
 }
 
-// UpdateTranscriptionStatus provides a mock function with given fields: ctx, lessonID, transcriptionCompleted
-func (_m *MockLessonRepository) UpdateTranscriptionStatus(ctx context.Context, lessonID string, transcriptionCompleted bool) error {
-	ret := _m.Called(ctx, lessonID, transcriptionCompleted)
-
-	if len(ret) == 0 {
-		panic("no return value specified for UpdateTranscriptionStatus")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, bool) error); ok {
-		r0 = rf(ctx, lessonID, transcriptionCompleted)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// MockLessonRepository_UpdateTranscriptionStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTranscriptionStatus'
-type MockLessonRepository_UpdateTranscriptionStatus_Call struct {
-	*mock.Call
-}
-
-// UpdateTranscriptionStatus is a helper method to define mock.On call
-//   - ctx context.Context
-//   - lessonID string
-//   - transcriptionCompleted bool
-func (_e *MockLessonRepository_Expecter) UpdateTranscriptionStatus(ctx interface{}, lessonID interface{}, transcriptionCompleted interface{}) *MockLessonRepository_UpdateTranscriptionStatus_Call {
-	return &MockLessonRepository_UpdateTranscriptionStatus_Call{Call: _e.mock.On("UpdateTranscriptionStatus", ctx, lessonID, transcriptionCompleted)}
-}
-
-func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) Run(run func(ctx context.Context, lessonID string, transcriptionCompleted bool)) *MockLessonRepository_UpdateTranscriptionStatus_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(bool))
-	})
-	return _c
-}
-
-func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) Return(_a0 error) *MockLessonRepository_UpdateTranscriptionStatus_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockLessonRepository_UpdateTranscriptionStatus_Call) RunAndReturn(run func(context.Context, string, bool) error) *MockLessonRepository_UpdateTranscriptionStatus_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // NewMockLessonRepository creates a new instance of MockLessonRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockLessonRepository(t interface {

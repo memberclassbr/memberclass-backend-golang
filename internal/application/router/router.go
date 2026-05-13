@@ -22,6 +22,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
+	"github.com/memberclass-backend-golang/internal/features/workers/transcription"
 )
 
 type Router struct {
@@ -35,6 +36,7 @@ type Router struct {
 	socialCommentHandler      *comment.SocialCommentHandler
 	activitySummary           *activity_summary.Feature
 	memberImport              *member_import.Feature
+	transcription             *transcription.Feature
 	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
 	studentReportHandler      *student.StudentReportHandler
 	swaggerHandler            *internalhttp.SwaggerHandler
@@ -61,6 +63,7 @@ func NewRouter(
 	socialCommentHandler *comment.SocialCommentHandler,
 	activitySummary *activity_summary.Feature,
 	memberImport *member_import.Feature,
+	transcriptionFeat *transcription.Feature,
 	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
 	studentReportHandler *student.StudentReportHandler,
 	swaggerHandler *internalhttp.SwaggerHandler,
@@ -106,6 +109,7 @@ func NewRouter(
 		socialCommentHandler:      socialCommentHandler,
 		activitySummary:           activitySummary,
 		memberImport:              memberImport,
+		transcription:             transcriptionFeat,
 		lessonsCompletedHandler:   lessonsCompletedHandler,
 		studentReportHandler:      studentReportHandler,
 		swaggerHandler:            swaggerHandler,
@@ -152,15 +156,24 @@ func (r *Router) SetupRoutes() {
 
 		router.Route("/ai", func(router chi.Router) {
 			router.Route("/lessons", func(router chi.Router) {
-				router.Patch("/{lessonId}", r.aiLessonHandler.UpdateTranscriptionStatus)
+				// /lessons/{lessonId}/transcription PATCH lives in the
+				// transcription slice; keep the GET / endpoint here for
+				// the AI dashboard (paginated lessons listing).
 				router.With(
 					r.rateLimitTenantMiddleware.LimitByTenant,
 				).Get("/", r.aiLessonHandler.GetLessons)
 			})
 			router.Route("/tenants", func(router chi.Router) {
 				router.Get("/", r.aiTenantHandler.GetTenantsWithAIEnabled)
-				router.Post("/process-lessons", r.aiTenantHandler.ProcessLessonsTenant)
+				// process-lessons now flows through the transcription
+				// slice (registered below) — old handler removed.
 			})
+
+			// Transcription slice owns:
+			//   POST  /tenants/process-lessons
+			//   GET   /jobs/{jobId}
+			//   PATCH /lessons/{lessonId}/transcription
+			r.transcription.Register(router, transcription.MiddlewareSet{})
 		})
 
 		router.Route("/videos", func(router chi.Router) {

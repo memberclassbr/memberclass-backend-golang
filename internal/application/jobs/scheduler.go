@@ -9,9 +9,6 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-const (
-	TranscriptionJobSchedule = "0 0 22 * * *"
-)
 
 type ScheduledJob struct {
 	Job      ports.Job
@@ -92,12 +89,3 @@ func (s *Scheduler) Stop() {
 	s.logger.Info("Scheduler stopped")
 }
 
-func InitJobs(scheduler *Scheduler, transcriptionJob ports.Job) error {
-	if err := scheduler.AddJob(transcriptionJob, TranscriptionJobSchedule); err != nil {
-		scheduler.logger.Error("Error scheduling transcription job: " + err.Error())
-		return err
-	}
-	scheduler.logger.Info("Transcription job scheduled to run daily at 10 PM")
-
-	return nil
-}
