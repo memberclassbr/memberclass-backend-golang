@@ -86,15 +86,17 @@ func NewRouter(
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
 
-	// Wildcard CORS works for every route now: public API uses `mc-api-key`
-	// and the frontend-only routes (/imports, future /admin/*) use a
-	// bearer JWT in `Authorization`. Nothing relies on cookies, so
-	// AllowCredentials stays false and `*` is valid.
+	// CORS: echo back the request Origin so the response works for any
+	// tenant subdomain / custom domain (multi-tenant). AllowCredentials=true
+	// requires a non-wildcard Allow-Origin, so we reflect the caller's Origin
+	// instead of sending "*". ExposedHeaders lets the frontend read pagination
+	// metadata.
 	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "Content-Length", "user_id", "mc-api-key", "x-internal-api-key", "Authorization"},
-		AllowCredentials: false,
+		AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
+		AllowedHeaders:   []string{"*"},
+		ExposedHeaders:   []string{"Content-Length", "X-Total-Count"},
+		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
