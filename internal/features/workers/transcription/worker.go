@@ -2,6 +2,7 @@ package transcription
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 )
@@ -10,7 +11,23 @@ import (
 // no-op. Wire it from cmd/api/main.go's startApplication AFTER the DBs
 // are open and BEFORE the HTTP server starts accepting work so newly
 // enqueued jobs begin processing immediately.
+//
+// Refuses to start when transcriptionDB is missing or the chunks.embedding
+// column probe fails — running with the wrong dim would re-fire embed
+// requests into a Postgres error loop (see 2026-05-13 burn).
 func (f *Feature) Start(parent context.Context) {
+	if f.transcriptionDB == nil {
+		f.log.Warn("transcription.worker.disabled", "reason", "transcriptionDB is nil (DB_TRANSCRIPTION_DSN unset or unreachable)")
+		return
+	}
+	if err := f.probeEmbedDims(parent); err != nil {
+		f.log.Error("transcription.worker.disabled",
+			"reason", "embed dimension probe failed — worker will not start to avoid retry loop",
+			"error", err.Error())
+		return
+	}
+	f.log.Info("transcription.worker.embed_dims_resolved", "dims", f.embedDims)
+
 	f.mu.Lock()
 	if f.running {
 		f.mu.Unlock()
@@ -132,6 +149,33 @@ func (f *Feature) processLoop(ctx context.Context, jobChan <-chan claimedJob) {
 			f.processOne(ctx, j)
 		}
 	}
+}
+
+// probeEmbedDims reads the declared width of public.chunks.embedding from
+// the Railway DB and caches it on f.embedDims. For pgvector, atttypmod
+// stores the dimension directly. Refusing to start on probe failure is
+// deliberate: a mismatch between code-requested dims and column dims
+// produces a tight Postgres error loop (see the 2026-05-13 incident).
+func (f *Feature) probeEmbedDims(ctx context.Context) error {
+	const q = `
+        SELECT atttypmod
+          FROM pg_attribute
+         WHERE attrelid = 'public.chunks'::regclass
+           AND attname  = 'embedding'
+           AND NOT attisdropped
+    `
+	var dims int
+	if err := f.transcriptionDB.QueryRowContext(ctx, q).Scan(&dims); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("chunks.embedding column not found")
+		}
+		return err
+	}
+	if dims <= 0 {
+		return errors.New("chunks.embedding has no declared dimension (vector with no typmod)")
+	}
+	f.embedDims = dims
+	return nil
 }
 
 func (f *Feature) processOne(ctx context.Context, j claimedJob) {

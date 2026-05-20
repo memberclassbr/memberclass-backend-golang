@@ -15,14 +15,21 @@ import (
 const defaultOpenAIBase = "https://api.openai.com"
 
 const (
-	// embedModel must match the dimension of chunks.embedding (1536).
-	// Switching models invalidates the legacy embeddings — bring up a
-	// new column rather than re-using vector(1536) under a different model.
+	// embedModel: text-embedding-3-small supports the `dimensions` request
+	// param (Matryoshka), so we ask the API to truncate to whatever width
+	// the chunks.embedding column was declared with (see Feature.embedDims).
+	// Mixing models or widths against the same column invalidates prior
+	// rows — bring up a new column instead of overloading this one.
 	embedModel = "text-embedding-3-small"
 
 	// whisperModel: whisper-1 is the only Whisper variant exposed by the
 	// OpenAI HTTP API today.
 	whisperModel = "whisper-1"
+
+	// defaultEmbedDims is the fallback when the runtime probe of
+	// chunks.embedding fails (e.g. table absent on a fresh DB). It matches
+	// the legacy Supabase column width.
+	defaultEmbedDims = 768
 )
 
 // ---------- response types ----------
@@ -63,9 +70,14 @@ type whisperResponse struct {
 // input (positions matching `inputs`) and the total token count reported
 // by the API (used for cost tracking).
 func (f *Feature) embedBatch(ctx context.Context, inputs []string) ([][]float32, int, error) {
+	dims := f.embedDims
+	if dims <= 0 {
+		dims = defaultEmbedDims
+	}
 	body, err := json.Marshal(map[string]any{
-		"model": embedModel,
-		"input": inputs,
+		"model":      embedModel,
+		"input":      inputs,
+		"dimensions": dims,
 	})
 	if err != nil {
 		return nil, 0, fmt.Errorf("marshal embed payload: %w", err)

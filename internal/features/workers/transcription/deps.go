@@ -80,6 +80,13 @@ type Feature struct {
 	pollInterval time.Duration
 	workers      int
 
+	// embedDims is the dimension width of chunks.embedding on the
+	// Railway pgvector DB. Populated from the column's typmod at Start()
+	// so embedBatch can request matching widths via OpenAI's dimensions
+	// param. Zero means "probe failed / not yet probed" — callers fall
+	// back to defaultEmbedDims.
+	embedDims int
+
 	// Worker lifecycle. Lock guards every transition; the goroutine itself
 	// is owned by run() and signals exit via done.
 	mu      sync.Mutex

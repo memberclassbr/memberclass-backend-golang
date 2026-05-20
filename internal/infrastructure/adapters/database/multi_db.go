@@ -1,13 +1,19 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 )
+
+// pingTimeout bounds the initial connection probe per bucket so a
+// misconfigured or unreachable database cannot stall app boot.
+const pingTimeout = 10 * time.Second
 
 // DBMap maps bucket names to their respective database connections.
 type DBMap map[string]*sql.DB
@@ -23,6 +29,14 @@ var bucketDSNMapping = map[string]string{
 	"ephra":         "DB_EPHRA_DSN",
 	"celetusclass":  "DB_CELETUS_DSN",
 	"transcription": "DB_TRANSCRIPTION_DSN",
+}
+
+// optionalBuckets do not block app boot when their DSN is set but the
+// connection fails (open or ping). Failure is logged and the bucket is
+// skipped — consumers must tolerate a nil *sql.DB for these buckets
+// (see transcription slice preflight()).
+var optionalBuckets = map[string]bool{
+	"transcription": true,
 }
 
 const defaultBucket = "memberclass"
@@ -46,6 +60,10 @@ func NewMultiDB(logger ports.Logger) (DBMap, error) {
 
 		db, err := sql.Open(driver, dsn)
 		if err != nil {
+			if optionalBuckets[bucket] {
+				logger.Warn(fmt.Sprintf("Optional bucket '%s' failed to open, skipping: %v", bucket, err))
+				continue
+			}
 			// Close already opened connections
 			for _, openDB := range dbs {
 				openDB.Close()
@@ -53,8 +71,15 @@ func NewMultiDB(logger ports.Logger) (DBMap, error) {
 			return nil, fmt.Errorf("failed to open database for bucket '%s': %w", bucket, err)
 		}
 
-		if err := db.Ping(); err != nil {
+		pingCtx, cancel := context.WithTimeout(context.Background(), pingTimeout)
+		err = db.PingContext(pingCtx)
+		cancel()
+		if err != nil {
 			db.Close()
+			if optionalBuckets[bucket] {
+				logger.Warn(fmt.Sprintf("Optional bucket '%s' failed to ping, skipping: %v", bucket, err))
+				continue
+			}
 			for _, openDB := range dbs {
 				openDB.Close()
 			}
