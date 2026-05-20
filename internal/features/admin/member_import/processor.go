@@ -203,6 +203,17 @@ func (f *Feature) processBatch(
 			continue
 		}
 
+		// Validate email up-front: Resend rejects the entire batch with a
+		// single 422 if any recipient is non-ASCII or malformed. Fail this
+		// row fast so the other 99 in the batch still get their emails.
+		if err := validateEmailForResend(strings.ToLower(u.Email)); err != nil {
+			state.status = "error"
+			state.errorMessage = "invalid email: " + err.Error()
+			counters.errorRows++
+			states = append(states, state)
+			continue
+		}
+
 		// --- Find-or-create user ---
 		userID, existingName, existingDoc, uotExists, findErr := f.findUser(ctx, u, req.TenantID)
 		if findErr != nil {

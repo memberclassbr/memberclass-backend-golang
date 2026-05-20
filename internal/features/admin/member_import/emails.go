@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"mime"
+	"net/mail"
 	"net/url"
 	"os"
 	"strconv"
@@ -124,10 +126,36 @@ func (f *Feature) sendGroup(
 	}
 	i18n := translationsFor(transLang)
 
-	fromAddress := fmt.Sprintf("%s <naoresponder@%s>", sanitizeEmailName(tenant.Name), publicRoot)
+	fromAddress := buildFromAddress(tenant.Name, publicRoot)
 
-	emails := make([]resend.Email, 0, len(idx))
+	// Defense-in-depth: drop rows whose email is non-ASCII or unparsable
+	// BEFORE shipping to Resend. processBatch already validates, but a
+	// single bad address would 422 the whole batch and burn every other
+	// row's email — partition first, fail only the bad ones.
+	sendable := make([]int, 0, len(idx))
 	for _, i := range idx {
+		email := strings.ToLower(states[i].input.Email)
+		if err := validateEmailForResend(email); err != nil {
+			states[i].emailSent = sql.NullString{Valid: true, String: kind}
+			states[i].emailStatus = sql.NullString{Valid: true, String: "failed"}
+			if states[i].errorMessage == "" {
+				states[i].errorMessage = "invalid recipient email: " + err.Error()
+			}
+			counters.emailsFailed++
+			f.log.Warn("import.email_skipped_invalid",
+				"import_id", importID, "kind", kind,
+				"row_index", states[i].rowIndex, "reason", err.Error())
+			continue
+		}
+		sendable = append(sendable, i)
+	}
+
+	if len(sendable) == 0 {
+		return
+	}
+
+	emails := make([]resend.Email, 0, len(sendable))
+	for _, i := range sendable {
 		s := &states[i]
 		link := buildMagicLink(proto, tenantDom, s.shortCode, s.magicToken, s.input.Email)
 		subject, html := renderEmail(kind, s, tenant, link, passwordAccount, tmpl, i18n)
@@ -143,7 +171,7 @@ func (f *Feature) sendGroup(
 	if err != nil {
 		f.log.Error("import.email_batch_failed",
 			"import_id", importID, "kind", kind, "error", err.Error())
-		for _, i := range idx {
+		for _, i := range sendable {
 			states[i].emailSent = sql.NullString{Valid: true, String: kind}
 			states[i].emailStatus = sql.NullString{Valid: true, String: "failed"}
 			counters.emailsFailed++
@@ -151,15 +179,66 @@ func (f *Feature) sendGroup(
 		return
 	}
 
-	for _, i := range idx {
+	for _, i := range sendable {
 		states[i].emailSent = sql.NullString{Valid: true, String: kind}
 		states[i].emailStatus = sql.NullString{Valid: true, String: "sent"}
 	}
 	if kind == "login" {
-		counters.loginEmailsSent += len(idx)
+		counters.loginEmailsSent += len(sendable)
 	} else {
-		counters.deliveryEmailsSent += len(idx)
+		counters.deliveryEmailsSent += len(sendable)
 	}
+}
+
+// validateEmailForResend enforces what Resend requires for a recipient:
+// pure ASCII (no SMTPUTF8) AND a parsable RFC 5322 address. Run before
+// every Resend submission to keep one bad row from 422-ing a whole batch.
+func validateEmailForResend(email string) error {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return errors.New("empty")
+	}
+	if !isASCII(email) {
+		return errors.New("non-ASCII characters")
+	}
+	addr, err := mail.ParseAddress(email)
+	if err != nil {
+		return fmt.Errorf("malformed: %w", err)
+	}
+	// ParseAddress accepts `Name <addr>`; reject that — we want a bare addr.
+	if addr.Address != email {
+		return errors.New("must be a bare email address")
+	}
+	return nil
+}
+
+// isASCII reports whether s is purely 7-bit ASCII. Used to keep recipient
+// emails inside the Resend / RFC 5321 SMTPUTF8-free envelope, and to
+// decide whether the From display name needs MIME encoding.
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > 127 {
+			return false
+		}
+	}
+	return true
+}
+
+// buildFromAddress produces the `From` header value for Resend.
+// MIME-encodes the display name when it contains non-ASCII (RFC 2047) so
+// tenant names like "Café & Aulas" don't trip Resend's ASCII-only header
+// validator. Falls back to a plain "no-reply" addr if name sanitization
+// strips everything.
+func buildFromAddress(tenantName, publicRoot string) string {
+	name := sanitizeEmailName(tenantName)
+	addr := "naoresponder@" + publicRoot
+	if name == "" {
+		return addr
+	}
+	if !isASCII(name) {
+		name = mime.QEncoding.Encode("UTF-8", name)
+	}
+	return fmt.Sprintf("%s <%s>", name, addr)
 }
 
 // ---------- Link builder ----------
