@@ -279,7 +279,7 @@ func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger
 				skipped++
 				continue
 			}
-			if migrateRow(ctx, db, evType, whereEvent, withEvent, value, tenantIdN.String, userIdN.String, createdAt) {
+			if migrateRow(ctx, db, id, evType, whereEvent, withEvent, value, tenantIdN.String, userIdN.String, createdAt) {
 				mapped++
 			} else {
 				skipped++
@@ -295,13 +295,18 @@ func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger
 	return nil
 }
 
-func migrateRow(ctx context.Context, db *sql.DB, evType, whereEvent, withEvent string, _ sql.NullInt64, tenantId, userId string, createdAt time.Time) bool {
+// migrateRow uses the source UserEvent.id as the destination row's id, so re-running
+// the migration after a mid-chunk failure is idempotent via ON CONFLICT DO NOTHING.
+// UserEvent.id is globally unique; reusing it across destination tables is fine because
+// each ON CONFLICT is scoped to its own PK.
+func migrateRow(ctx context.Context, db *sql.DB, sourceId, evType, whereEvent, withEvent string, _ sql.NullInt64, tenantId, userId string, createdAt time.Time) bool {
 	switch evType {
 	case "login", "user-login":
 		_, _ = db.ExecContext(ctx, `
 			INSERT INTO "LoginEvent" ("id","tenantId","userId","createdAt")
-			VALUES (gen_random_uuid()::string, $1, $2, $3)
-		`, tenantId, userId, createdAt)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT ("id") DO NOTHING
+		`, sourceId, tenantId, userId, createdAt)
 		return true
 	case "lesson_viewed":
 		if whereEvent == "" {
@@ -309,8 +314,9 @@ func migrateRow(ctx context.Context, db *sql.DB, evType, whereEvent, withEvent s
 		}
 		_, _ = db.ExecContext(ctx, `
 			INSERT INTO "LessonAccessEvent" ("id","tenantId","userId","lessonId","createdAt")
-			VALUES (gen_random_uuid()::string, $1, $2, $3, $4)
-		`, tenantId, userId, whereEvent, createdAt)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT ("id") DO NOTHING
+		`, sourceId, tenantId, userId, whereEvent, createdAt)
 		return true
 	case "exam", "exam-completed", "exam_auto_register":
 		if whereEvent == "" {
@@ -318,8 +324,9 @@ func migrateRow(ctx context.Context, db *sql.DB, evType, whereEvent, withEvent s
 		}
 		_, _ = db.ExecContext(ctx, `
 			INSERT INTO "ExamCompletionEvent" ("id","tenantId","userId","examId","passed","createdAt")
-			VALUES (gen_random_uuid()::string, $1, $2, $3, false, $4)
-		`, tenantId, userId, whereEvent, createdAt)
+			VALUES ($1, $2, $3, $4, false, $5)
+			ON CONFLICT ("id") DO NOTHING
+		`, sourceId, tenantId, userId, whereEvent, createdAt)
 		return true
 	default:
 		return false
