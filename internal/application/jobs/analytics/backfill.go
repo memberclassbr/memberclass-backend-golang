@@ -16,7 +16,9 @@ import (
 //  4. Run RunForMonth for each fully-closed month.
 //
 // from/to are YYYY-MM strings inclusive of from-month and exclusive of to-month+1.
-func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth string) error {
+// When tenantId is non-empty, the run is scoped to that single tenant and never
+// deletes raw data (history is kept until the operator validates the dashboard).
+func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth, tenantId string) error {
 	from, err := parseMonth(fromMonth)
 	if err != nil {
 		return fmt.Errorf("parse from: %w", err)
@@ -27,22 +29,22 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, t
 	}
 	to := toBase.AddDate(0, 1, 0)
 
-	logger.Info("analytics backfill start", "from", from.String(), "to", to.String())
+	logger.Info("analytics backfill start", "from", from.String(), "to", to.String(), "tenantId", tenantId)
 
 	// Step 1: legacy Read fixups.
-	if err := backfillLegacyRead(ctx, db, logger); err != nil {
+	if err := backfillLegacyRead(ctx, db, logger, tenantId); err != nil {
 		return fmt.Errorf("legacy Read backfill: %w", err)
 	}
 
 	// Step 2: distinct types report (operator confirms mapping before scale migration).
-	if err := printDistinctTypes(ctx, db, logger); err != nil {
+	if err := printDistinctTypes(ctx, db, logger, tenantId); err != nil {
 		return fmt.Errorf("distinct types: %w", err)
 	}
 
 	// Step 3: per-month UserEvent migration.
 	for m := from; m.Before(to); m = m.AddDate(0, 1, 0) {
 		end := m.AddDate(0, 1, 0)
-		if err := migrateUserEventsRange(ctx, db, logger, m, end); err != nil {
+		if err := migrateUserEventsRange(ctx, db, logger, m, end, tenantId); err != nil {
 			logger.Error("migrate range failed", "month", m.String(), "err", err.Error())
 		}
 	}
@@ -50,8 +52,14 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, t
 	// Step 4: daily rollup per UTC day in range.
 	daily := NewDailyRollupJob(db, logger)
 	for d := from; d.Before(to); d = d.AddDate(0, 0, 1) {
-		if err := daily.RunForUTCInstant(ctx, d.Add(12*time.Hour)); err != nil {
-			logger.Error("daily rollup failed", "day", d.String(), "err", err.Error())
+		var derr error
+		if tenantId != "" {
+			derr = daily.RunForUTCInstantForTenant(ctx, d.Add(12*time.Hour), tenantId)
+		} else {
+			derr = daily.RunForUTCInstant(ctx, d.Add(12*time.Hour))
+		}
+		if derr != nil {
+			logger.Error("daily rollup failed", "day", d.String(), "err", derr.Error())
 		}
 	}
 
@@ -61,8 +69,14 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, t
 	for m := from; m.Before(to); m = m.AddDate(0, 1, 0) {
 		end := m.AddDate(0, 1, 0)
 		if !end.After(now) {
-			if err := monthly.RunForMonth(ctx, m); err != nil {
-				logger.Error("monthly rollup failed", "month", m.String(), "err", err.Error())
+			var merr error
+			if tenantId != "" {
+				merr = monthly.RunForMonthForTenant(ctx, m, tenantId)
+			} else {
+				merr = monthly.RunForMonth(ctx, m)
+			}
+			if merr != nil {
+				logger.Error("monthly rollup failed", "month", m.String(), "err", merr.Error())
 			}
 		}
 	}
@@ -75,12 +89,33 @@ func parseMonth(s string) (time.Time, error) {
 	return time.Parse("2006-01", s)
 }
 
-func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger) error {
+func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
 	// Populate readAt for completed reads where it's NULL.
-	res, err := db.ExecContext(ctx, `
-		UPDATE "Read" SET "readAt" = "createdAt"
-		WHERE "read" = true AND "readAt" IS NULL
-	`)
+	// Tenant scope is applied via the lesson chain because Read.tenantId itself may still be NULL.
+	var (
+		res sql.Result
+		err error
+	)
+	if tenantId == "" {
+		res, err = db.ExecContext(ctx, `
+			UPDATE "Read" SET "readAt" = "createdAt"
+			WHERE "read" = true AND "readAt" IS NULL
+		`)
+	} else {
+		res, err = db.ExecContext(ctx, `
+			UPDATE "Read" r
+			SET "readAt" = r."createdAt"
+			FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
+			WHERE r."read" = true AND r."readAt" IS NULL
+			  AND r."lessonId" IS NOT NULL
+			  AND l."id" = r."lessonId"
+			  AND m."id" = l."moduleId"
+			  AND s."id" = m."sectionId"
+			  AND c."id" = s."courseId"
+			  AND v."id" = c."vitrineId"
+			  AND v."tenantId" = $1
+		`, tenantId)
+	}
 	if err != nil {
 		return err
 	}
@@ -88,18 +123,34 @@ func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger) er
 	logger.Info("Read.readAt backfilled", "rows", n)
 
 	// Populate tenantId via lesson→module→section→course→vitrine→tenant chain.
-	res, err = db.ExecContext(ctx, `
-		UPDATE "Read" r
-		SET "tenantId" = v."tenantId"
-		FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
-		WHERE r."tenantId" IS NULL
-		  AND r."lessonId" IS NOT NULL
-		  AND l."id" = r."lessonId"
-		  AND m."id" = l."moduleId"
-		  AND s."id" = m."sectionId"
-		  AND c."id" = s."courseId"
-		  AND v."id" = c."vitrineId"
-	`)
+	if tenantId == "" {
+		res, err = db.ExecContext(ctx, `
+			UPDATE "Read" r
+			SET "tenantId" = v."tenantId"
+			FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
+			WHERE r."tenantId" IS NULL
+			  AND r."lessonId" IS NOT NULL
+			  AND l."id" = r."lessonId"
+			  AND m."id" = l."moduleId"
+			  AND s."id" = m."sectionId"
+			  AND c."id" = s."courseId"
+			  AND v."id" = c."vitrineId"
+		`)
+	} else {
+		res, err = db.ExecContext(ctx, `
+			UPDATE "Read" r
+			SET "tenantId" = v."tenantId"
+			FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
+			WHERE r."tenantId" IS NULL
+			  AND r."lessonId" IS NOT NULL
+			  AND l."id" = r."lessonId"
+			  AND m."id" = l."moduleId"
+			  AND s."id" = m."sectionId"
+			  AND c."id" = s."courseId"
+			  AND v."id" = c."vitrineId"
+			  AND v."tenantId" = $1
+		`, tenantId)
+	}
 	if err != nil {
 		return err
 	}
@@ -108,10 +159,22 @@ func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger) er
 	return nil
 }
 
-func printDistinctTypes(ctx context.Context, db *sql.DB, logger ports.Logger) error {
-	rows, err := db.QueryContext(ctx, `
-		SELECT "type", COUNT(*) FROM "UserEvent" GROUP BY "type" ORDER BY 2 DESC LIMIT 200
-	`)
+func printDistinctTypes(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if tenantId == "" {
+		rows, err = db.QueryContext(ctx, `
+			SELECT "type", COUNT(*) FROM "UserEvent" GROUP BY "type" ORDER BY 2 DESC LIMIT 200
+		`)
+	} else {
+		rows, err = db.QueryContext(ctx, `
+			SELECT "type", COUNT(*) FROM "UserEvent"
+			WHERE "usersOnTenantsTenantId" = $1
+			GROUP BY "type" ORDER BY 2 DESC LIMIT 200
+		`, tenantId)
+	}
 	if err != nil {
 		return err
 	}
@@ -129,20 +192,36 @@ func printDistinctTypes(ctx context.Context, db *sql.DB, logger ports.Logger) er
 
 // migrateUserEventsRange copies UserEvent rows in [from, to) into typed event tables.
 // Unmapped types are skipped and counted. Uses 50k-row chunks.
-func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger, from, to time.Time) error {
+func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger, from, to time.Time, tenantId string) error {
 	const chunk = 50_000
 	var offset int
 	mapped := 0
 	skipped := 0
 	for {
-		rows, err := db.QueryContext(ctx, `
-			SELECT id, type, "whereEvent", "withEvent", value,
-			       "usersOnTenantsTenantId", "usersOnTenantsUserId", "createdAt"
-			FROM "UserEvent"
-			WHERE "createdAt" >= $1 AND "createdAt" < $2
-			ORDER BY "createdAt", id
-			LIMIT $3 OFFSET $4
-		`, from, to, chunk, offset)
+		var (
+			rows *sql.Rows
+			err  error
+		)
+		if tenantId == "" {
+			rows, err = db.QueryContext(ctx, `
+				SELECT id, type, "whereEvent", "withEvent", value,
+				       "usersOnTenantsTenantId", "usersOnTenantsUserId", "createdAt"
+				FROM "UserEvent"
+				WHERE "createdAt" >= $1 AND "createdAt" < $2
+				ORDER BY "createdAt", id
+				LIMIT $3 OFFSET $4
+			`, from, to, chunk, offset)
+		} else {
+			rows, err = db.QueryContext(ctx, `
+				SELECT id, type, "whereEvent", "withEvent", value,
+				       "usersOnTenantsTenantId", "usersOnTenantsUserId", "createdAt"
+				FROM "UserEvent"
+				WHERE "createdAt" >= $1 AND "createdAt" < $2
+				  AND "usersOnTenantsTenantId" = $5
+				ORDER BY "createdAt", id
+				LIMIT $3 OFFSET $4
+			`, from, to, chunk, offset, tenantId)
+		}
 		if err != nil {
 			return err
 		}

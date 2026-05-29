@@ -45,6 +45,26 @@ func (j *DailyRollupJob) RunForUTCInstant(ctx context.Context, anyUTCInDay time.
 	return nil
 }
 
+// RunForUTCInstantForTenant is the single-tenant variant used by backfill.
+func (j *DailyRollupJob) RunForUTCInstantForTenant(ctx context.Context, anyUTCInDay time.Time, tenantId string) error {
+	tz, err := j.lookupTenantTimezone(ctx, tenantId)
+	if err != nil {
+		return err
+	}
+	from := anyUTCInDay.Add(-36 * time.Hour)
+	to := anyUTCInDay.Add(12 * time.Hour)
+	return j.rollupTenantDays(ctx, tenantId, tz, from, to)
+}
+
+func (j *DailyRollupJob) lookupTenantTimezone(ctx context.Context, tenantId string) (string, error) {
+	var tz string
+	err := j.db.QueryRowContext(ctx,
+		`SELECT COALESCE("timezone", 'America/Sao_Paulo') FROM "Tenant" WHERE id = $1`,
+		tenantId,
+	).Scan(&tz)
+	return tz, err
+}
+
 type tenantTz struct {
 	id       string
 	timezone string

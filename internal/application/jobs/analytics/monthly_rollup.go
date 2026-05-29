@@ -56,6 +56,19 @@ func (j *MonthlyRollupJob) RunForMonth(ctx context.Context, month time.Time) err
 	return nil
 }
 
+// RunForMonthForTenant is the single-tenant variant used by backfill. Never deletes
+// raw data — backfill workflow keeps history intact.
+func (j *MonthlyRollupJob) RunForMonthForTenant(ctx context.Context, month time.Time, tenantId string) error {
+	next := month.AddDate(0, 1, 0)
+	if err := j.rollupTenantCounters(ctx, tenantId, month, next); err != nil {
+		return fmt.Errorf("counters: %w", err)
+	}
+	if err := j.rollupTenantDetails(ctx, tenantId, month, next); err != nil {
+		return fmt.Errorf("details: %w", err)
+	}
+	return nil
+}
+
 func (j *MonthlyRollupJob) listTenantsWithActivity(ctx context.Context, from, to time.Time) ([]string, error) {
 	rows, err := j.db.QueryContext(ctx, `
 		SELECT DISTINCT "tenantId" FROM "TenantDailyUserActivity"
