@@ -89,73 +89,109 @@ func parseMonth(s string) (time.Time, error) {
 	return time.Parse("2006-01", s)
 }
 
-func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
-	// Populate readAt for completed reads where it's NULL.
-	// Tenant scope is applied via the lesson chain because Read.tenantId itself may still be NULL.
-	var (
-		res sql.Result
-		err error
-	)
-	if tenantId == "" {
-		res, err = db.ExecContext(ctx, `
-			UPDATE "Read" SET "readAt" = "createdAt"
-			WHERE "read" = true AND "readAt" IS NULL
-		`)
-	} else {
-		res, err = db.ExecContext(ctx, `
-			UPDATE "Read" r
-			SET "readAt" = r."createdAt"
-			FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
-			WHERE r."read" = true AND r."readAt" IS NULL
-			  AND r."lessonId" IS NOT NULL
-			  AND l."id" = r."lessonId"
-			  AND m."id" = l."moduleId"
-			  AND s."id" = m."sectionId"
-			  AND c."id" = s."courseId"
-			  AND v."id" = c."vitrineId"
-			  AND v."tenantId" = $1
-		`, tenantId)
-	}
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	logger.Info("Read.readAt backfilled", "rows", n)
+// readBackfillBatchSize keeps each UPDATE's transaction below CockroachDB's
+// lock-tracking memory budget (~1MB). 5k row updates run comfortably under that.
+const readBackfillBatchSize = 5_000
 
-	// Populate tenantId via lesson→module→section→course→vitrine→tenant chain.
-	if tenantId == "" {
-		res, err = db.ExecContext(ctx, `
-			UPDATE "Read" r
-			SET "tenantId" = v."tenantId"
-			FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
-			WHERE r."tenantId" IS NULL
-			  AND r."lessonId" IS NOT NULL
-			  AND l."id" = r."lessonId"
-			  AND m."id" = l."moduleId"
-			  AND s."id" = m."sectionId"
-			  AND c."id" = s."courseId"
-			  AND v."id" = c."vitrineId"
-		`)
-	} else {
-		res, err = db.ExecContext(ctx, `
-			UPDATE "Read" r
-			SET "tenantId" = v."tenantId"
-			FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
-			WHERE r."tenantId" IS NULL
-			  AND r."lessonId" IS NOT NULL
-			  AND l."id" = r."lessonId"
-			  AND m."id" = l."moduleId"
-			  AND s."id" = m."sectionId"
-			  AND c."id" = s."courseId"
-			  AND v."id" = c."vitrineId"
-			  AND v."tenantId" = $1
-		`, tenantId)
-	}
-	if err != nil {
+func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
+	// Step 1: readAt = createdAt for completed reads where readAt IS NULL.
+	// Tenant scope is applied via the lesson chain because Read.tenantId may still be NULL.
+	if err := batchUpdate(ctx, logger, "Read.readAt", func() (sql.Result, error) {
+		if tenantId == "" {
+			return db.ExecContext(ctx, `
+				UPDATE "Read" SET "readAt" = "createdAt"
+				WHERE "id" IN (
+					SELECT "id" FROM "Read"
+					WHERE "read" = true AND "readAt" IS NULL
+					LIMIT $1
+				)
+			`, readBackfillBatchSize)
+		}
+		return db.ExecContext(ctx, `
+			UPDATE "Read" SET "readAt" = "createdAt"
+			WHERE "id" IN (
+				SELECT r."id"
+				FROM "Read" r, "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
+				WHERE r."read" = true AND r."readAt" IS NULL
+				  AND r."lessonId" IS NOT NULL
+				  AND l."id" = r."lessonId"
+				  AND m."id" = l."moduleId"
+				  AND s."id" = m."sectionId"
+				  AND c."id" = s."courseId"
+				  AND v."id" = c."vitrineId"
+				  AND v."tenantId" = $1
+				LIMIT $2
+			)
+		`, tenantId, readBackfillBatchSize)
+	}); err != nil {
 		return err
 	}
-	n, _ = res.RowsAffected()
-	logger.Info("Read.tenantId backfilled", "rows", n)
+
+	// Step 2: tenantId = v.tenantId via lesson→module→section→course→vitrine chain.
+	// Uses a correlated subquery so each batched UPDATE resolves the chain per row.
+	return batchUpdate(ctx, logger, "Read.tenantId", func() (sql.Result, error) {
+		if tenantId == "" {
+			return db.ExecContext(ctx, `
+				UPDATE "Read" SET "tenantId" = (
+					SELECT v."tenantId"
+					FROM "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
+					WHERE l."id" = "Read"."lessonId"
+					  AND m."id" = l."moduleId"
+					  AND s."id" = m."sectionId"
+					  AND c."id" = s."courseId"
+					  AND v."id" = c."vitrineId"
+					LIMIT 1
+				)
+				WHERE "id" IN (
+					SELECT r."id"
+					FROM "Read" r, "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
+					WHERE r."tenantId" IS NULL
+					  AND r."lessonId" IS NOT NULL
+					  AND l."id" = r."lessonId"
+					  AND m."id" = l."moduleId"
+					  AND s."id" = m."sectionId"
+					  AND c."id" = s."courseId"
+					  AND v."id" = c."vitrineId"
+					LIMIT $1
+				)
+			`, readBackfillBatchSize)
+		}
+		return db.ExecContext(ctx, `
+			UPDATE "Read" SET "tenantId" = $1
+			WHERE "id" IN (
+				SELECT r."id"
+				FROM "Read" r, "Lesson" l, "Module" m, "Section" s, "Course" c, "Vitrine" v
+				WHERE r."tenantId" IS NULL
+				  AND r."lessonId" IS NOT NULL
+				  AND l."id" = r."lessonId"
+				  AND m."id" = l."moduleId"
+				  AND s."id" = m."sectionId"
+				  AND c."id" = s."courseId"
+				  AND v."id" = c."vitrineId"
+				  AND v."tenantId" = $1
+				LIMIT $2
+			)
+		`, tenantId, readBackfillBatchSize)
+	})
+}
+
+// batchUpdate loops the given UPDATE until RowsAffected = 0 to keep each transaction
+// small. Logs cumulative progress every batch.
+func batchUpdate(ctx context.Context, logger ports.Logger, label string, run func() (sql.Result, error)) error {
+	var total int64
+	for {
+		res, err := run()
+		if err != nil {
+			return fmt.Errorf("%s batch: %w", label, err)
+		}
+		n, _ := res.RowsAffected()
+		total += n
+		logger.Info(label+" batch", "rows", n, "total", total)
+		if n == 0 {
+			break
+		}
+	}
+	logger.Info(label+" backfilled", "rows", total)
 	return nil
 }
 
