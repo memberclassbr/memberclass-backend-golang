@@ -25,7 +25,7 @@ func prevMonthStart() time.Time {
 func main() {
 	_ = godotenv.Load()
 
-	cmd := flag.String("cmd", "daily", "daily|monthly|backfill")
+	cmd := flag.String("cmd", "daily", "daily|monthly|backfill|backfill-extras")
 	from := flag.String("from", "", "YYYY-MM (backfill)")
 	to := flag.String("to", "", "YYYY-MM (backfill)")
 	tenantId := flag.String("tenantId", "", "scope backfill/daily/monthly to a single tenant (empty = all)")
@@ -68,6 +68,10 @@ func main() {
 		}
 		if err := analyticsjobs.Backfill(ctx, db, logr, *from, *to, *tenantId); err != nil {
 			log.Fatalf("backfill: %v", err)
+		}
+	case "backfill-extras":
+		if err := analyticsjobs.BackfillExtras(ctx, db, logr, *tenantId); err != nil {
+			log.Fatalf("backfill-extras: %v", err)
 		}
 	default:
 		log.Fatalf("unknown cmd: %s", *cmd)
