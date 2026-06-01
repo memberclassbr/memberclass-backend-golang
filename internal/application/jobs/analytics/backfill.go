@@ -413,47 +413,65 @@ func resetTenantData(ctx context.Context, db *sql.DB, logger ports.Logger, tenan
 	return nil
 }
 
+// backfillTenantOrderBy maps an --order flag to a SQL ORDER BY clause. The
+// returned text is a constant from this switch (never user input); tenant id is
+// always the tiebreak so paging stays deterministic for equal counts.
+func backfillTenantOrderBy(order string) string {
+	switch order {
+	case "size-asc": // smallest tenants first — validate the pipeline on cheap ones
+		return `COUNT(*) ASC, "usersOnTenantsTenantId"`
+	case "size-desc": // largest first
+		return `COUNT(*) DESC, "usersOnTenantsTenantId"`
+	default: // "id" — stable by tenant id
+		return `"usersOnTenantsTenantId"`
+	}
+}
+
 // ListTenantsWithData prints every tenant that has UserEvent data, in the SAME
 // order BackfillAllTenants pages through (so the idx column lines up with
-// --offset), with its event count — use it to plan the migration waves.
-func ListTenantsWithData(ctx context.Context, db *sql.DB, logger ports.Logger) error {
-	rows, err := db.QueryContext(ctx, `
+// --offset), with its event count and a running cumulative — use it to plan the
+// migration waves.
+func ListTenantsWithData(ctx context.Context, db *sql.DB, logger ports.Logger, order string) error {
+	q := fmt.Sprintf(`
 		SELECT "usersOnTenantsTenantId" AS t, COUNT(*) AS c
 		FROM "UserEvent"
 		WHERE "usersOnTenantsTenantId" IS NOT NULL
 		GROUP BY "usersOnTenantsTenantId"
-		ORDER BY "usersOnTenantsTenantId"`)
+		ORDER BY %s`, backfillTenantOrderBy(order))
+	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	idx := 0
-	var grand int64
+	var cum int64
 	for rows.Next() {
 		var t string
 		var c int64
 		if err := rows.Scan(&t, &c); err != nil {
 			return err
 		}
-		logger.Info("tenant with data", "idx", idx, "tenantId", t, "userEvents", c)
+		cum += c
+		logger.Info("tenant with data", "idx", idx, "tenantId", t, "userEvents", c, "cumUserEvents", cum)
 		idx++
-		grand += c
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	logger.Info("tenants with data summary", "tenants", idx, "userEvents", grand)
+	logger.Info("tenants with data summary", "order", order, "tenants", idx, "userEvents", cum)
 	return nil
 }
 
 // listBackfillTenants returns tenant ids that have UserEvent data to migrate,
-// ordered deterministically so --offset/--limit page through them stably.
-func listBackfillTenants(ctx context.Context, db *sql.DB) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT DISTINCT "usersOnTenantsTenantId"
+// in the requested order so --offset/--limit page through them stably.
+func listBackfillTenants(ctx context.Context, db *sql.DB, order string) ([]string, error) {
+	q := fmt.Sprintf(`
+		SELECT "usersOnTenantsTenantId"
 		FROM "UserEvent"
 		WHERE "usersOnTenantsTenantId" IS NOT NULL
-		ORDER BY "usersOnTenantsTenantId"`)
+		GROUP BY "usersOnTenantsTenantId"
+		ORDER BY %s`, backfillTenantOrderBy(order))
+	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -474,8 +492,8 @@ func listBackfillTenants(ctx context.Context, db *sql.DB) ([]string, error) {
 // (stably ordered) tenant list so the migration can run in small, observable
 // waves; the log prints the next offset to use. Each tenant is independent and
 // idempotent, so the run honors ctx between chunks and can be stopped/resumed.
-func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, o BackfillOpts, concurrency, offset, limit int) error {
-	all, err := listBackfillTenants(ctx, db)
+func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, o BackfillOpts, concurrency, offset, limit int, order string) error {
+	all, err := listBackfillTenants(ctx, db, order)
 	if err != nil {
 		return fmt.Errorf("list tenants: %w", err)
 	}
@@ -496,7 +514,7 @@ func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, o 
 		concurrency = 1
 	}
 	logger.Info("backfill all-tenants start",
-		"tenantsWithData", total, "offset", offset, "processing", len(tenants),
+		"tenantsWithData", total, "order", order, "offset", offset, "processing", len(tenants),
 		"concurrency", concurrency, "reset", o.Reset, "chunk", o.ChunkSize, "sleep", o.Sleep.String())
 
 	sem := make(chan struct{}, concurrency)

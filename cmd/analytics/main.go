@@ -38,6 +38,7 @@ func main() {
 	reset := flag.Bool("reset", false, "backfill: delete each tenant's backfill-derived rows before re-migrating")
 	offset := flag.Int("offset", 0, "all-tenants backfill: skip the first N tenants-with-data (wave paging)")
 	limit := flag.Int("limit", 0, "all-tenants backfill: process at most N tenants this run (0 = all)")
+	order := flag.String("order", "id", "all-tenants/list order: id|size-asc (smallest first)|size-desc")
 	flag.Parse()
 
 	logr := logger.NewLogger()
@@ -91,7 +92,7 @@ func main() {
 				log.Fatalf("backfill: %v", err)
 			}
 		} else {
-			if err := analyticsjobs.BackfillAllTenants(ctx, db, logr, opts, *concurrency, *offset, *limit); err != nil {
+			if err := analyticsjobs.BackfillAllTenants(ctx, db, logr, opts, *concurrency, *offset, *limit, *order); err != nil {
 				log.Fatalf("backfill: %v", err)
 			}
 		}
@@ -100,7 +101,7 @@ func main() {
 			log.Fatalf("backfill-extras: %v", err)
 		}
 	case "list-tenants":
-		if err := analyticsjobs.ListTenantsWithData(ctx, db, logr); err != nil {
+		if err := analyticsjobs.ListTenantsWithData(ctx, db, logr, *order); err != nil {
 			log.Fatalf("list-tenants: %v", err)
 		}
 	default:
