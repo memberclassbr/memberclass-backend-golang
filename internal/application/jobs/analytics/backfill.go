@@ -413,31 +413,47 @@ func resetTenantData(ctx context.Context, db *sql.DB, logger ports.Logger, tenan
 	return nil
 }
 
-// backfillTenantOrderBy maps an --order flag to a SQL ORDER BY clause. The
-// returned text is a constant from this switch (never user input); tenant id is
-// always the tiebreak so paging stays deterministic for equal counts.
+// pendingUserEventWhere matches handled-type UserEvent rows NOT yet migrated to
+// their destination table (the destination reuses UserEvent.id). It's how we
+// count remaining work and skip tenants already fully migrated — a tenant drops
+// off the list/queue once its events are in the typed tables. A --reset deletes
+// the destination rows, so the tenant correctly reappears as pending.
+// The surrounding query must alias UserEvent as `ue`.
+const pendingUserEventWhere = `ue."usersOnTenantsTenantId" IS NOT NULL AND (
+		(ue."type" IN ('login','user-login')
+		   AND NOT EXISTS (SELECT 1 FROM "LoginEvent" d WHERE d."id" = ue."id"))
+		OR (ue."type" = 'lesson_viewed' AND ue."whereEvent" <> ''
+		   AND NOT EXISTS (SELECT 1 FROM "LessonAccessEvent" d WHERE d."id" = ue."id"))
+		OR (ue."type" IN ('exam','exam-completed','exam_auto_register') AND ue."whereEvent" <> ''
+		   AND NOT EXISTS (SELECT 1 FROM "ExamCompletionEvent" d WHERE d."id" = ue."id"))
+	)`
+
+// backfillTenantOrderBy maps an --order flag to an ORDER BY over the pending
+// query's aliases (c = pending event count, t = tenant id). Constant from this
+// switch (never user input); tenant id is always the tiebreak.
 func backfillTenantOrderBy(order string) string {
 	switch order {
-	case "size-asc": // smallest tenants first — validate the pipeline on cheap ones
-		return `COUNT(*) ASC, "usersOnTenantsTenantId"`
-	case "size-desc": // largest first
-		return `COUNT(*) DESC, "usersOnTenantsTenantId"`
+	case "size-asc": // fewest pending events first — validate on cheap tenants
+		return `c ASC, t`
+	case "size-desc": // most pending first
+		return `c DESC, t`
 	default: // "id" — stable by tenant id
-		return `"usersOnTenantsTenantId"`
+		return `t`
 	}
 }
 
-// ListTenantsWithData prints every tenant that has UserEvent data, in the SAME
-// order BackfillAllTenants pages through (so the idx column lines up with
-// --offset), with its event count and a running cumulative — use it to plan the
-// migration waves.
+// ListTenantsWithData prints tenants that still have data to migrate (handled
+// UserEvent rows not yet in the typed tables), in the order the backfill
+// processes them, with the pending count + running cumulative. Fully-migrated
+// tenants are omitted, so the list shrinks as you go.
 func ListTenantsWithData(ctx context.Context, db *sql.DB, logger ports.Logger, order string) error {
 	q := fmt.Sprintf(`
-		SELECT "usersOnTenantsTenantId" AS t, COUNT(*) AS c
-		FROM "UserEvent"
-		WHERE "usersOnTenantsTenantId" IS NOT NULL
-		GROUP BY "usersOnTenantsTenantId"
-		ORDER BY %s`, backfillTenantOrderBy(order))
+		SELECT ue."usersOnTenantsTenantId" AS t, COUNT(*) AS c
+		FROM "UserEvent" ue
+		WHERE %s
+		GROUP BY ue."usersOnTenantsTenantId"
+		HAVING COUNT(*) > 0
+		ORDER BY %s`, pendingUserEventWhere, backfillTenantOrderBy(order))
 	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return err
@@ -452,25 +468,38 @@ func ListTenantsWithData(ctx context.Context, db *sql.DB, logger ports.Logger, o
 			return err
 		}
 		cum += c
-		logger.Info("tenant with data", "idx", idx, "tenantId", t, "userEvents", c, "cumUserEvents", cum)
+		logger.Info("tenant pending", "idx", idx, "tenantId", t, "pendingEvents", c, "cumPending", cum)
 		idx++
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	logger.Info("tenants with data summary", "order", order, "tenants", idx, "userEvents", cum)
+
+	// Legacy Read fixup still pending (completed reads missing readAt). Not
+	// attributed per tenant here — Read.tenantId is set BY the backfill itself.
+	var readPending int64
+	if err := db.QueryRowContext(ctx,
+		`SELECT count(*) FROM "Read" WHERE "read" = true AND "readAt" IS NULL`).Scan(&readPending); err != nil {
+		return err
+	}
+
+	logger.Info("pending summary", "order", order,
+		"tenantsPending", idx, "pendingEvents", cum, "readsMissingReadAt", readPending)
 	return nil
 }
 
-// listBackfillTenants returns tenant ids that have UserEvent data to migrate,
-// in the requested order so --offset/--limit page through them stably.
+// listBackfillTenants returns tenants that still have handled UserEvent rows not
+// yet migrated, in the requested order. Fully-migrated tenants are excluded, so
+// each run picks up the next pending tenants (the list shrinks — use --offset=0
+// and just re-run until it's empty).
 func listBackfillTenants(ctx context.Context, db *sql.DB, order string) ([]string, error) {
 	q := fmt.Sprintf(`
-		SELECT "usersOnTenantsTenantId"
-		FROM "UserEvent"
-		WHERE "usersOnTenantsTenantId" IS NOT NULL
-		GROUP BY "usersOnTenantsTenantId"
-		ORDER BY %s`, backfillTenantOrderBy(order))
+		SELECT ue."usersOnTenantsTenantId" AS t, COUNT(*) AS c
+		FROM "UserEvent" ue
+		WHERE %s
+		GROUP BY ue."usersOnTenantsTenantId"
+		HAVING COUNT(*) > 0
+		ORDER BY %s`, pendingUserEventWhere, backfillTenantOrderBy(order))
 	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
@@ -479,7 +508,8 @@ func listBackfillTenants(ctx context.Context, db *sql.DB, order string) ([]strin
 	out := make([]string, 0, 256)
 	for rows.Next() {
 		var t string
-		if err := rows.Scan(&t); err != nil {
+		var c int64
+		if err := rows.Scan(&t, &c); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
