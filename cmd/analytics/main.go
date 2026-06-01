@@ -5,6 +5,8 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"time"
 
@@ -30,6 +32,9 @@ func main() {
 	to := flag.String("to", "", "YYYY-MM (backfill)")
 	tenantId := flag.String("tenantId", "", "scope backfill/daily/monthly to a single tenant (empty = all)")
 	skipUserEvent := flag.Bool("skipUserEvent", false, "skip Read fixups + UserEvent migration; only run daily/monthly rollup")
+	concurrency := flag.Int("concurrency", 2, "all-tenants backfill: tenants processed in parallel")
+	chunk := flag.Int("chunk", 5000, "backfill: rows per set-based INSERT...SELECT chunk")
+	sleepMs := flag.Int("sleepMs", 100, "backfill: pause between chunks (ms) to ease DB load")
 	flag.Parse()
 
 	logr := logger.NewLogger()
@@ -40,7 +45,10 @@ func main() {
 	}
 	defer db.Close()
 
-	ctx := context.Background()
+	// Cancel on Ctrl-C / SIGTERM so a long backfill stops cleanly between chunks.
+	// The work is idempotent (ON CONFLICT), so a stopped run can just be re-run.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	switch *cmd {
 	case "daily":
@@ -67,8 +75,15 @@ func main() {
 		if *from == "" || *to == "" {
 			log.Fatal("backfill requires --from=YYYY-MM --to=YYYY-MM")
 		}
-		if err := analyticsjobs.Backfill(ctx, db, logr, *from, *to, *tenantId, *skipUserEvent); err != nil {
-			log.Fatalf("backfill: %v", err)
+		sleep := time.Duration(*sleepMs) * time.Millisecond
+		if *tenantId != "" {
+			if err := analyticsjobs.Backfill(ctx, db, logr, *from, *to, *tenantId, *skipUserEvent, *chunk, sleep); err != nil {
+				log.Fatalf("backfill: %v", err)
+			}
+		} else {
+			if err := analyticsjobs.BackfillAllTenants(ctx, db, logr, *from, *to, *skipUserEvent, *concurrency, *chunk, sleep); err != nil {
+				log.Fatalf("backfill: %v", err)
+			}
 		}
 	case "backfill-extras":
 		if err := analyticsjobs.BackfillExtras(ctx, db, logr, *tenantId); err != nil {

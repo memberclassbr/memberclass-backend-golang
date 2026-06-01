@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -18,7 +19,7 @@ import (
 // from/to are YYYY-MM strings inclusive of from-month and exclusive of to-month+1.
 // When tenantId is non-empty, the run is scoped to that single tenant and never
 // deletes raw data (history is kept until the operator validates the dashboard).
-func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth, tenantId string, skipUserEvent bool) error {
+func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth, tenantId string, skipUserEvent bool, chunkSize int, sleep time.Duration) error {
 	from, err := parseMonth(fromMonth)
 	if err != nil {
 		return fmt.Errorf("parse from: %w", err)
@@ -42,12 +43,16 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, t
 			return fmt.Errorf("distinct types: %w", err)
 		}
 
-		// Step 3: per-month UserEvent migration.
-		for m := from; m.Before(to); m = m.AddDate(0, 1, 0) {
-			end := m.AddDate(0, 1, 0)
-			if err := migrateUserEventsRange(ctx, db, logger, m, end, tenantId); err != nil {
-				logger.Error("migrate range failed", "month", m.String(), "err", err.Error())
-			}
+		// Step 3: UserEvent migration — set-based INSERT...SELECT with keyset
+		// pagination (one pass over [from,to) per type, not one INSERT per row).
+		if err := migrateUserEvents(ctx, db, logger, tenantId, from, to, chunkSize, sleep); err != nil {
+			return fmt.Errorf("UserEvent migration: %w", err)
+		}
+
+		// Step 3b: CommentEvent/CommunityPostEvent from primary entities. Runs
+		// BEFORE the rollups below so daily/monthly counts include comments/posts.
+		if err := BackfillExtras(ctx, db, logger, tenantId); err != nil {
+			logger.Error("backfill-extras failed", "tenantId", tenantId, "err", err.Error())
 		}
 	} else {
 		logger.Info("skipping Read backfill + UserEvent migration (--skipUserEvent)")
@@ -237,122 +242,179 @@ func printDistinctTypes(ctx context.Context, db *sql.DB, logger ports.Logger, te
 	return rows.Err()
 }
 
-// migrateUserEventsRange copies UserEvent rows in [from, to) into typed event tables.
-// Unmapped types are skipped and counted. Uses 50k-row chunks.
-func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger, from, to time.Time, tenantId string) error {
-	const chunk = 50_000
-	var offset int
-	mapped := 0
-	skipped := 0
-	failedRows := 0
-	for {
-		var (
-			rows *sql.Rows
-			err  error
-		)
-		if tenantId == "" {
-			rows, err = db.QueryContext(ctx, `
-				SELECT id, type, "whereEvent", "withEvent", value,
-				       "usersOnTenantsTenantId", "usersOnTenantsUserId", "createdAt"
-				FROM "UserEvent"
-				WHERE "createdAt" >= $1 AND "createdAt" < $2
-				ORDER BY "createdAt", id
-				LIMIT $3 OFFSET $4
-			`, from, to, chunk, offset)
-		} else {
-			rows, err = db.QueryContext(ctx, `
-				SELECT id, type, "whereEvent", "withEvent", value,
-				       "usersOnTenantsTenantId", "usersOnTenantsUserId", "createdAt"
-				FROM "UserEvent"
-				WHERE "createdAt" >= $1 AND "createdAt" < $2
-				  AND "usersOnTenantsTenantId" = $5
-				ORDER BY "createdAt", id
-				LIMIT $3 OFFSET $4
-			`, from, to, chunk, offset, tenantId)
-		}
-		if err != nil {
-			return err
-		}
-		read := 0
-		for rows.Next() {
-			read++
-			var (
-				id, evType                                  string
-				whereEvent, withEvent                       string
-				value                                       sql.NullInt64
-				tenantIdN, userIdN                          sql.NullString
-				createdAt                                   time.Time
-			)
-			if err := rows.Scan(&id, &evType, &whereEvent, &withEvent, &value, &tenantIdN, &userIdN, &createdAt); err != nil {
-				rows.Close()
-				return err
-			}
-			if !tenantIdN.Valid || !userIdN.Valid {
-				skipped++
-				continue
-			}
-			mappedRow, mErr := migrateRow(ctx, db, id, evType, whereEvent, withEvent, value, tenantIdN.String, userIdN.String, createdAt)
-			if mErr != nil {
-				// Don't abort the chunk on one bad row — log, count, keep going.
-				// Re-running the backfill is idempotent (ON CONFLICT DO NOTHING),
-				// so the operator can rerun after fixing the cause.
-				logger.Error("UserEvent migrate row failed", "id", id, "type", evType, "err", mErr.Error())
-				failedRows++
-				continue
-			}
-			if mappedRow {
-				mapped++
-			} else {
-				skipped++
-			}
-		}
-		rows.Close()
-		if read < chunk {
-			break
-		}
-		offset += chunk
+// eventMigration maps a set of legacy UserEvent.type values to a typed event
+// table. The destination row reuses UserEvent.id so re-runs are idempotent via
+// ON CONFLICT ("id") DO NOTHING.
+type eventMigration struct {
+	label        string
+	destTable    string
+	destCols     string // INSERT column list
+	selectExpr   string // SELECT expressions from "UserEvent" ue
+	typeIn       string // SQL literal list for type IN (...)
+	requireWhere bool   // lesson/exam need a non-empty whereEvent
+}
+
+// userEventMigrations is a hardcoded allowlist — the SQL fragments below are
+// constants, never user input.
+var userEventMigrations = []eventMigration{
+	{
+		label:      "LoginEvent",
+		destTable:  "LoginEvent",
+		destCols:   `"id","tenantId","userId","createdAt"`,
+		selectExpr: `ue.id, ue."usersOnTenantsTenantId", ue."usersOnTenantsUserId", ue."createdAt"`,
+		typeIn:     `'login','user-login'`,
+	},
+	{
+		label:        "LessonAccessEvent",
+		destTable:    "LessonAccessEvent",
+		destCols:     `"id","tenantId","userId","lessonId","createdAt"`,
+		selectExpr:   `ue.id, ue."usersOnTenantsTenantId", ue."usersOnTenantsUserId", ue."whereEvent", ue."createdAt"`,
+		typeIn:       `'lesson_viewed'`,
+		requireWhere: true,
+	},
+	{
+		label:        "ExamCompletionEvent",
+		destTable:    "ExamCompletionEvent",
+		destCols:     `"id","tenantId","userId","examId","passed","createdAt"`,
+		selectExpr:   `ue.id, ue."usersOnTenantsTenantId", ue."usersOnTenantsUserId", ue."whereEvent", false, ue."createdAt"`,
+		typeIn:       `'exam','exam-completed','exam_auto_register'`,
+		requireWhere: true,
+	},
+}
+
+const defaultBackfillChunk = 5_000
+
+// migrateUserEvents copies a tenant's UserEvent rows in [from, to) into the
+// typed event tables using set-based INSERT...SELECT with keyset (id > cursor)
+// pagination. Replaces the old per-row INSERT + OFFSET loop: O(n) instead of
+// O(n^2), and ~one statement per chunk instead of one per row.
+func migrateUserEvents(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string, from, to time.Time, chunkSize int, sleep time.Duration) error {
+	if chunkSize <= 0 {
+		chunkSize = defaultBackfillChunk
 	}
-	logger.Info("UserEvent migration range done", "from", from.String(), "mapped", mapped, "skipped", skipped, "failed", failedRows)
-	if failedRows > 0 {
-		return fmt.Errorf("UserEvent migration [%s, %s): %d rows failed to insert", from.Format("2006-01-02"), to.Format("2006-01-02"), failedRows)
+	for _, m := range userEventMigrations {
+		whereExtra := ""
+		if m.requireWhere {
+			whereExtra = `AND ue."whereEvent" <> ''`
+		}
+		// $1 tenantId, $2 from, $3 to, $4 cursor, $5 chunkSize. SQL fragments are
+		// constants from the allowlist above — no user input is interpolated.
+		query := fmt.Sprintf(`
+WITH chunk AS (
+  SELECT ue.id FROM "UserEvent" ue
+  WHERE ue."usersOnTenantsTenantId" = $1
+    AND ue."usersOnTenantsUserId" IS NOT NULL
+    AND ue."type" IN (%s)
+    %s
+    AND ue."createdAt" >= $2 AND ue."createdAt" < $3
+    AND ue.id > $4
+  ORDER BY ue.id LIMIT $5
+),
+ins AS (
+  INSERT INTO %q (%s)
+  SELECT %s FROM "UserEvent" ue WHERE ue.id IN (SELECT id FROM chunk)
+  ON CONFLICT ("id") DO NOTHING
+  RETURNING 1
+)
+SELECT (SELECT MAX(id) FROM chunk), (SELECT COUNT(*) FROM ins)
+`, m.typeIn, whereExtra, m.destTable, m.destCols, m.selectExpr)
+
+		cursor := ""
+		var total int64
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			var maxId sql.NullString
+			var inserted int64
+			if err := db.QueryRowContext(ctx, query, tenantId, from, to, cursor, chunkSize).Scan(&maxId, &inserted); err != nil {
+				return fmt.Errorf("%s migrate (tenant %s): %w", m.label, tenantId, err)
+			}
+			total += inserted
+			logger.Info("UserEvent migrate batch", "dest", m.label, "tenantId", tenantId, "inserted", inserted, "total", total, "lastId", maxId.String)
+			if !maxId.Valid {
+				break
+			}
+			cursor = maxId.String
+			if sleep > 0 {
+				time.Sleep(sleep)
+			}
+		}
+		logger.Info("UserEvent migrate done", "dest", m.label, "tenantId", tenantId, "total", total)
 	}
 	return nil
 }
 
-// migrateRow uses the source UserEvent.id as the destination row's id, so re-running
-// the migration after a mid-chunk failure is idempotent via ON CONFLICT DO NOTHING.
-// UserEvent.id is globally unique; reusing it across destination tables is fine because
-// each ON CONFLICT is scoped to its own PK.
-func migrateRow(ctx context.Context, db *sql.DB, sourceId, evType, whereEvent, withEvent string, _ sql.NullInt64, tenantId, userId string, createdAt time.Time) (bool, error) {
-	switch evType {
-	case "login", "user-login":
-		_, err := db.ExecContext(ctx, `
-			INSERT INTO "LoginEvent" ("id","tenantId","userId","createdAt")
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT ("id") DO NOTHING
-		`, sourceId, tenantId, userId, createdAt)
-		return true, err
-	case "lesson_viewed":
-		if whereEvent == "" {
-			return false, nil
-		}
-		_, err := db.ExecContext(ctx, `
-			INSERT INTO "LessonAccessEvent" ("id","tenantId","userId","lessonId","createdAt")
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT ("id") DO NOTHING
-		`, sourceId, tenantId, userId, whereEvent, createdAt)
-		return true, err
-	case "exam", "exam-completed", "exam_auto_register":
-		if whereEvent == "" {
-			return false, nil
-		}
-		_, err := db.ExecContext(ctx, `
-			INSERT INTO "ExamCompletionEvent" ("id","tenantId","userId","examId","passed","createdAt")
-			VALUES ($1, $2, $3, $4, false, $5)
-			ON CONFLICT ("id") DO NOTHING
-		`, sourceId, tenantId, userId, whereEvent, createdAt)
-		return true, err
-	default:
-		return false, nil
+// listBackfillTenants returns every tenant id. Empty tenants are cheap to run
+// (each set-based step returns 0 rows fast), so we don't pre-filter.
+func listBackfillTenants(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id FROM "Tenant" ORDER BY id`)
+	if err != nil {
+		return nil, err
 	}
+	defer rows.Close()
+	out := make([]string, 0, 256)
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// BackfillAllTenants runs the per-tenant Backfill for every tenant with bounded
+// concurrency and per-chunk pacing, so the cluster isn't saturated. Each tenant
+// is independent and idempotent (ON CONFLICT), so the run honors ctx between
+// chunks and can be stopped and resumed safely.
+func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth string, skipUserEvent bool, concurrency, chunkSize int, sleep time.Duration) error {
+	tenants, err := listBackfillTenants(ctx, db)
+	if err != nil {
+		return fmt.Errorf("list tenants: %w", err)
+	}
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	logger.Info("backfill all-tenants start", "tenants", len(tenants), "concurrency", concurrency, "chunk", chunkSize, "sleep", sleep.String())
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var done, failed int
+
+	for _, tenantId := range tenants {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return ctx.Err()
+		default:
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(tenantId string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := Backfill(ctx, db, logger, fromMonth, toMonth, tenantId, skipUserEvent, chunkSize, sleep); err != nil {
+				logger.Error("tenant backfill failed", "tenantId", tenantId, "err", err.Error())
+				mu.Lock()
+				failed++
+				mu.Unlock()
+				return
+			}
+			mu.Lock()
+			done++
+			d := done
+			mu.Unlock()
+			logger.Info("tenant backfill done", "tenantId", tenantId, "done", d, "total", len(tenants))
+		}(tenantId)
+	}
+	wg.Wait()
+	logger.Info("backfill all-tenants finished", "done", done, "failed", failed, "total", len(tenants))
+	if failed > 0 {
+		return fmt.Errorf("%d/%d tenants failed (see logs); rerun is idempotent", failed, len(tenants))
+	}
+	return nil
 }
