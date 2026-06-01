@@ -22,6 +22,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	vitrine4 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
+	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
 	auth3 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/application/router"
@@ -181,9 +182,14 @@ func startApplication(
 ) {
 	router.SetupRoutes()
 
-	// Scheduler is kept running for future ports.Job entries; today every
-	// transcription enqueue flows through the HTTP route the internal
-	// admin UI calls, so no Job is registered here.
+	// Analytics rollup jobs. Scheduler uses WithSeconds() (6 fields).
+	if err := scheduler.AddJob(analyticsjobs.NewDailyRollupJob(db, log), "0 0 8 * * *"); err != nil {
+		log.Error("failed to register analytics.daily_rollup", "err", err.Error())
+	}
+	if err := scheduler.AddJob(analyticsjobs.NewMonthlyRollupJob(db, log), "0 0 9 1 * *"); err != nil {
+		log.Error("failed to register analytics.monthly_rollup", "err", err.Error())
+	}
+
 	scheduler.Start()
 
 	// Member-import slice: clear orphaned "processing" imports on startup,
