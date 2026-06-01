@@ -19,20 +19,36 @@ import (
 // from/to are YYYY-MM strings inclusive of from-month and exclusive of to-month+1.
 // When tenantId is non-empty, the run is scoped to that single tenant and never
 // deletes raw data (history is kept until the operator validates the dashboard).
-func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth, tenantId string, skipUserEvent bool, chunkSize int, sleep time.Duration) error {
-	from, err := parseMonth(fromMonth)
+// BackfillOpts carries the tunables shared by single-tenant and all-tenants runs.
+type BackfillOpts struct {
+	FromMonth     string        // YYYY-MM inclusive
+	ToMonth       string        // YYYY-MM inclusive (range is [from, to+1month))
+	SkipUserEvent bool          // skip Read fixups + event migration; only roll up
+	Reset         bool          // delete this tenant's backfill-derived rows first
+	ChunkSize     int           // rows per set-based chunk / batched delete
+	Sleep         time.Duration // pause between chunks
+}
+
+func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string, o BackfillOpts) error {
+	from, err := parseMonth(o.FromMonth)
 	if err != nil {
 		return fmt.Errorf("parse from: %w", err)
 	}
-	toBase, err := parseMonth(toMonth)
+	toBase, err := parseMonth(o.ToMonth)
 	if err != nil {
 		return fmt.Errorf("parse to: %w", err)
 	}
 	to := toBase.AddDate(0, 1, 0)
 
-	logger.Info("analytics backfill start", "from", from.String(), "to", to.String(), "tenantId", tenantId, "skipUserEvent", skipUserEvent)
+	logger.Info("analytics backfill start", "from", from.String(), "to", to.String(), "tenantId", tenantId, "skipUserEvent", o.SkipUserEvent, "reset", o.Reset)
 
-	if !skipUserEvent {
+	if o.Reset {
+		if err := resetTenantData(ctx, db, logger, tenantId, o.ChunkSize); err != nil {
+			return fmt.Errorf("reset tenant data: %w", err)
+		}
+	}
+
+	if !o.SkipUserEvent {
 		// Step 1: legacy Read fixups.
 		if err := backfillLegacyRead(ctx, db, logger, tenantId); err != nil {
 			return fmt.Errorf("legacy Read backfill: %w", err)
@@ -45,7 +61,7 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, t
 
 		// Step 3: UserEvent migration — set-based INSERT...SELECT with keyset
 		// pagination (one pass over [from,to) per type, not one INSERT per row).
-		if err := migrateUserEvents(ctx, db, logger, tenantId, from, to, chunkSize, sleep); err != nil {
+		if err := migrateUserEvents(ctx, db, logger, tenantId, from, to, o.ChunkSize, o.Sleep); err != nil {
 			return fmt.Errorf("UserEvent migration: %w", err)
 		}
 
@@ -347,10 +363,97 @@ SELECT (SELECT MAX(id) FROM chunk), (SELECT COUNT(*) FROM ins)
 	return nil
 }
 
-// listBackfillTenants returns every tenant id. Empty tenants are cheap to run
-// (each set-based step returns 0 rows fast), so we don't pre-filter.
+// backfillResetTables are the analytics tables fully rebuilt by a backfill, so
+// they're safe to delete before a re-run. Deliberately EXCLUDES LessonWatchEvent
+// (live-only heartbeat, not reconstructable), Read and CourseProgress.
+var backfillResetTables = []string{
+	"LoginEvent",
+	"LessonAccessEvent",
+	"ExamCompletionEvent",
+	"CommentEvent",
+	"CommunityPostEvent",
+	"TenantDailyStats",
+	"TenantDailyUserActivity",
+	"StudentMonthlyStats",
+}
+
+// resetTenantData deletes a tenant's backfill-derived rows in batches (to stay
+// under CockroachDB's lock budget) so a re-run re-inserts from scratch. Table
+// names are a hardcoded allowlist; tenantId is bound.
+func resetTenantData(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string, chunkSize int) error {
+	if chunkSize <= 0 {
+		chunkSize = defaultBackfillChunk
+	}
+	for _, t := range backfillResetTables {
+		q := fmt.Sprintf(`DELETE FROM %q WHERE "tenantId" = $1 LIMIT $2`, t)
+		var total int64
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			res, err := db.ExecContext(ctx, q, tenantId, chunkSize)
+			if err != nil {
+				return fmt.Errorf("reset %s: %w", t, err)
+			}
+			n, raErr := res.RowsAffected()
+			if raErr != nil {
+				return fmt.Errorf("reset %s RowsAffected: %w", t, raErr)
+			}
+			total += n
+			if n == 0 {
+				break
+			}
+		}
+		if total > 0 {
+			logger.Info("reset table", "table", t, "tenantId", tenantId, "deleted", total)
+		}
+	}
+	return nil
+}
+
+// ListTenantsWithData prints every tenant that has UserEvent data, in the SAME
+// order BackfillAllTenants pages through (so the idx column lines up with
+// --offset), with its event count — use it to plan the migration waves.
+func ListTenantsWithData(ctx context.Context, db *sql.DB, logger ports.Logger) error {
+	rows, err := db.QueryContext(ctx, `
+		SELECT "usersOnTenantsTenantId" AS t, COUNT(*) AS c
+		FROM "UserEvent"
+		WHERE "usersOnTenantsTenantId" IS NOT NULL
+		GROUP BY "usersOnTenantsTenantId"
+		ORDER BY "usersOnTenantsTenantId"`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	idx := 0
+	var grand int64
+	for rows.Next() {
+		var t string
+		var c int64
+		if err := rows.Scan(&t, &c); err != nil {
+			return err
+		}
+		logger.Info("tenant with data", "idx", idx, "tenantId", t, "userEvents", c)
+		idx++
+		grand += c
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	logger.Info("tenants with data summary", "tenants", idx, "userEvents", grand)
+	return nil
+}
+
+// listBackfillTenants returns tenant ids that have UserEvent data to migrate,
+// ordered deterministically so --offset/--limit page through them stably.
 func listBackfillTenants(ctx context.Context, db *sql.DB) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id FROM "Tenant" ORDER BY id`)
+	rows, err := db.QueryContext(ctx, `
+		SELECT DISTINCT "usersOnTenantsTenantId"
+		FROM "UserEvent"
+		WHERE "usersOnTenantsTenantId" IS NOT NULL
+		ORDER BY "usersOnTenantsTenantId"`)
 	if err != nil {
 		return nil, err
 	}
@@ -366,19 +469,35 @@ func listBackfillTenants(ctx context.Context, db *sql.DB) ([]string, error) {
 	return out, rows.Err()
 }
 
-// BackfillAllTenants runs the per-tenant Backfill for every tenant with bounded
-// concurrency and per-chunk pacing, so the cluster isn't saturated. Each tenant
-// is independent and idempotent (ON CONFLICT), so the run honors ctx between
-// chunks and can be stopped and resumed safely.
-func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth string, skipUserEvent bool, concurrency, chunkSize int, sleep time.Duration) error {
-	tenants, err := listBackfillTenants(ctx, db)
+// BackfillAllTenants runs the per-tenant Backfill across tenants that have data,
+// with bounded concurrency and per-chunk pacing. offset/limit page through the
+// (stably ordered) tenant list so the migration can run in small, observable
+// waves; the log prints the next offset to use. Each tenant is independent and
+// idempotent, so the run honors ctx between chunks and can be stopped/resumed.
+func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, o BackfillOpts, concurrency, offset, limit int) error {
+	all, err := listBackfillTenants(ctx, db)
 	if err != nil {
 		return fmt.Errorf("list tenants: %w", err)
 	}
+	total := len(all)
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	tenants := all[offset:]
+	if limit > 0 && limit < len(tenants) {
+		tenants = tenants[:limit]
+	}
+
 	if concurrency < 1 {
 		concurrency = 1
 	}
-	logger.Info("backfill all-tenants start", "tenants", len(tenants), "concurrency", concurrency, "chunk", chunkSize, "sleep", sleep.String())
+	logger.Info("backfill all-tenants start",
+		"tenantsWithData", total, "offset", offset, "processing", len(tenants),
+		"concurrency", concurrency, "reset", o.Reset, "chunk", o.ChunkSize, "sleep", o.Sleep.String())
 
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -397,7 +516,7 @@ func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, fr
 		go func(tenantId string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if err := Backfill(ctx, db, logger, fromMonth, toMonth, tenantId, skipUserEvent, chunkSize, sleep); err != nil {
+			if err := Backfill(ctx, db, logger, tenantId, o); err != nil {
 				logger.Error("tenant backfill failed", "tenantId", tenantId, "err", err.Error())
 				mu.Lock()
 				failed++
@@ -408,11 +527,12 @@ func BackfillAllTenants(ctx context.Context, db *sql.DB, logger ports.Logger, fr
 			done++
 			d := done
 			mu.Unlock()
-			logger.Info("tenant backfill done", "tenantId", tenantId, "done", d, "total", len(tenants))
+			logger.Info("tenant backfill done", "tenantId", tenantId, "done", d, "wave", len(tenants))
 		}(tenantId)
 	}
 	wg.Wait()
-	logger.Info("backfill all-tenants finished", "done", done, "failed", failed, "total", len(tenants))
+	logger.Info("backfill all-tenants finished",
+		"done", done, "failed", failed, "wave", len(tenants), "nextOffset", offset+len(tenants), "totalWithData", total)
 	if failed > 0 {
 		return fmt.Errorf("%d/%d tenants failed (see logs); rerun is idempotent", failed, len(tenants))
 	}
