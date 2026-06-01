@@ -192,7 +192,10 @@ func batchUpdate(ctx context.Context, logger ports.Logger, label string, run fun
 		if err != nil {
 			return fmt.Errorf("%s batch: %w", label, err)
 		}
-		n, _ := res.RowsAffected()
+		n, raErr := res.RowsAffected()
+		if raErr != nil {
+			return fmt.Errorf("%s RowsAffected: %w", label, raErr)
+		}
 		total += n
 		logger.Info(label+" batch", "rows", n, "total", total)
 		if n == 0 {
@@ -241,6 +244,7 @@ func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger
 	var offset int
 	mapped := 0
 	skipped := 0
+	failedRows := 0
 	for {
 		var (
 			rows *sql.Rows
@@ -287,7 +291,16 @@ func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger
 				skipped++
 				continue
 			}
-			if migrateRow(ctx, db, id, evType, whereEvent, withEvent, value, tenantIdN.String, userIdN.String, createdAt) {
+			mappedRow, mErr := migrateRow(ctx, db, id, evType, whereEvent, withEvent, value, tenantIdN.String, userIdN.String, createdAt)
+			if mErr != nil {
+				// Don't abort the chunk on one bad row — log, count, keep going.
+				// Re-running the backfill is idempotent (ON CONFLICT DO NOTHING),
+				// so the operator can rerun after fixing the cause.
+				logger.Error("UserEvent migrate row failed", "id", id, "type", evType, "err", mErr.Error())
+				failedRows++
+				continue
+			}
+			if mappedRow {
 				mapped++
 			} else {
 				skipped++
@@ -299,7 +312,10 @@ func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger
 		}
 		offset += chunk
 	}
-	logger.Info("UserEvent migration chunk done", "from", from.String(), "mapped", mapped, "skipped", skipped)
+	logger.Info("UserEvent migration range done", "from", from.String(), "mapped", mapped, "skipped", skipped, "failed", failedRows)
+	if failedRows > 0 {
+		return fmt.Errorf("UserEvent migration [%s, %s): %d rows failed to insert", from.Format("2006-01-02"), to.Format("2006-01-02"), failedRows)
+	}
 	return nil
 }
 
@@ -307,36 +323,36 @@ func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger
 // the migration after a mid-chunk failure is idempotent via ON CONFLICT DO NOTHING.
 // UserEvent.id is globally unique; reusing it across destination tables is fine because
 // each ON CONFLICT is scoped to its own PK.
-func migrateRow(ctx context.Context, db *sql.DB, sourceId, evType, whereEvent, withEvent string, _ sql.NullInt64, tenantId, userId string, createdAt time.Time) bool {
+func migrateRow(ctx context.Context, db *sql.DB, sourceId, evType, whereEvent, withEvent string, _ sql.NullInt64, tenantId, userId string, createdAt time.Time) (bool, error) {
 	switch evType {
 	case "login", "user-login":
-		_, _ = db.ExecContext(ctx, `
+		_, err := db.ExecContext(ctx, `
 			INSERT INTO "LoginEvent" ("id","tenantId","userId","createdAt")
 			VALUES ($1, $2, $3, $4)
 			ON CONFLICT ("id") DO NOTHING
 		`, sourceId, tenantId, userId, createdAt)
-		return true
+		return true, err
 	case "lesson_viewed":
 		if whereEvent == "" {
-			return false
+			return false, nil
 		}
-		_, _ = db.ExecContext(ctx, `
+		_, err := db.ExecContext(ctx, `
 			INSERT INTO "LessonAccessEvent" ("id","tenantId","userId","lessonId","createdAt")
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT ("id") DO NOTHING
 		`, sourceId, tenantId, userId, whereEvent, createdAt)
-		return true
+		return true, err
 	case "exam", "exam-completed", "exam_auto_register":
 		if whereEvent == "" {
-			return false
+			return false, nil
 		}
-		_, _ = db.ExecContext(ctx, `
+		_, err := db.ExecContext(ctx, `
 			INSERT INTO "ExamCompletionEvent" ("id","tenantId","userId","examId","passed","createdAt")
 			VALUES ($1, $2, $3, $4, false, $5)
 			ON CONFLICT ("id") DO NOTHING
 		`, sourceId, tenantId, userId, whereEvent, createdAt)
-		return true
+		return true, err
 	default:
-		return false
+		return false, nil
 	}
 }

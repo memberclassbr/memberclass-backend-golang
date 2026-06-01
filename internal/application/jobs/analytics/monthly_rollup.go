@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -40,17 +41,26 @@ func (j *MonthlyRollupJob) RunForMonth(ctx context.Context, month time.Time) err
 		return err
 	}
 
+	anyFailed := false
 	for _, tenantId := range tenants {
 		if err := j.rollupTenantCounters(ctx, tenantId, month, next); err != nil {
 			j.logger.Error("counters rollup failed", "tenantId", tenantId, "err", err.Error())
+			anyFailed = true
 			continue
 		}
 		if err := j.rollupTenantDetails(ctx, tenantId, month, next); err != nil {
 			j.logger.Error("details rollup failed", "tenantId", tenantId, "err", err.Error())
+			anyFailed = true
 		}
 	}
 
 	if os.Getenv("ANALYTICS_DELETE_ENABLED") == "true" {
+		// Never delete raw events when any tenant rollup failed — the rollup is the
+		// only surviving copy, so an incomplete rollup + delete = permanent data loss.
+		if anyFailed {
+			j.logger.Error("skipping raw-event deletion: one or more tenant rollups failed; raw data kept", "month", month.String())
+			return fmt.Errorf("monthly rollup incomplete for %s; raw events NOT deleted", month.Format("2006-01"))
+		}
 		return j.deleteRawMonth(ctx, month, next)
 	}
 	return nil
@@ -198,18 +208,49 @@ func (j *MonthlyRollupJob) rollupTenantDetails(ctx context.Context, tenantId str
 		return err
 	}
 
+	// Each user's details are independent (distinct StudentMonthlyStats row), so a
+	// bounded worker pool cuts wall-clock ~detailWorkers-fold over the old serial
+	// loop without risking write conflicts. *sql.DB is safe for concurrent use.
+	const detailWorkers = 8
+	sem := make(chan struct{}, detailWorkers)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var failed int
+	var firstErr error
+	recordFail := func(err error) {
+		mu.Lock()
+		failed++
+		if firstErr == nil {
+			firstErr = err
+		}
+		mu.Unlock()
+	}
+
 	for _, userId := range userIds {
-		details, err := buildStudentDetailsJSON(ctx, j.db, tenantId, userId, monthStart, monthEnd)
-		if err != nil {
-			j.logger.Error("details build failed", "userId", userId, "err", err.Error())
-			continue
-		}
-		if _, err := j.db.ExecContext(ctx, `
-			UPDATE "StudentMonthlyStats" SET "details" = $1
-			WHERE "userId" = $2 AND "tenantId" = $3 AND "month" = $4
-		`, details, userId, tenantId, monthStart); err != nil {
-			j.logger.Error("details update failed", "userId", userId, "err", err.Error())
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(userId string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			details, err := buildStudentDetailsJSON(ctx, j.db, tenantId, userId, monthStart, monthEnd)
+			if err != nil {
+				j.logger.Error("details build failed", "userId", userId, "err", err.Error())
+				recordFail(err)
+				return
+			}
+			if _, err := j.db.ExecContext(ctx, `
+				UPDATE "StudentMonthlyStats" SET "details" = $1
+				WHERE "userId" = $2 AND "tenantId" = $3 AND "month" = $4
+			`, details, userId, tenantId, monthStart); err != nil {
+				j.logger.Error("details update failed", "userId", userId, "err", err.Error())
+				recordFail(err)
+			}
+		}(userId)
+	}
+	wg.Wait()
+
+	if failed > 0 {
+		return fmt.Errorf("details rollup: %d/%d users failed (first: %w)", failed, len(userIds), firstErr)
 	}
 	return nil
 }
