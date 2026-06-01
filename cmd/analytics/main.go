@@ -29,6 +29,7 @@ func main() {
 	from := flag.String("from", "", "YYYY-MM (backfill)")
 	to := flag.String("to", "", "YYYY-MM (backfill)")
 	tenantId := flag.String("tenantId", "", "scope backfill/daily/monthly to a single tenant (empty = all)")
+	skipUserEvent := flag.Bool("skipUserEvent", false, "skip Read fixups + UserEvent migration; only run daily/monthly rollup")
 	flag.Parse()
 
 	logr := logger.NewLogger()
@@ -66,7 +67,7 @@ func main() {
 		if *from == "" || *to == "" {
 			log.Fatal("backfill requires --from=YYYY-MM --to=YYYY-MM")
 		}
-		if err := analyticsjobs.Backfill(ctx, db, logr, *from, *to, *tenantId); err != nil {
+		if err := analyticsjobs.Backfill(ctx, db, logr, *from, *to, *tenantId, *skipUserEvent); err != nil {
 			log.Fatalf("backfill: %v", err)
 		}
 	case "backfill-extras":

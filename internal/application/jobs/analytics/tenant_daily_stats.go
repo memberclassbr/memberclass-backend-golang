@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"time"
 )
 
@@ -28,7 +29,11 @@ func upsertTenantDailyStats(ctx context.Context, tx *sql.Tx, tenantId, tz string
 	if err != nil {
 		return err
 	}
-	for _, localDay := range days {
+	slog.Info("daily stats: active days resolved", "tenantId", tenantId, "days", len(days))
+	for i, localDay := range days {
+		if i > 0 && i%30 == 0 {
+			slog.Info("daily stats progress", "tenantId", tenantId, "done", i, "total", len(days))
+		}
 		dayStart, dayEnd, err := dayBoundsUTC(localDay, tz)
 		if err != nil {
 			return err

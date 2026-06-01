@@ -48,12 +48,13 @@ var dailyActivitySQLs = []string{
 	   "didWatch" = true,
 	   "watchSec" = EXCLUDED."watchSec"`,
 
-	// quiz
+	// quiz — read directly from StudentQuiz (no separate event table).
 	`INSERT INTO "TenantDailyUserActivity" ("tenantId","day","userId","didQuiz")
-	 SELECT $1, DATE("createdAt" AT TIME ZONE $2), "userId", true
-	 FROM "QuizCompletionEvent"
+	 SELECT $1, DATE("createdAt" AT TIME ZONE $2), "studentId", true
+	 FROM "StudentQuiz"
 	 WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
-	 GROUP BY DATE("createdAt" AT TIME ZONE $2), "userId"
+	   AND "quizId" IS NOT NULL AND "score" IS NOT NULL AND "deletedAt" IS NULL
+	 GROUP BY DATE("createdAt" AT TIME ZONE $2), "studentId"
 	 ON CONFLICT ("tenantId","day","userId") DO UPDATE SET "didQuiz" = true`,
 
 	// exam
@@ -98,7 +99,7 @@ FROM (
   SELECT "createdAt" FROM "LoginEvent"          WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
   UNION ALL SELECT "createdAt" FROM "LessonAccessEvent"   WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
   UNION ALL SELECT "createdAt" FROM "LessonWatchEvent"    WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
-  UNION ALL SELECT "createdAt" FROM "QuizCompletionEvent" WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
+  UNION ALL SELECT "createdAt" FROM "StudentQuiz" WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4 AND "quizId" IS NOT NULL AND "score" IS NOT NULL AND "deletedAt" IS NULL
   UNION ALL SELECT "createdAt" FROM "ExamCompletionEvent" WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
   UNION ALL SELECT "createdAt" FROM "CommentEvent"        WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
   UNION ALL SELECT "createdAt" FROM "CommunityPostEvent"  WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
@@ -121,7 +122,7 @@ SELECT
   (SELECT COUNT(*) FROM "LessonAccessEvent"   WHERE "tenantId"=$1 AND "createdAt" >= $3 AND "createdAt" < $4),
   COALESCE((SELECT SUM("lessonReadCount")::int FROM "TenantDailyUserActivity" WHERE "tenantId"=$1 AND "day"=$2), 0),
   COALESCE((SELECT SUM("watchSec")::int        FROM "TenantDailyUserActivity" WHERE "tenantId"=$1 AND "day"=$2), 0),
-  (SELECT COUNT(*) FROM "QuizCompletionEvent"  WHERE "tenantId"=$1 AND "createdAt" >= $3 AND "createdAt" < $4),
+  (SELECT COUNT(*) FROM "StudentQuiz" WHERE "tenantId"=$1 AND "createdAt" >= $3 AND "createdAt" < $4 AND "quizId" IS NOT NULL AND "score" IS NOT NULL AND "deletedAt" IS NULL),
   (SELECT COUNT(*) FROM "ExamCompletionEvent"  WHERE "tenantId"=$1 AND "createdAt" >= $3 AND "createdAt" < $4),
   (SELECT COUNT(*) FROM "ExamCompletionEvent"  WHERE "tenantId"=$1 AND "createdAt" >= $3 AND "createdAt" < $4 AND "passed"=true),
   (SELECT COUNT(*)             FROM "Read" WHERE "tenantId"=$1 AND "rating" IS NOT NULL AND "createdAt" >= $3 AND "createdAt" < $4),

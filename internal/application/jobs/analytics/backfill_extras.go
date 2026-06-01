@@ -8,10 +8,11 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 )
 
-// BackfillExtras populates QuizCompletionEvent, CommentEvent and CommunityPostEvent
-// from their primary entities (StudentQuiz, Comment, Post). Idempotent via
-// ON CONFLICT (id) DO NOTHING. Run after the main Backfill so the daily/monthly
-// rollups can pick the data up next time.
+// BackfillExtras populates CommentEvent and CommunityPostEvent from their primary
+// entities (Comment, Post). Quiz no longer has its own event table — analytics
+// queries read StudentQuiz directly. Idempotent via ON CONFLICT (id) DO NOTHING.
+// Run after the main Backfill so the daily/monthly rollups can pick the data up
+// next time.
 //
 // When tenantId is non-empty the run is scoped to that single tenant.
 // Cursor pagination by primary-entity id keeps each transaction below the
@@ -19,9 +20,6 @@ import (
 func BackfillExtras(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
 	logger.Info("analytics backfill-extras start", "tenantId", tenantId)
 
-	if err := backfillQuizFromStudentQuiz(ctx, db, logger, tenantId); err != nil {
-		return fmt.Errorf("quiz: %w", err)
-	}
 	if err := backfillCommentFromComment(ctx, db, logger, tenantId); err != nil {
 		return fmt.Errorf("comment: %w", err)
 	}
@@ -34,50 +32,6 @@ func BackfillExtras(ctx context.Context, db *sql.DB, logger ports.Logger, tenant
 }
 
 const extrasChunkSize = 5_000
-
-func backfillQuizFromStudentQuiz(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
-	cursor := ""
-	total := int64(0)
-	for {
-		args := []any{cursor, extrasChunkSize}
-		tenantFilter := ""
-		if tenantId != "" {
-			tenantFilter = `AND "tenantId" = $3`
-			args = append(args, tenantId)
-		}
-		query := fmt.Sprintf(`
-			WITH chunk AS (
-				SELECT "id" FROM "StudentQuiz"
-				WHERE "quizId" IS NOT NULL AND "score" IS NOT NULL
-				  AND "id" > $1
-				  %s
-				ORDER BY "id" LIMIT $2
-			),
-			ins AS (
-				INSERT INTO "QuizCompletionEvent" ("id","tenantId","userId","quizId","lessonId","score","createdAt")
-				SELECT sq."id", sq."tenantId", sq."studentId", sq."quizId", NULL, sq."score", sq."createdAt"
-				FROM "StudentQuiz" sq
-				WHERE sq."id" IN (SELECT "id" FROM chunk)
-				ON CONFLICT ("id") DO NOTHING
-				RETURNING 1
-			)
-			SELECT (SELECT MAX("id") FROM chunk), (SELECT COUNT(*) FROM ins)
-		`, tenantFilter)
-		var maxId sql.NullString
-		var inserted int64
-		if err := db.QueryRowContext(ctx, query, args...).Scan(&maxId, &inserted); err != nil {
-			return err
-		}
-		total += inserted
-		logger.Info("quiz backfill batch", "inserted", inserted, "total", total, "lastId", maxId.String)
-		if !maxId.Valid {
-			break
-		}
-		cursor = maxId.String
-	}
-	logger.Info("quiz backfill done", "total", total)
-	return nil
-}
 
 func backfillCommentFromComment(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
 	cursor := ""

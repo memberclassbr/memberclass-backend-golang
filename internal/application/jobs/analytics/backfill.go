@@ -18,7 +18,7 @@ import (
 // from/to are YYYY-MM strings inclusive of from-month and exclusive of to-month+1.
 // When tenantId is non-empty, the run is scoped to that single tenant and never
 // deletes raw data (history is kept until the operator validates the dashboard).
-func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth, tenantId string) error {
+func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth, tenantId string, skipUserEvent bool) error {
 	from, err := parseMonth(fromMonth)
 	if err != nil {
 		return fmt.Errorf("parse from: %w", err)
@@ -29,37 +29,45 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, t
 	}
 	to := toBase.AddDate(0, 1, 0)
 
-	logger.Info("analytics backfill start", "from", from.String(), "to", to.String(), "tenantId", tenantId)
+	logger.Info("analytics backfill start", "from", from.String(), "to", to.String(), "tenantId", tenantId, "skipUserEvent", skipUserEvent)
 
-	// Step 1: legacy Read fixups.
-	if err := backfillLegacyRead(ctx, db, logger, tenantId); err != nil {
-		return fmt.Errorf("legacy Read backfill: %w", err)
-	}
-
-	// Step 2: distinct types report (operator confirms mapping before scale migration).
-	if err := printDistinctTypes(ctx, db, logger, tenantId); err != nil {
-		return fmt.Errorf("distinct types: %w", err)
-	}
-
-	// Step 3: per-month UserEvent migration.
-	for m := from; m.Before(to); m = m.AddDate(0, 1, 0) {
-		end := m.AddDate(0, 1, 0)
-		if err := migrateUserEventsRange(ctx, db, logger, m, end, tenantId); err != nil {
-			logger.Error("migrate range failed", "month", m.String(), "err", err.Error())
+	if !skipUserEvent {
+		// Step 1: legacy Read fixups.
+		if err := backfillLegacyRead(ctx, db, logger, tenantId); err != nil {
+			return fmt.Errorf("legacy Read backfill: %w", err)
 		}
+
+		// Step 2: distinct types report (operator confirms mapping before scale migration).
+		if err := printDistinctTypes(ctx, db, logger, tenantId); err != nil {
+			return fmt.Errorf("distinct types: %w", err)
+		}
+
+		// Step 3: per-month UserEvent migration.
+		for m := from; m.Before(to); m = m.AddDate(0, 1, 0) {
+			end := m.AddDate(0, 1, 0)
+			if err := migrateUserEventsRange(ctx, db, logger, m, end, tenantId); err != nil {
+				logger.Error("migrate range failed", "month", m.String(), "err", err.Error())
+			}
+		}
+	} else {
+		logger.Info("skipping Read backfill + UserEvent migration (--skipUserEvent)")
 	}
 
-	// Step 4: daily rollup per UTC day in range.
+	// Step 4: daily rollup.
+	// Single tenant → one transaction covering the whole [from, to) range
+	// (~1000x faster than the per-day loop for multi-year backfills).
+	// All tenants → fall back to the per-day loop using the existing job entry point.
 	daily := NewDailyRollupJob(db, logger)
-	for d := from; d.Before(to); d = d.AddDate(0, 0, 1) {
-		var derr error
-		if tenantId != "" {
-			derr = daily.RunForUTCInstantForTenant(ctx, d.Add(12*time.Hour), tenantId)
-		} else {
-			derr = daily.RunForUTCInstant(ctx, d.Add(12*time.Hour))
+	if tenantId != "" {
+		logger.Info("daily rollup step start", "tenantId", tenantId, "from", from.String(), "to", to.String())
+		if derr := daily.RunForRangeForTenant(ctx, tenantId, from, to); derr != nil {
+			logger.Error("daily rollup failed", "err", derr.Error())
 		}
-		if derr != nil {
-			logger.Error("daily rollup failed", "day", d.String(), "err", derr.Error())
+	} else {
+		for d := from; d.Before(to); d = d.AddDate(0, 0, 1) {
+			if derr := daily.RunForUTCInstant(ctx, d.Add(12*time.Hour)); derr != nil {
+				logger.Error("daily rollup failed", "day", d.String(), "err", derr.Error())
+			}
 		}
 	}
 

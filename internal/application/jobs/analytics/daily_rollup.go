@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/ports"
@@ -54,6 +55,55 @@ func (j *DailyRollupJob) RunForUTCInstantForTenant(ctx context.Context, anyUTCIn
 	from := anyUTCInDay.Add(-36 * time.Hour)
 	to := anyUTCInDay.Add(12 * time.Hour)
 	return j.rollupTenantDays(ctx, tenantId, tz, from, to)
+}
+
+// RunForRangeForTenant rolls up every tenant-local day in [from, to) for one
+// tenant, chunked one month per transaction so each tx stays short enough to
+// avoid CockroachDB serializable-retry conflicts with concurrent writers.
+// Retries each month up to 3 times on a serializable retry error.
+func (j *DailyRollupJob) RunForRangeForTenant(ctx context.Context, tenantId string, from, to time.Time) error {
+	tz, err := j.lookupTenantTimezone(ctx, tenantId)
+	if err != nil {
+		return err
+	}
+	j.logger.Info("daily rollup range start", "tenantId", tenantId, "from", from.Format("2006-01-02"), "to", to.Format("2006-01-02"))
+	for m := from; m.Before(to); m = m.AddDate(0, 1, 0) {
+		end := m.AddDate(0, 1, 0)
+		if end.After(to) {
+			end = to
+		}
+		if err := j.rollupTenantDaysWithRetry(ctx, tenantId, tz, m, end, 3); err != nil {
+			j.logger.Error("daily rollup month failed", "tenantId", tenantId, "month", m.Format("2006-01"), "err", err.Error())
+		}
+	}
+	j.logger.Info("daily rollup range done", "tenantId", tenantId)
+	return nil
+}
+
+func (j *DailyRollupJob) rollupTenantDaysWithRetry(ctx context.Context, tenantId, tz string, from, to time.Time, maxAttempts int) error {
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = j.rollupTenantDays(ctx, tenantId, tz, from, to)
+		if err == nil {
+			return nil
+		}
+		if !isSerializableRetry(err) || attempt == maxAttempts {
+			return err
+		}
+		j.logger.Info("daily rollup retry", "tenantId", tenantId, "month", from.Format("2006-01"), "attempt", attempt)
+		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+	}
+	return err
+}
+
+func isSerializableRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "TransactionRetryWithProtoRefreshError") ||
+		strings.Contains(s, "RETRY_SERIALIZABLE") ||
+		strings.Contains(s, "restart transaction")
 }
 
 func (j *DailyRollupJob) lookupTenantTimezone(ctx context.Context, tenantId string) (string, error) {

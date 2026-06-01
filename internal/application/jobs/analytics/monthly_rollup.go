@@ -100,8 +100,10 @@ WITH la AS (
   WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4 GROUP BY "userId"
 ),
 qz AS (
-  SELECT "userId", COUNT(*) AS cnt FROM "QuizCompletionEvent"
-  WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4 GROUP BY "userId"
+  SELECT "studentId" AS "userId", COUNT(*) AS cnt FROM "StudentQuiz"
+  WHERE "tenantId" = $1 AND "createdAt" >= $3 AND "createdAt" < $4
+    AND "quizId" IS NOT NULL AND "score" IS NOT NULL AND "deletedAt" IS NULL
+  GROUP BY "studentId"
 ),
 ex AS (
   SELECT "userId",
@@ -294,8 +296,9 @@ func buildStudentDetailsJSON(ctx context.Context, db *sql.DB, tenantId, userId s
 	// Quizzes (cap 500).
 	var quizzes []quizRow
 	rows, err = db.QueryContext(ctx, `
-		SELECT "quizId", "lessonId", "score", "createdAt" FROM "QuizCompletionEvent"
-		WHERE "tenantId"=$1 AND "userId"=$2 AND "createdAt" >= $3 AND "createdAt" < $4
+		SELECT "quizId", NULL::text AS "lessonId", "score", "createdAt" FROM "StudentQuiz"
+		WHERE "tenantId"=$1 AND "studentId"=$2 AND "createdAt" >= $3 AND "createdAt" < $4
+		  AND "quizId" IS NOT NULL AND "score" IS NOT NULL AND "deletedAt" IS NULL
 		ORDER BY "createdAt" DESC LIMIT 500
 	`, tenantId, userId, from, to)
 	if err != nil {
@@ -387,7 +390,7 @@ func (j *MonthlyRollupJob) deleteRawMonth(ctx context.Context, from, to time.Tim
 	// is intentional and not a SQL injection vector.
 	tables := []string{
 		"LoginEvent", "LessonAccessEvent", "LessonWatchEvent",
-		"QuizCompletionEvent", "ExamCompletionEvent", "CommentEvent", "CommunityPostEvent",
+		"ExamCompletionEvent", "CommentEvent", "CommunityPostEvent",
 	}
 	for _, t := range tables {
 		q := fmt.Sprintf(`DELETE FROM %q WHERE "createdAt" >= $1 AND "createdAt" < $2`, t)
