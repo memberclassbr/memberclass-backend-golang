@@ -262,12 +262,12 @@ func printDistinctTypes(ctx context.Context, db *sql.DB, logger ports.Logger, te
 // table. The destination row reuses UserEvent.id so re-runs are idempotent via
 // ON CONFLICT ("id") DO NOTHING.
 type eventMigration struct {
-	label        string
-	destTable    string
-	destCols     string // INSERT column list
-	selectExpr   string // SELECT expressions from "UserEvent" ue
-	typeIn       string // SQL literal list for type IN (...)
-	requireWhere bool   // lesson/exam need a non-empty whereEvent
+	label             string
+	destTable         string
+	destCols          string // INSERT column list
+	selectExpr        string // SELECT expressions from "UserEvent" ue
+	typeIn            string // SQL literal list for type IN (...)
+	requireIdentifier bool   // lesson/exam carry the lessonId/examId in UserEvent.identifier
 }
 
 // userEventMigrations is a hardcoded allowlist — the SQL fragments below are
@@ -281,20 +281,22 @@ var userEventMigrations = []eventMigration{
 		typeIn:     `'login','user-login'`,
 	},
 	{
-		label:        "LessonAccessEvent",
-		destTable:    "LessonAccessEvent",
-		destCols:     `"id","tenantId","userId","lessonId","createdAt"`,
-		selectExpr:   `ue.id, ue."usersOnTenantsTenantId", ue."usersOnTenantsUserId", ue."whereEvent", ue."createdAt"`,
-		typeIn:       `'lesson_viewed'`,
-		requireWhere: true,
+		// lessonId is in UserEvent.identifier (whereEvent holds the page path).
+		label:             "LessonAccessEvent",
+		destTable:         "LessonAccessEvent",
+		destCols:          `"id","tenantId","userId","lessonId","createdAt"`,
+		selectExpr:        `ue.id, ue."usersOnTenantsTenantId", ue."usersOnTenantsUserId", ue."identifier", ue."createdAt"`,
+		typeIn:            `'lesson_viewed'`,
+		requireIdentifier: true,
 	},
 	{
-		label:        "ExamCompletionEvent",
-		destTable:    "ExamCompletionEvent",
-		destCols:     `"id","tenantId","userId","examId","passed","createdAt"`,
-		selectExpr:   `ue.id, ue."usersOnTenantsTenantId", ue."usersOnTenantsUserId", ue."whereEvent", false, ue."createdAt"`,
-		typeIn:       `'exam','exam-completed','exam_auto_register'`,
-		requireWhere: true,
+		// examId is in UserEvent.identifier (whereEvent holds the answers JSON).
+		label:             "ExamCompletionEvent",
+		destTable:         "ExamCompletionEvent",
+		destCols:          `"id","tenantId","userId","examId","passed","createdAt"`,
+		selectExpr:        `ue.id, ue."usersOnTenantsTenantId", ue."usersOnTenantsUserId", ue."identifier", false, ue."createdAt"`,
+		typeIn:            `'exam','exam-completed','exam_auto_register'`,
+		requireIdentifier: true,
 	},
 }
 
@@ -310,8 +312,8 @@ func migrateUserEvents(ctx context.Context, db *sql.DB, logger ports.Logger, ten
 	}
 	for _, m := range userEventMigrations {
 		whereExtra := ""
-		if m.requireWhere {
-			whereExtra = `AND ue."whereEvent" <> ''`
+		if m.requireIdentifier {
+			whereExtra = `AND ue."identifier" IS NOT NULL AND ue."identifier" <> ''`
 		}
 		// $1 tenantId, $2 from, $3 to, $4 cursor, $5 chunkSize. SQL fragments are
 		// constants from the allowlist above — no user input is interpolated.
