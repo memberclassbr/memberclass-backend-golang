@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -17,6 +18,16 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
 )
 
+func parseCutoff(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC(), nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.UTC(), nil
+	}
+	return time.Time{}, fmt.Errorf("invalid --before %q (use RFC3339 or YYYY-MM-DD)", s)
+}
+
 func nowMinus24() time.Time { return time.Now().UTC().Add(-24 * time.Hour) }
 func prevMonthStart() time.Time {
 	now := time.Now().UTC()
@@ -27,7 +38,7 @@ func prevMonthStart() time.Time {
 func main() {
 	_ = godotenv.Load()
 
-	cmd := flag.String("cmd", "daily", "daily|monthly|backfill|backfill-extras|list-tenants")
+	cmd := flag.String("cmd", "daily", "daily|monthly|backfill|backfill-extras|list-tenants|dedup|cleanup-userevent")
 	from := flag.String("from", "", "YYYY-MM (backfill)")
 	to := flag.String("to", "", "YYYY-MM (backfill)")
 	tenantId := flag.String("tenantId", "", "scope backfill/daily/monthly to a single tenant (empty = all)")
@@ -39,6 +50,8 @@ func main() {
 	offset := flag.Int("offset", 0, "all-tenants backfill: skip the first N tenants-with-data (wave paging)")
 	limit := flag.Int("limit", 0, "all-tenants backfill: process at most N tenants this run (0 = all)")
 	order := flag.String("order", "id", "all-tenants/list order: id|size-asc (smallest first)|size-desc")
+	before := flag.String("before", "", "dedup: cutoff (RFC3339 or YYYY-MM-DD) = when dual-write was disabled")
+	apply := flag.Bool("apply", false, "dedup/cleanup-userevent: actually delete (default = dry-run / count only)")
 	flag.Parse()
 
 	logr := logger.NewLogger()
@@ -103,6 +116,21 @@ func main() {
 	case "list-tenants":
 		if err := analyticsjobs.ListTenantsWithData(ctx, db, logr, *order); err != nil {
 			log.Fatalf("list-tenants: %v", err)
+		}
+	case "dedup":
+		if *before == "" {
+			log.Fatal("dedup requires --before=YYYY-MM-DD or RFC3339 (the dual-write cutoff)")
+		}
+		cutoff, perr := parseCutoff(*before)
+		if perr != nil {
+			log.Fatalf("dedup: %v", perr)
+		}
+		if err := analyticsjobs.Dedup(ctx, db, logr, cutoff, *apply, *chunk, time.Duration(*sleepMs)*time.Millisecond); err != nil {
+			log.Fatalf("dedup: %v", err)
+		}
+	case "cleanup-userevent":
+		if err := analyticsjobs.CleanupUserEvent(ctx, db, logr, *apply, *chunk, time.Duration(*sleepMs)*time.Millisecond); err != nil {
+			log.Fatalf("cleanup-userevent: %v", err)
 		}
 	default:
 		log.Fatalf("unknown cmd: %s", *cmd)
