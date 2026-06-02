@@ -25,15 +25,18 @@ import (
 // look like a duplicate. Dedup has a guard that refuses when the source is
 // empty, as a backstop.
 type dedupSpec struct {
-	dest     string // typed table to dedup
-	source   string // table whose ids the backfill reused
-	typePred string // predicate on the source for this mapping (unqualified); "" = all rows
+	dest          string // typed table to dedup
+	source        string // table whose ids the backfill reused
+	typePred      string // predicate on the source for this mapping (unqualified); "" = all rows
+	keepUserEvent bool   // never delete the source UserEvent rows (feature still reads them)
 }
 
 var dedupSpecs = []dedupSpec{
 	{dest: "LoginEvent", source: "UserEvent", typePred: `"type" IN ('login','user-login')`},
 	{dest: "LessonAccessEvent", source: "UserEvent", typePred: `"type" = 'lesson_viewed'`},
-	{dest: "ExamCompletionEvent", source: "UserEvent", typePred: `"type" IN ('exam','exam-completed','exam_auto_register')`},
+	// keepUserEvent: exam UserEvent rows store the full attempt + student answers
+	// (whereEvent JSON) read by the quiz/exam/responses page — never delete them.
+	{dest: "ExamCompletionEvent", source: "UserEvent", typePred: `"type" IN ('exam','exam-completed','exam_auto_register')`, keepUserEvent: true},
 	{dest: "CommentEvent", source: "Comment", typePred: ``},
 	{dest: "CommunityPostEvent", source: "Post", typePred: ``},
 }
@@ -128,11 +131,11 @@ func Dedup(ctx context.Context, db *sql.DB, logger ports.Logger, before time.Tim
 	return nil
 }
 
-// CleanupUserEvent deletes the legacy UserEvent rows of the migrated types that
-// have already been migrated (their id exists in the destination typed table).
+// CleanupUserEvent deletes the legacy UserEvent rows of the redundant migrated
+// types (login, lesson_viewed) that are confirmed migrated (id exists in dest).
 // Run AFTER Dedup is validated. Dry-run by default; pass apply=true to delete.
-// Comment/Post sources are left alone (they are primary entities, not legacy
-// duplicates).
+// Left alone: Comment/Post (primary entities) and EXAM — exam UserEvent rows
+// hold the attempt + student answers read by the quiz/exam/responses page.
 func CleanupUserEvent(ctx context.Context, db *sql.DB, logger ports.Logger, apply bool, chunkSize int, sleep time.Duration) error {
 	if chunkSize <= 0 {
 		chunkSize = defaultBackfillChunk
@@ -141,7 +144,9 @@ func CleanupUserEvent(ctx context.Context, db *sql.DB, logger ports.Logger, appl
 
 	var grandDeleted int64
 	for _, s := range dedupSpecs {
-		if s.source != "UserEvent" {
+		// Skip non-UserEvent sources and any UserEvent type the feature still
+		// reads (exam answers live in UserEvent.whereEvent).
+		if s.source != "UserEvent" || s.keepUserEvent {
 			continue
 		}
 		// Only delete UserEvent rows confirmed migrated (id present in dest).
