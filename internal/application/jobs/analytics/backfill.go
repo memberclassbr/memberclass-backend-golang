@@ -59,6 +59,14 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId str
 			return fmt.Errorf("distinct types: %w", err)
 		}
 
+		// Step 2b: drop rows the OLD backfill wrote with the wrong lessonId/examId
+		// (it copied whereEvent). Surgical: only backfill rows whose id-field != the
+		// source identifier. Must run before step 3 — ON CONFLICT DO NOTHING would
+		// otherwise keep the wrong row.
+		if err := cleanStaleEventTables(ctx, db, logger, tenantId, o.ChunkSize); err != nil {
+			return fmt.Errorf("clean stale event tables: %w", err)
+		}
+
 		// Step 3: UserEvent migration — set-based INSERT...SELECT with keyset
 		// pagination (one pass over [from,to) per type, not one INSERT per row).
 		if err := migrateUserEvents(ctx, db, logger, tenantId, from, to, o.ChunkSize, o.Sleep); err != nil {
@@ -302,6 +310,59 @@ var userEventMigrations = []eventMigration{
 
 const defaultBackfillChunk = 5_000
 
+// staleIdEventTables: typed tables whose id-field (lessonId/examId) must equal the
+// source UserEvent.identifier. The old backfill copied whereEvent there by mistake.
+var staleIdEventTables = []struct {
+	table string
+	idCol string
+}{
+	{table: "LessonAccessEvent", idCol: "lessonId"},
+	{table: "ExamCompletionEvent", idCol: "examId"},
+}
+
+// cleanStaleEventTables deletes, for one tenant, the backfill rows (id present in
+// UserEvent) whose id-field disagrees with UserEvent.identifier — the wrong rows
+// the old backfill wrote. Live dual-write rows (id not in UserEvent) are left alone.
+// Deletes nothing when the tenant is already correct, so it's safe to always run.
+func cleanStaleEventTables(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string, chunkSize int) error {
+	if chunkSize <= 0 {
+		chunkSize = defaultBackfillChunk
+	}
+	for _, s := range staleIdEventTables {
+		delSQL := fmt.Sprintf(`DELETE FROM %q
+			WHERE "tenantId" = $1
+			  AND EXISTS (
+			    SELECT 1 FROM "UserEvent" ue
+			    WHERE ue."id" = %q."id" AND ue."identifier" IS DISTINCT FROM %q.%q
+			  )
+			LIMIT $2`, s.table, s.table, s.table, s.idCol)
+		var total int64
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+			res, err := db.ExecContext(ctx, delSQL, tenantId, chunkSize)
+			if err != nil {
+				return fmt.Errorf("clean stale %s: %w", s.table, err)
+			}
+			n, raErr := res.RowsAffected()
+			if raErr != nil {
+				return fmt.Errorf("clean stale %s RowsAffected: %w", s.table, raErr)
+			}
+			total += n
+			if n == 0 {
+				break
+			}
+		}
+		if total > 0 {
+			logger.Info("cleaned stale rows (wrong id) before re-migrate", "table", s.table, "tenantId", tenantId, "deleted", total)
+		}
+	}
+	return nil
+}
+
 // migrateUserEvents copies a tenant's UserEvent rows in [from, to) into the
 // typed event tables using set-based INSERT...SELECT with keyset (id > cursor)
 // pagination. Replaces the old per-row INSERT + OFFSET loop: O(n) instead of
@@ -415,19 +476,19 @@ func resetTenantData(ctx context.Context, db *sql.DB, logger ports.Logger, tenan
 	return nil
 }
 
-// pendingUserEventWhere matches handled-type UserEvent rows NOT yet migrated to
-// their destination table (the destination reuses UserEvent.id). It's how we
-// count remaining work and skip tenants already fully migrated — a tenant drops
-// off the list/queue once its events are in the typed tables. A --reset deletes
-// the destination rows, so the tenant correctly reappears as pending.
+// pendingUserEventWhere matches handled-type UserEvent rows that don't yet have a
+// CORRECT destination row (destination reuses UserEvent.id, and for lesson/exam the
+// id-field must equal UserEvent.identifier). This counts remaining work AND flags
+// tenants whose lesson/exam rows were backfilled with the wrong id (old bug: copied
+// whereEvent), so they re-enter the queue. A --reset also brings a tenant back.
 // The surrounding query must alias UserEvent as `ue`.
 const pendingUserEventWhere = `ue."usersOnTenantsTenantId" IS NOT NULL AND (
 		(ue."type" IN ('login','user-login')
 		   AND NOT EXISTS (SELECT 1 FROM "LoginEvent" d WHERE d."id" = ue."id"))
-		OR (ue."type" = 'lesson_viewed' AND ue."whereEvent" <> ''
-		   AND NOT EXISTS (SELECT 1 FROM "LessonAccessEvent" d WHERE d."id" = ue."id"))
-		OR (ue."type" IN ('exam','exam-completed','exam_auto_register') AND ue."whereEvent" <> ''
-		   AND NOT EXISTS (SELECT 1 FROM "ExamCompletionEvent" d WHERE d."id" = ue."id"))
+		OR (ue."type" = 'lesson_viewed' AND ue."identifier" IS NOT NULL AND ue."identifier" <> ''
+		   AND NOT EXISTS (SELECT 1 FROM "LessonAccessEvent" d WHERE d."id" = ue."id" AND d."lessonId" = ue."identifier"))
+		OR (ue."type" IN ('exam','exam-completed','exam_auto_register') AND ue."identifier" IS NOT NULL AND ue."identifier" <> ''
+		   AND NOT EXISTS (SELECT 1 FROM "ExamCompletionEvent" d WHERE d."id" = ue."id" AND d."examId" = ue."identifier"))
 	)`
 
 // backfillTenantOrderBy maps an --order flag to an ORDER BY over the pending
