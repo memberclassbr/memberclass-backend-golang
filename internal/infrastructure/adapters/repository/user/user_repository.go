@@ -369,16 +369,11 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 	}
 
 	deliveriesQuery := `
-		SELECT uod."userId", uod."deliveryId", uod."assignedAt", d.name as delivery_name
-		FROM "UserOnDelivery" uod
-		JOIN "Delivery" d ON d.id = uod."deliveryId"
-		WHERE uod."userId" = ANY($1) AND d."tenantId" = $2
-		UNION ALL
-		SELECT mod."memberId", mod."deliveryId", mod."assignedAt", d.name
+		SELECT mod."memberId", mod."deliveryId", mod."assignedAt", d.name as delivery_name
 		FROM "MemberOnDelivery" mod
 		JOIN "Delivery" d ON d.id = mod."deliveryId"
 		WHERE mod."memberId" = ANY($1) AND mod."tenantId" = $2
-		ORDER BY "assignedAt" DESC
+		ORDER BY mod."assignedAt" DESC
 	`
 
 	deliveryRows, err := r.db.QueryContext(ctx, deliveriesQuery, pq.Array(userIDs), tenantID)
