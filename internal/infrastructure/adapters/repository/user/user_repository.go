@@ -438,14 +438,14 @@ func (r *UserRepository) IsUserOwner(ctx context.Context, userID, tenantID strin
 	return true, nil
 }
 
-func (r *UserRepository) GetUserDeliveryIDs(ctx context.Context, userID string) ([]string, error) {
+func (r *UserRepository) GetUserDeliveryIDs(ctx context.Context, userID string, tenantID string) ([]string, error) {
 	query := `
-		SELECT "deliveryId" 
-		FROM "UserOnDelivery" 
-		WHERE "userId" = $1
+		SELECT "deliveryId"
+		FROM "MemberOnDelivery"
+		WHERE "memberId" = $1 AND "tenantId" = $2
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, userID)
+	rows, err := r.db.QueryContext(ctx, query, userID, tenantID)
 	if err != nil {
 		r.log.Error("Error getting user delivery IDs: " + err.Error())
 		return nil, &memberclasserrors.MemberClassError{

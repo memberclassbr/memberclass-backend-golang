@@ -17,6 +17,6 @@ type UserRepository interface {
 	FindPurchasesByUserAndTenant(ctx context.Context, userID, tenantID string, purchaseTypes []string, page, limit int) ([]purchases.UserPurchaseData, int64, error)
 	FindUserInformations(ctx context.Context, tenantID string, email string, page, limit int) ([]user.UserInformation, int64, error)
 	IsUserOwner(ctx context.Context, userID, tenantID string) (bool, error)
-	GetUserDeliveryIDs(ctx context.Context, userID string) ([]string, error)
+	GetUserDeliveryIDs(ctx context.Context, userID string, tenantID string) ([]string, error)
 	UpdateMagicToken(ctx context.Context, userID string, tokenHash string, validUntil time.Time) error
 }

@@ -396,9 +396,9 @@ func (_c *MockUserRepository_FindUserInformations_Call) RunAndReturn(run func(co
 	return _c
 }
 
-// GetUserDeliveryIDs provides a mock function with given fields: ctx, userID
-func (_m *MockUserRepository) GetUserDeliveryIDs(ctx context.Context, userID string) ([]string, error) {
-	ret := _m.Called(ctx, userID)
+// GetUserDeliveryIDs provides a mock function with given fields: ctx, userID, tenantID
+func (_m *MockUserRepository) GetUserDeliveryIDs(ctx context.Context, userID string, tenantID string) ([]string, error) {
+	ret := _m.Called(ctx, userID, tenantID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUserDeliveryIDs")
@@ -406,19 +406,19 @@ func (_m *MockUserRepository) GetUserDeliveryIDs(ctx context.Context, userID str
 
 	var r0 []string
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) ([]string, error)); ok {
-		return rf(ctx, userID)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]string, error)); ok {
+		return rf(ctx, userID, tenantID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) []string); ok {
-		r0 = rf(ctx, userID)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []string); ok {
+		r0 = rf(ctx, userID, tenantID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]string)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, userID)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, userID, tenantID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -434,13 +434,14 @@ type MockUserRepository_GetUserDeliveryIDs_Call struct {
 // GetUserDeliveryIDs is a helper method to define mock.On call
 //   - ctx context.Context
 //   - userID string
-func (_e *MockUserRepository_Expecter) GetUserDeliveryIDs(ctx interface{}, userID interface{}) *MockUserRepository_GetUserDeliveryIDs_Call {
-	return &MockUserRepository_GetUserDeliveryIDs_Call{Call: _e.mock.On("GetUserDeliveryIDs", ctx, userID)}
+//   - tenantID string
+func (_e *MockUserRepository_Expecter) GetUserDeliveryIDs(ctx interface{}, userID interface{}, tenantID interface{}) *MockUserRepository_GetUserDeliveryIDs_Call {
+	return &MockUserRepository_GetUserDeliveryIDs_Call{Call: _e.mock.On("GetUserDeliveryIDs", ctx, userID, tenantID)}
 }
 
-func (_c *MockUserRepository_GetUserDeliveryIDs_Call) Run(run func(ctx context.Context, userID string)) *MockUserRepository_GetUserDeliveryIDs_Call {
+func (_c *MockUserRepository_GetUserDeliveryIDs_Call) Run(run func(ctx context.Context, userID string, tenantID string)) *MockUserRepository_GetUserDeliveryIDs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
 	})
 	return _c
 }
@@ -450,7 +451,7 @@ func (_c *MockUserRepository_GetUserDeliveryIDs_Call) Return(_a0 []string, _a1 e
 	return _c
 }
 
-func (_c *MockUserRepository_GetUserDeliveryIDs_Call) RunAndReturn(run func(context.Context, string) ([]string, error)) *MockUserRepository_GetUserDeliveryIDs_Call {
+func (_c *MockUserRepository_GetUserDeliveryIDs_Call) RunAndReturn(run func(context.Context, string, string) ([]string, error)) *MockUserRepository_GetUserDeliveryIDs_Call {
 	_c.Call.Return(run)
 	return _c
 }

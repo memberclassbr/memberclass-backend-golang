@@ -196,7 +196,7 @@ func TestSocialCommentUseCase_CreateOrUpdatePost_CreatePost_NoDeliveryAccess(t *
 	mockUserRepo.On("BelongsToTenant", "user-123", "tenant-123").Return(true, nil)
 	mockUserRepo.On("IsUserOwner", mock.Anything, "user-123", "tenant-123").Return(false, nil)
 	mockTopicRepo.On("FindByIDWithDeliveries", mock.Anything, "topic-456").Return(topic, nil)
-	mockUserRepo.On("GetUserDeliveryIDs", mock.Anything, "user-123").Return([]string{"delivery-3"}, nil)
+	mockUserRepo.On("GetUserDeliveryIDs", mock.Anything, "user-123", "tenant-123").Return([]string{"delivery-3"}, nil)
 
 	result, err := useCase.CreateOrUpdatePost(context.Background(), req, "tenant-123")
 
@@ -232,7 +232,7 @@ func TestSocialCommentUseCase_CreateOrUpdatePost_CreatePost_WithDeliveryAccess(t
 	mockUserRepo.On("BelongsToTenant", "user-123", "tenant-123").Return(true, nil)
 	mockUserRepo.On("IsUserOwner", mock.Anything, "user-123", "tenant-123").Return(false, nil)
 	mockTopicRepo.On("FindByIDWithDeliveries", mock.Anything, "topic-456").Return(topic, nil)
-	mockUserRepo.On("GetUserDeliveryIDs", mock.Anything, "user-123").Return([]string{"delivery-1", "delivery-3"}, nil)
+	mockUserRepo.On("GetUserDeliveryIDs", mock.Anything, "user-123", "tenant-123").Return([]string{"delivery-1", "delivery-3"}, nil)
 	mockSocialCommentRepo.On("Create", mock.Anything, req, "tenant-123").Return("post-789", nil)
 
 	result, err := useCase.CreateOrUpdatePost(context.Background(), req, "tenant-123")

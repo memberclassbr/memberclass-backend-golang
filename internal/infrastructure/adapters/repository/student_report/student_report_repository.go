@@ -118,7 +118,7 @@ func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantI
 		return nil, 0, err
 	}
 
-	userOnDeliveries, memberOnDeliveries, err := r.getUserDeliveries(ctx, userIDs, tenantID)
+	memberOnDeliveries, err := r.getUserDeliveries(ctx, userIDs, tenantID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -135,9 +135,6 @@ func (r *StudentReportRepository) GetStudentsReport(ctx context.Context, tenantI
 
 	for userID, student := range studentsMap {
 		deliveryIDs := []string{}
-		if userDeliveries, ok := userOnDeliveries[userID]; ok {
-			deliveryIDs = append(deliveryIDs, userDeliveries...)
-		}
 		if memberDeliveries, ok := memberOnDeliveries[userID]; ok {
 			deliveryIDs = append(deliveryIDs, memberDeliveries...)
 		}
@@ -229,38 +226,13 @@ func (r *StudentReportRepository) getDeliveries(ctx context.Context, tenantID st
 	return deliveries, nil
 }
 
-func (r *StudentReportRepository) getUserDeliveries(ctx context.Context, userIDs []string, tenantID string) (map[string][]string, map[string][]string, error) {
-	userOnDeliveryQuery := `SELECT "userId", "deliveryId" FROM "UserOnDelivery" WHERE "userId" = ANY($1)`
-
-	rows, err := r.db.QueryContext(ctx, userOnDeliveryQuery, pq.Array(userIDs))
-	if err != nil {
-		r.log.Error("Error getting user deliveries: " + err.Error())
-		return nil, nil, &memberclasserrors.MemberClassError{
-			Code:    500,
-			Message: "error getting user deliveries",
-		}
-	}
-	defer rows.Close()
-
-	userOnDeliveries := make(map[string][]string)
-	for rows.Next() {
-		var userID, deliveryID string
-		if err := rows.Scan(&userID, &deliveryID); err != nil {
-			r.log.Error("Error scanning user delivery: " + err.Error())
-			return nil, nil, &memberclasserrors.MemberClassError{
-				Code:    500,
-				Message: "error scanning user delivery",
-			}
-		}
-		userOnDeliveries[userID] = append(userOnDeliveries[userID], deliveryID)
-	}
-
+func (r *StudentReportRepository) getUserDeliveries(ctx context.Context, userIDs []string, tenantID string) (map[string][]string, error) {
 	memberOnDeliveryQuery := `SELECT "memberId", "deliveryId" FROM "MemberOnDelivery" WHERE "memberId" = ANY($1) AND "tenantId" = $2`
 
 	memberRows, err := r.db.QueryContext(ctx, memberOnDeliveryQuery, pq.Array(userIDs), tenantID)
 	if err != nil {
 		r.log.Error("Error getting member deliveries: " + err.Error())
-		return nil, nil, &memberclasserrors.MemberClassError{
+		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error getting member deliveries",
 		}
@@ -272,7 +244,7 @@ func (r *StudentReportRepository) getUserDeliveries(ctx context.Context, userIDs
 		var memberID, deliveryID string
 		if err := memberRows.Scan(&memberID, &deliveryID); err != nil {
 			r.log.Error("Error scanning member delivery: " + err.Error())
-			return nil, nil, &memberclasserrors.MemberClassError{
+			return nil, &memberclasserrors.MemberClassError{
 				Code:    500,
 				Message: "error scanning member delivery",
 			}
@@ -280,7 +252,7 @@ func (r *StudentReportRepository) getUserDeliveries(ctx context.Context, userIDs
 		memberOnDeliveries[memberID] = append(memberOnDeliveries[memberID], deliveryID)
 	}
 
-	return userOnDeliveries, memberOnDeliveries, nil
+	return memberOnDeliveries, nil
 }
 
 func (r *StudentReportRepository) getLessonsWatched(ctx context.Context, userIDs []string, tenantID string) (map[string][]student.LessonWatched, error) {
