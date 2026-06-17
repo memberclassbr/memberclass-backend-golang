@@ -107,7 +107,7 @@ func (uc *SocialCommentUseCase) createPost(ctx context.Context, req comments.Cre
 	}
 
 	if len(topic.DeliveryIDs) > 0 && !isOwner {
-		userDeliveryIDs, err := uc.userRepo.GetUserDeliveryIDs(ctx, req.UserID)
+		userDeliveryIDs, err := uc.userRepo.GetUserDeliveryIDs(ctx, req.UserID, tenantID)
 		if err != nil {
 			return nil, err
 		}

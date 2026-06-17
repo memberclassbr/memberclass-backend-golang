@@ -3,6 +3,8 @@ package student_report
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"errors"
 	"testing"
@@ -15,6 +17,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// legacyTableGuardMatcher behaves like the default regexp matcher but also
+// fails any query that references the legacy "UserOnDelivery" table. That
+// table does not exist in the schema — querying it made the student report
+// endpoint return 500 `error getting user deliveries` (pq: relation
+// "UserOnDelivery" does not exist). Deliveries now live in "MemberOnDelivery"
+// only; this guard ensures the regression can never be reintroduced silently.
+var legacyTableGuardMatcher = sqlmock.QueryMatcherFunc(func(expectedSQL, actualSQL string) error {
+	if strings.Contains(actualSQL, "UserOnDelivery") {
+		return fmt.Errorf("query references non-existent legacy table UserOnDelivery: %s", actualSQL)
+	}
+	return sqlmock.QueryMatcherRegexp.Match(expectedSQL, actualSQL)
+})
 
 func TestNewStudentReportRepository(t *testing.T) {
 	t.Run("should create new student report repository instance", func(t *testing.T) {
@@ -64,13 +79,8 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 					WithArgs("tenant-123").
 					WillReturnRows(deliveryRows)
 
-				userOnDeliveryRows := sqlmock.NewRows([]string{"userId", "deliveryId"}).
+				memberOnDeliveryRows := sqlmock.NewRows([]string{"memberId", "deliveryId"}).
 					AddRow("user-1", "delivery-1")
-				sqlMock.ExpectQuery(`SELECT "userId", "deliveryId" FROM "UserOnDelivery"`).
-					WithArgs(sqlmock.AnyArg()).
-					WillReturnRows(userOnDeliveryRows)
-
-				memberOnDeliveryRows := sqlmock.NewRows([]string{"memberId", "deliveryId"})
 				sqlMock.ExpectQuery(`SELECT "memberId", "deliveryId" FROM "MemberOnDelivery"`).
 					WithArgs(sqlmock.AnyArg(), "tenant-123").
 					WillReturnRows(memberOnDeliveryRows)
@@ -114,11 +124,6 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 				sqlMock.ExpectQuery(`SELECT id, name FROM "Delivery"`).
 					WithArgs("tenant-123").
 					WillReturnRows(deliveryRows)
-
-				userOnDeliveryRows := sqlmock.NewRows([]string{"userId", "deliveryId"})
-				sqlMock.ExpectQuery(`SELECT "userId", "deliveryId" FROM "UserOnDelivery"`).
-					WithArgs(pq.Array([]string{"user-1"})).
-					WillReturnRows(userOnDeliveryRows)
 
 				memberOnDeliveryRows := sqlmock.NewRows([]string{"memberId", "deliveryId"})
 				sqlMock.ExpectQuery(`SELECT "memberId", "deliveryId" FROM "MemberOnDelivery"`).
@@ -197,11 +202,6 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 					WithArgs("tenant-123").
 					WillReturnRows(deliveryRows)
 
-				userOnDeliveryRows := sqlmock.NewRows([]string{"userId", "deliveryId"})
-				sqlMock.ExpectQuery(`SELECT "userId", "deliveryId" FROM "UserOnDelivery"`).
-					WithArgs(pq.Array([]string{"user-1"})).
-					WillReturnRows(userOnDeliveryRows)
-
 				memberOnDeliveryRows := sqlmock.NewRows([]string{"memberId", "deliveryId"})
 				sqlMock.ExpectQuery(`SELECT "memberId", "deliveryId" FROM "MemberOnDelivery"`).
 					WithArgs(pq.Array([]string{"user-1"}), "tenant-123").
@@ -253,7 +253,7 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
-			name:      "should return error when getUserDeliveries fails",
+			name:      "should return error when getMemberDeliveries fails",
 			tenantID:  "tenant-123",
 			startDate: nil,
 			endDate:   nil,
@@ -272,13 +272,13 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 					WithArgs("tenant-123").
 					WillReturnRows(deliveryRows)
 
-				sqlMock.ExpectQuery(`SELECT "userId", "deliveryId" FROM "UserOnDelivery"`).
-					WithArgs(pq.Array([]string{"user-1"})).
-					WillReturnError(errors.New("user delivery error"))
+				sqlMock.ExpectQuery(`SELECT "memberId", "deliveryId" FROM "MemberOnDelivery"`).
+					WithArgs(pq.Array([]string{"user-1"}), "tenant-123").
+					WillReturnError(errors.New("member delivery error"))
 			},
 			expectedError: &memberclasserrors.MemberClassError{
 				Code:    500,
-				Message: "error getting user deliveries",
+				Message: "error getting member deliveries",
 			},
 			expectedCount: 0,
 		},
@@ -301,11 +301,6 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 				sqlMock.ExpectQuery(`SELECT id, name FROM "Delivery"`).
 					WithArgs("tenant-123").
 					WillReturnRows(deliveryRows)
-
-				userOnDeliveryRows := sqlmock.NewRows([]string{"userId", "deliveryId"})
-				sqlMock.ExpectQuery(`SELECT "userId", "deliveryId" FROM "UserOnDelivery"`).
-					WithArgs(pq.Array([]string{"user-1"})).
-					WillReturnRows(userOnDeliveryRows)
 
 				memberOnDeliveryRows := sqlmock.NewRows([]string{"memberId", "deliveryId"})
 				sqlMock.ExpectQuery(`SELECT "memberId", "deliveryId" FROM "MemberOnDelivery"`).
@@ -341,11 +336,6 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 				sqlMock.ExpectQuery(`SELECT id, name FROM "Delivery"`).
 					WithArgs("tenant-123").
 					WillReturnRows(deliveryRows)
-
-				userOnDeliveryRows := sqlmock.NewRows([]string{"userId", "deliveryId"})
-				sqlMock.ExpectQuery(`SELECT "userId", "deliveryId" FROM "UserOnDelivery"`).
-					WithArgs(pq.Array([]string{"user-1"})).
-					WillReturnRows(userOnDeliveryRows)
 
 				memberOnDeliveryRows := sqlmock.NewRows([]string{"memberId", "deliveryId"})
 				sqlMock.ExpectQuery(`SELECT "memberId", "deliveryId" FROM "MemberOnDelivery"`).
@@ -408,11 +398,6 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 					WithArgs("tenant-123").
 					WillReturnRows(deliveryRows)
 
-				userOnDeliveryRows := sqlmock.NewRows([]string{"userId", "deliveryId"})
-				sqlMock.ExpectQuery(`SELECT "userId", "deliveryId" FROM "UserOnDelivery"`).
-					WithArgs(pq.Array([]string{"user-1"})).
-					WillReturnRows(userOnDeliveryRows)
-
 				memberOnDeliveryRows := sqlmock.NewRows([]string{"memberId", "deliveryId"})
 				sqlMock.ExpectQuery(`SELECT "memberId", "deliveryId" FROM "MemberOnDelivery"`).
 					WithArgs(pq.Array([]string{"user-1"}), "tenant-123").
@@ -439,7 +424,7 @@ func TestStudentReportRepository_GetStudentsReport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, sqlMock, err := sqlmock.New()
+			db, sqlMock, err := sqlmock.New(sqlmock.QueryMatcherOption(legacyTableGuardMatcher))
 			assert.NoError(t, err)
 			defer db.Close()
 
