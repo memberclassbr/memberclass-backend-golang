@@ -22,11 +22,12 @@ type deliveryRef struct {
 }
 
 type importUserInput struct {
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone,omitempty"`
-	Accession string `json:"accession,omitempty"`
-	Document  string `json:"document,omitempty"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone,omitempty"`
+	Accession  string `json:"accession,omitempty"`
+	Document   string `json:"document,omitempty"`
+	Expiration string `json:"expiration,omitempty"`
 }
 
 type importRequest struct {
@@ -45,16 +46,17 @@ type importAcceptedResponse struct {
 // tenantRow is the subset of "Tenant" columns the processor needs to render
 // emails. Kept slice-local to avoid importing the full tenant entity.
 type tenantRow struct {
-	ID              string
-	Name            string
-	Subdomain       sql.NullString
-	CustomDomain    sql.NullString
-	Logo            sql.NullString
-	MainColor       sql.NullString
-	BackgroundColor sql.NullString
-	TextColor       sql.NullString
-	EmailContact    sql.NullString
-	Language        sql.NullString
+	ID                 string
+	Name               string
+	Subdomain          sql.NullString
+	CustomDomain       sql.NullString
+	Logo               sql.NullString
+	MainColor          sql.NullString
+	BackgroundColor    sql.NullString
+	TextColor          sql.NullString
+	EmailContact       sql.NullString
+	Language           sql.NullString
+	OneUserPerDocument bool
 }
 
 // ---------- HTTP handler ----------
@@ -200,7 +202,7 @@ func (f *Feature) loadRoleForTenant(ctx context.Context, userID, tenantID string
 func (f *Feature) loadTenant(ctx context.Context, tenantID string) (*tenantRow, error) {
 	const q = `
 		SELECT id, name, subdomain, "customDomain", logo, "mainColor",
-		       "backgroundColor", "textColor", "emailContact", language
+		       "backgroundColor", "textColor", "emailContact", language, "oneUserPerDocument"
 		FROM "Tenant"
 		WHERE id = $1
 		LIMIT 1
@@ -209,6 +211,7 @@ func (f *Feature) loadTenant(ctx context.Context, tenantID string) (*tenantRow, 
 	err := f.db.QueryRowContext(ctx, q, tenantID).Scan(
 		&t.ID, &t.Name, &t.Subdomain, &t.CustomDomain, &t.Logo,
 		&t.MainColor, &t.BackgroundColor, &t.TextColor, &t.EmailContact, &t.Language,
+		&t.OneUserPerDocument,
 	)
 	if err != nil {
 		return nil, err
@@ -297,6 +300,24 @@ func pickProtocol(domain string) string {
 // to now on any parse error (keeps the row going — the timestamp is not
 // business-critical enough to reject the import). Logs at debug so malformed
 // client input is noticed without spamming the error channel.
+// parseExpiration parses the optional expiration date in `dd/MM/yyyy HH:mm:ss`
+// format. Returns nil when the field is empty or malformed — nil maps to a NULL
+// expiresAt on MemberOnDelivery (no expiration).
+func (f *Feature) parseExpiration(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("02/01/2006 15:04:05", s)
+	if err != nil {
+		f.log.Debug("import.parse_expiration_fallback",
+			"raw", s,
+			"error", err.Error(),
+		)
+		return nil
+	}
+	return &t
+}
+
 func (f *Feature) parseAccession(s string) time.Time {
 	if s == "" {
 		return time.Now().UTC()
