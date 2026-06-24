@@ -106,6 +106,7 @@ func (f *Feature) runImport(importID string, req *importRequest, tenant *tenantR
 			string(passwordHash), string(tokenHash),
 			magicTokenValidUntil,
 			counters,
+			tenant.OneUserPerDocument,
 		)
 		if err != nil {
 			f.log.Error("import.batch_failed",
@@ -189,6 +190,7 @@ func (f *Feature) processBatch(
 	passwordHash, tokenHash string,
 	magicTokenValidUntil time.Time,
 	counters *importCounters,
+	oneUserPerDocument bool,
 ) ([]rowState, error) {
 	states := make([]rowState, 0, len(batch))
 
@@ -215,7 +217,7 @@ func (f *Feature) processBatch(
 		}
 
 		// --- Find-or-create user ---
-		userID, existingName, existingDoc, uotExists, findErr := f.findUser(ctx, u, req.TenantID)
+		userID, existingName, existingDoc, uotExists, findWarn, findErr := f.findUser(ctx, u, req.TenantID, oneUserPerDocument)
 		if findErr != nil {
 			state.status = "error"
 			state.errorMessage = findErr.Error()
@@ -223,6 +225,17 @@ func (f *Feature) processBatch(
 			states = append(states, state)
 			continue
 		}
+
+		f.log.Info("import.debug.find_user",
+			"import_id", importID,
+			"row_index", rowIdx,
+			"email", u.Email,
+			"document", u.Document,
+			"found_user_id", userID,
+			"uot_exists", uotExists,
+			"one_user_per_document", oneUserPerDocument,
+			"warn", findWarn,
+		)
 
 		email := strings.ToLower(u.Email)
 
@@ -280,6 +293,16 @@ func (f *Feature) processBatch(
 		}
 		state.hasAll = hasAll
 
+		f.log.Info("import.debug.has_all",
+			"import_id", importID,
+			"row_index", rowIdx,
+			"email", u.Email,
+			"user_id", userID,
+			"is_new_user", state.isNewUser,
+			"deliveries_count", len(req.Deliveries),
+			"has_all", hasAll,
+		)
+
 		// --- Refresh magic token only when there's real work to deliver ---
 		if !hasAll {
 			if !state.isNewUser {
@@ -329,16 +352,21 @@ func (f *Feature) processBatch(
 			}
 		}
 
-		// --- Create delivery memberships (if requested and not already full) ---
-		if len(req.Deliveries) > 0 && !hasAll {
+		// --- Create/update delivery memberships (always upsert dates from spreadsheet) ---
+		if len(req.Deliveries) > 0 {
 			assignedAt := f.parseAccession(u.Accession)
-			if err := f.insertMemberOnDeliveries(ctx, userID, req.TenantID, req.Deliveries, assignedAt); err != nil {
+			expiresAt := f.parseExpiration(u.Expiration)
+			if err := f.insertMemberOnDeliveries(ctx, userID, req.TenantID, req.Deliveries, assignedAt, expiresAt); err != nil {
 				state.status = "error"
 				state.errorMessage = err.Error()
 				counters.errorRows++
 				states = append(states, state)
 				continue
 			}
+		}
+
+		if findWarn != "" {
+			state.errorMessage = findWarn
 		}
 
 		state.userID = userID
@@ -367,32 +395,39 @@ func (f *Feature) processBatch(
 
 // ---------- Lookup ----------
 
-// findUser tries document-based lookup first (with CPF variants), then falls
-// back to email. Returns (userId, name-on-tenant, doc-on-tenant, uotExists, err).
-// userId is "" when nothing matched.
-func (f *Feature) findUser(ctx context.Context, u importUserInput, tenantID string) (string, string, string, bool, error) {
-	if u.Document != "" {
+// findUser looks up a user by document (when oneUserPerDocument is enabled) or
+// by email. Returns (userId, name-on-tenant, doc-on-tenant, uotExists, warnMessage, err).
+// userId is "" when nothing matched. warnMessage is non-empty when a duplicate
+// document was detected in the tenant but the rule is disabled — the row is
+// still processed normally, but the warning is stored for the admin to review.
+func (f *Feature) findUser(ctx context.Context, u importUserInput, tenantID string, oneUserPerDocument bool) (string, string, string, bool, string, error) {
+	if oneUserPerDocument && u.Document != "" {
 		variants := documentVariants(u.Document)
 		if len(variants) > 0 {
 			const q = `
-				SELECT uot."userId", COALESCE(uot.name, ''), COALESCE(uot.document, '')
+				SELECT uot."userId", COALESCE(uot.name, ''), COALESCE(uot.document, ''), u.email
 				FROM "UsersOnTenants" uot
+				JOIN "User" u ON u.id = uot."userId"
 				WHERE uot."tenantId" = $1
 				  AND uot.document = ANY($2)
 				LIMIT 1
 			`
-			var userID, name, doc string
-			err := f.db.QueryRowContext(ctx, q, tenantID, pq.Array(variants)).Scan(&userID, &name, &doc)
+			var userID, name, doc, foundEmail string
+			err := f.db.QueryRowContext(ctx, q, tenantID, pq.Array(variants)).Scan(&userID, &name, &doc, &foundEmail)
 			if err == nil {
-				return userID, name, doc, true, nil
+				warnMsg := ""
+				if foundEmail != strings.ToLower(u.Email) {
+					warnMsg = fmt.Sprintf("CPF vinculado a outro usuário no tenant (e-mail existente: %s). O usuário existente foi atualizado.", foundEmail)
+				}
+				return userID, name, doc, true, warnMsg, nil
 			}
 			if !errors.Is(err, sql.ErrNoRows) {
-				return "", "", "", false, fmt.Errorf("find by document: %w", err)
+				return "", "", "", false, "", fmt.Errorf("find by document: %w", err)
 			}
 		}
 	}
 
-	// Email fallback.
+	// Email lookup (primary when oneUserPerDocument is false).
 	email := strings.ToLower(u.Email)
 	var userID string
 	err := f.db.QueryRowContext(ctx,
@@ -400,9 +435,9 @@ func (f *Feature) findUser(ctx context.Context, u importUserInput, tenantID stri
 	).Scan(&userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", "", "", false, nil
+			return "", "", "", false, "", nil
 		}
-		return "", "", "", false, fmt.Errorf("find by email: %w", err)
+		return "", "", "", false, "", fmt.Errorf("find by email: %w", err)
 	}
 
 	// Does the user already belong to this tenant?
@@ -416,11 +451,48 @@ func (f *Feature) findUser(ctx context.Context, u importUserInput, tenantID stri
 	).Scan(&name, &doc)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return userID, "", "", false, nil
+			warnMsg := ""
+			if !oneUserPerDocument {
+				warnMsg = f.checkDuplicateDocument(ctx, u.Document, tenantID, userID)
+			}
+			return userID, "", "", false, warnMsg, nil
 		}
-		return "", "", "", false, fmt.Errorf("find uot by userId: %w", err)
+		return "", "", "", false, "", fmt.Errorf("find uot by userId: %w", err)
 	}
-	return userID, name, doc, true, nil
+
+	warnMsg := ""
+	if !oneUserPerDocument {
+		warnMsg = f.checkDuplicateDocument(ctx, u.Document, tenantID, userID)
+	}
+	return userID, name, doc, true, warnMsg, nil
+}
+
+// checkDuplicateDocument returns a warning message when another user in the
+// tenant shares the same document. excludeUserID is the user already matched
+// by email — we skip it to avoid self-match.
+func (f *Feature) checkDuplicateDocument(ctx context.Context, document, tenantID, excludeUserID string) string {
+	if document == "" {
+		return ""
+	}
+	variants := documentVariants(document)
+	if len(variants) == 0 {
+		return ""
+	}
+	const q = `
+		SELECT u.email
+		FROM "UsersOnTenants" uot
+		JOIN "User" u ON u.id = uot."userId"
+		WHERE uot."tenantId" = $1
+		  AND uot.document = ANY($2)
+		  AND uot."userId" != $3
+		LIMIT 1
+	`
+	var existingEmail string
+	err := f.db.QueryRowContext(ctx, q, tenantID, pq.Array(variants), excludeUserID).Scan(&existingEmail)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("CPF duplicado: outro usuário com o mesmo documento já existe no tenant (e-mail: %s). O usuário importado foi processado normalmente.", existingEmail)
 }
 
 // ---------- Writes ----------
@@ -501,7 +573,7 @@ func (f *Feature) userHasAllDeliveries(ctx context.Context, userID, tenantID str
 	return count >= len(deliveries), nil
 }
 
-func (f *Feature) insertMemberOnDeliveries(ctx context.Context, userID, tenantID string, deliveries []deliveryRef, assignedAt time.Time) error {
+func (f *Feature) insertMemberOnDeliveries(ctx context.Context, userID, tenantID string, deliveries []deliveryRef, assignedAt time.Time, expiresAt *time.Time) error {
 	// Build a single multi-row INSERT ... VALUES statement.
 	if len(deliveries) == 0 {
 		return nil
@@ -511,15 +583,15 @@ func (f *Feature) insertMemberOnDeliveries(ctx context.Context, userID, tenantID
 		args         []any
 	)
 	for i, d := range deliveries {
-		base := i * 4
+		base := i * 5
 		placeholders = append(placeholders,
-			fmt.Sprintf("($%d, $%d, $%d, $%d)", base+1, base+2, base+3, base+4),
+			fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", base+1, base+2, base+3, base+4, base+5),
 		)
-		args = append(args, userID, d.Value, tenantID, assignedAt)
+		args = append(args, userID, d.Value, tenantID, assignedAt, expiresAt)
 	}
-	q := `INSERT INTO "MemberOnDelivery" ("memberId", "deliveryId", "tenantId", "assignedAt") VALUES ` +
+	q := `INSERT INTO "MemberOnDelivery" ("memberId", "deliveryId", "tenantId", "assignedAt", "expiresAt") VALUES ` +
 		strings.Join(placeholders, ", ") +
-		` ON CONFLICT ("memberId", "deliveryId") DO NOTHING`
+		` ON CONFLICT ("memberId", "deliveryId") DO UPDATE SET "assignedAt" = EXCLUDED."assignedAt", "expiresAt" = EXCLUDED."expiresAt"`
 
 	if _, err := f.db.ExecContext(ctx, q, args...); err != nil {
 		return fmt.Errorf("insert MemberOnDelivery: %w", err)
