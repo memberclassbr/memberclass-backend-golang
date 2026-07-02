@@ -52,10 +52,12 @@ func TestUserRepository_FindUserInformations(t *testing.T) {
 				AddRow("user-1", "u1@example.com", "User One", true, assignedAt))
 
 		// 3) deliveries — must query MemberOnDelivery, never UserOnDelivery
+		expiresAt := assignedAt.Add(24 * time.Hour)
 		sqlMock.ExpectQuery(`FROM "MemberOnDelivery" mod`).
 			WithArgs(sqlmock.AnyArg(), tenantID).
-			WillReturnRows(sqlmock.NewRows([]string{"memberId", "deliveryId", "assignedAt", "delivery_name"}).
-				AddRow("user-1", "del-1", assignedAt, "Delivery One"))
+			WillReturnRows(sqlmock.NewRows([]string{"memberId", "deliveryId", "assignedAt", "delivery_name", "status", "expiresAt"}).
+				AddRow("user-1", "del-1", assignedAt, "Delivery One", "active", expiresAt).
+				AddRow("user-1", "del-2", assignedAt, "Delivery Two", "expired", nil))
 
 		result, total, err := repository.FindUserInformations(context.Background(), tenantID, "", 1, 10)
 
@@ -65,9 +67,14 @@ func TestUserRepository_FindUserInformations(t *testing.T) {
 		assert.Equal(t, "user-1", result[0].UserID)
 		assert.Equal(t, "u1@example.com", result[0].Email)
 		assert.True(t, result[0].IsPaid)
-		assert.Len(t, result[0].Deliveries, 1)
+		assert.Len(t, result[0].Deliveries, 2)
 		assert.Equal(t, "del-1", result[0].Deliveries[0].ID)
 		assert.Equal(t, "Delivery One", result[0].Deliveries[0].Name)
+		assert.Equal(t, "active", result[0].Deliveries[0].Status)
+		assert.NotNil(t, result[0].Deliveries[0].ExpiresAt)
+		assert.Equal(t, expiresAt.Format("2006-01-02T15:04:05.000Z"), *result[0].Deliveries[0].ExpiresAt)
+		assert.Equal(t, "expired", result[0].Deliveries[1].Status)
+		assert.Nil(t, result[0].Deliveries[1].ExpiresAt) // null = vitalício
 		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 
@@ -92,7 +99,7 @@ func TestUserRepository_FindUserInformations(t *testing.T) {
 
 		sqlMock.ExpectQuery(`FROM "MemberOnDelivery" mod`).
 			WithArgs(sqlmock.AnyArg(), tenantID).
-			WillReturnRows(sqlmock.NewRows([]string{"memberId", "deliveryId", "assignedAt", "delivery_name"}))
+			WillReturnRows(sqlmock.NewRows([]string{"memberId", "deliveryId", "assignedAt", "delivery_name", "status", "expiresAt"}))
 
 		result, total, err := repository.FindUserInformations(context.Background(), tenantID, email, 1, 10)
 

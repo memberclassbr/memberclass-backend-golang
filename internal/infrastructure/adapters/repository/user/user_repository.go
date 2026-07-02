@@ -369,7 +369,7 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 	}
 
 	deliveriesQuery := `
-		SELECT mod."memberId", mod."deliveryId", mod."assignedAt", d.name as delivery_name
+		SELECT mod."memberId", mod."deliveryId", mod."assignedAt", d.name as delivery_name, mod."status", mod."expiresAt"
 		FROM "MemberOnDelivery" mod
 		JOIN "Delivery" d ON d.id = mod."deliveryId"
 		WHERE mod."memberId" = ANY($1) AND mod."tenantId" = $2
@@ -387,12 +387,19 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 	defer deliveryRows.Close()
 
 	for deliveryRows.Next() {
-		var userID, deliveryID, deliveryName string
+		var userID, deliveryID, deliveryName, status string
 		var accessDate time.Time
+		var expiresAt sql.NullTime
 
-		if err := deliveryRows.Scan(&userID, &deliveryID, &accessDate, &deliveryName); err != nil {
+		if err := deliveryRows.Scan(&userID, &deliveryID, &accessDate, &deliveryName, &status, &expiresAt); err != nil {
 			r.log.Error("Error scanning delivery: " + err.Error())
 			continue
+		}
+
+		var expiresAtStr *string
+		if expiresAt.Valid {
+			formatted := expiresAt.Time.Format("2006-01-02T15:04:05.000Z")
+			expiresAtStr = &formatted
 		}
 
 		if user, exists := userMap[userID]; exists {
@@ -400,6 +407,8 @@ func (r *UserRepository) FindUserInformations(ctx context.Context, tenantID stri
 				ID:         deliveryID,
 				Name:       deliveryName,
 				AccessDate: accessDate.Format("2006-01-02T15:04:05.000Z"),
+				Status:     status,
+				ExpiresAt:  expiresAtStr,
 			})
 		}
 	}

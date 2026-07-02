@@ -253,9 +253,13 @@ paths:
                       - id: "delivery-1"
                         name: "Curso de Programação"
                         accessDate: "2024-01-15T10:30:00Z"
+                        status: "active"
+                        expiresAt: "2024-06-15T10:30:00Z"
                       - id: "delivery-2"
                         name: "Curso de Design"
                         accessDate: "2024-02-20T14:00:00Z"
+                        status: "active"
+                        expiresAt: null
                     lastAccess: "2024-03-10T09:15:00Z"
                   - userId: "user-456"
                     email: "outro@exemplo.com"
@@ -2081,6 +2085,17 @@ components:
           format: date-time
           description: Data de acesso à entrega
           example: "2024-01-15T10:30:00Z"
+        status:
+          type: string
+          description: "Estado do ciclo de vida do acesso"
+          enum: [active, expired, refunded, canceled]
+          example: "active"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Data de expiração do acesso; null = vitalício (compra única)"
+          example: "2024-06-15T10:30:00Z"
 
     CreateSocialCommentRequest:
       type: object

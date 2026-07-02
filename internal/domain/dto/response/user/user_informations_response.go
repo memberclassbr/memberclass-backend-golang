@@ -3,9 +3,11 @@ package user
 import "github.com/memberclass-backend-golang/internal/domain/dto"
 
 type DeliveryInfo struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	AccessDate string `json:"accessDate"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	AccessDate string  `json:"accessDate"`
+	Status     string  `json:"status"`    // active | expired | refunded | canceled
+	ExpiresAt  *string `json:"expiresAt"` // null = vitalício (compra única)
 }
 
 type UserInformation struct {
