@@ -78,6 +78,7 @@ func (c *fcmClient) messaging(ctx context.Context, notificationsInstance string)
 //	memberclass-0825 → FIREBASE_SERVICE_ACCOUNT_KEY_2
 //	mcpush3-87886    → FIREBASE_SERVICE_ACCOUNT_KEY_3
 //	mcpush4-d0d86    → FIREBASE_SERVICE_ACCOUNT_KEY_4
+//	mcpush5-19541    → FIREBASE_SERVICE_ACCOUNT_KEY_5
 //	other / null     → FIREBASE_SERVICE_ACCOUNT_KEY (default project)
 func selectFirebaseKey(notificationsInstance string) ([]byte, string, error) {
 	var (
@@ -94,6 +95,9 @@ func selectFirebaseKey(notificationsInstance string) ([]byte, string, error) {
 	case "mcpush4-d0d86":
 		envVar = "FIREBASE_SERVICE_ACCOUNT_KEY_4"
 		projectID = "mcpush4-d0d86"
+	case "mcpush5-19541":
+		envVar = "FIREBASE_SERVICE_ACCOUNT_KEY_5"
+		projectID = "mcpush5-19541"
 	default:
 		envVar = "FIREBASE_SERVICE_ACCOUNT_KEY"
 		if notificationsInstance != "" {
