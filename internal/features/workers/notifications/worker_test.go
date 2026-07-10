@@ -336,12 +336,14 @@ func TestSelectFirebaseKey_DispatchesEnvByInstance(t *testing.T) {
 	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY_2", `{"a":1}`)
 	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY_3", `{"a":1}`)
 	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY_4", `{"a":1}`)
+	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY_5", `{"a":1}`)
 	t.Setenv("FIREBASE_SERVICE_ACCOUNT_KEY", `{"a":1}`)
 
 	cases := []struct{ in, wantProject string }{
 		{"memberclass-0825", "memberclass-0825"},
 		{"mcpush3-87886", "mcpush3-87886"},
 		{"mcpush4-d0d86", "mcpush4-d0d86"},
+		{"mcpush5-19541", "mcpush5-19541"},
 		{"", "memberclass-84a92"},
 		{"custom-x", "custom-x"},
 	}
