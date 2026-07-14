@@ -196,16 +196,26 @@ func TestPgvectorString(t *testing.T) {
 	}
 }
 
-// newFakePandaServer serves the two Panda endpoints executeJob's Panda path
-// hits: the subtitle track list and the raw VTT body for the chosen track.
-func newFakePandaServer(t *testing.T, videoID, srclang, vtt string) *httptest.Server {
+// newFakePandaServer models the real Panda API for executeJob's Panda path:
+// player URLs carry the video_external_id, GET /videos maps it to the
+// internal id, and only the internal id works against /subtitles. Hitting
+// /subtitles with the external id returns the real 404 body, so the
+// happy-path test FAILS if the resolution step is ever skipped.
+func newFakePandaServer(t *testing.T, externalID, internalID, srclang, vtt string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/subtitles/" + videoID:
+		case "/videos":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"videos":[{"id":"` + internalID + `","video_external_id":"` + externalID + `"}],"pages":1,"total":1}`))
+		case "/subtitles/" + externalID:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errCode":"NotFound","errMsg":"NotFound","detail":"Video not found"}`))
+		case "/subtitles/" + internalID:
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"subtitles":[{"srclang":"` + srclang + `","label":"Português (BR)","hidden":false,"is_uploaded":true}]}`))
-		case "/subtitles/" + videoID + "/" + srclang:
+		case "/subtitles/" + internalID + "/" + srclang:
 			_, _ = w.Write([]byte(vtt))
 		default:
 			t.Fatalf("unexpected panda path: %s", r.URL.Path)
@@ -244,13 +254,16 @@ func TestExecuteJob_PandaHappyPath(t *testing.T) {
 	}
 	defer memberclassDB.Close()
 
-	videoID := "18d69307-e9af-4d1a-8891-77f88794ce43"
+	// The player URL carries the external id; only the internal id is valid
+	// against /subtitles (the fake 404s the external id, like the real API).
+	externalID := "18d69307-e9af-4d1a-8891-77f88794ce43"
+	internalID := "4675da7f-cc57-4224-a66d-0e3b0b4abafc"
 	vtt := "WEBVTT\n\n" +
 		"00:00:00.000 --> 00:00:03.000\n" +
 		"Olá, bem-vindo ao vídeo.\n\n" +
 		"00:00:03.000 --> 00:00:06.000\n" +
 		"Vamos aprender Go.\n"
-	panda := newFakePandaServer(t, videoID, "pt-BR", vtt)
+	panda := newFakePandaServer(t, externalID, internalID, "pt-BR", vtt)
 	defer panda.Close()
 
 	openai := newFakeOpenAIEmbeddingsOnly(t)
@@ -301,7 +314,7 @@ func TestExecuteJob_PandaHappyPath(t *testing.T) {
 	payload, _ := json.Marshal(jobPayload{
 		LessonID: lessonID,
 		TenantID: tenantID,
-		VideoURL: "https://player-vz-test.tv.pandavideo.com.br/embed/?v=" + videoID,
+		VideoURL: "https://player-vz-test.tv.pandavideo.com.br/embed/?v=" + externalID,
 		Title:    "Aula Panda",
 	})
 
@@ -353,9 +366,21 @@ func TestExecuteJob_PandaNoSubtitleTracks(t *testing.T) {
 	memberclassDB, mcMock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	defer memberclassDB.Close()
 
+	externalID := "18d69307-e9af-4d1a-8891-77f88794ce43"
+	internalID := "4675da7f-cc57-4224-a66d-0e3b0b4abafc"
 	panda := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"subtitles":[]}`))
+		switch r.URL.Path {
+		case "/videos":
+			_, _ = w.Write([]byte(`{"videos":[{"id":"` + internalID + `","video_external_id":"` + externalID + `"}],"pages":1,"total":1}`))
+		case "/subtitles/" + externalID:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"errCode":"NotFound","errMsg":"NotFound","detail":"Video not found"}`))
+		case "/subtitles/" + internalID:
+			_, _ = w.Write([]byte(`{"subtitles":[]}`))
+		default:
+			t.Fatalf("unexpected panda path: %s", r.URL.Path)
+		}
 	}))
 	defer panda.Close()
 
@@ -378,7 +403,7 @@ func TestExecuteJob_PandaNoSubtitleTracks(t *testing.T) {
 
 	payload, _ := json.Marshal(jobPayload{
 		LessonID: "l", TenantID: tenantID,
-		VideoURL: "https://player-vz-test.tv.pandavideo.com.br/embed/?v=18d69307-e9af-4d1a-8891-77f88794ce43",
+		VideoURL: "https://player-vz-test.tv.pandavideo.com.br/embed/?v=" + externalID,
 	})
 	err := f.executeJob(context.Background(), "j", tenantID, payload)
 	if err == nil || !strings.Contains(err.Error(), "dashboard") {

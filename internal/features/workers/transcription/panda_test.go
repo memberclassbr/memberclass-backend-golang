@@ -2,8 +2,10 @@ package transcription
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -258,6 +260,168 @@ func TestParseVTT_EmptyOrGarbageErrors(t *testing.T) {
 	}
 	if _, err := parseVTT("this is not a vtt file at all"); err == nil {
 		t.Fatal("expected error for garbage input")
+	}
+}
+
+func TestParseVTT_PandaTimestampMapHeader(t *testing.T) {
+	// Real Panda VTT bodies carry an X-TIMESTAMP-MAP metadata line right
+	// after the WEBVTT header; it must be skipped, not parsed as a cue.
+	vtt := "WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:144540\n\n" +
+		"00:00:00.320 --> 00:00:03.920\n" +
+		"Seja muito bemvindo.\n"
+	segs, err := parseVTT(vtt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(segs) != 1 {
+		t.Fatalf("len(segs) = %d, want 1", len(segs))
+	}
+	if segs[0].Start != 0.32 || segs[0].End != 3.92 || segs[0].Text != "Seja muito bemvindo." {
+		t.Fatalf("seg = %+v", segs[0])
+	}
+}
+
+// newFakePandaVideosServer serves GET /videos over the given pages of
+// items, tracking how many /videos requests arrived (per page and total).
+func newFakePandaVideosServer(t *testing.T, pages [][]pandaVideoListItem, hits *[]int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/videos" {
+			t.Fatalf("unexpected panda path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "test-key" {
+			t.Fatalf("Authorization = %q", got)
+		}
+		page, err := strconv.Atoi(r.URL.Query().Get("page"))
+		if err != nil || page < 1 || page > len(pages) {
+			t.Fatalf("unexpected page param: %q", r.URL.Query().Get("page"))
+		}
+		*hits = append(*hits, page)
+
+		total := 0
+		for _, p := range pages {
+			total += len(p)
+		}
+		resp := pandaVideoListResponse{Videos: pages[page-1], Pages: len(pages), Total: total}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+}
+
+func TestResolvePandaInternalID_HappyPathAndCache(t *testing.T) {
+	var hits []int
+	server := newFakePandaVideosServer(t, [][]pandaVideoListItem{
+		{{ID: "internal-1", ExternalID: "external-1"}},
+	}, &hits)
+	defer server.Close()
+
+	f := &Feature{pandaBaseURL: server.URL, pandaAPIKey: "test-key", httpClient: server.Client()}
+
+	id, err := f.resolvePandaInternalID(context.Background(), "external-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "internal-1" {
+		t.Fatalf("id = %q, want internal-1", id)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("scan requests after first resolve = %d, want 1", len(hits))
+	}
+
+	// Second call must be served from the cache — no new HTTP requests.
+	id, err = f.resolvePandaInternalID(context.Background(), "external-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "internal-1" {
+		t.Fatalf("cached id = %q, want internal-1", id)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("scan requests after cached resolve = %d, want 1", len(hits))
+	}
+}
+
+func TestResolvePandaInternalID_InternalIDPassthrough(t *testing.T) {
+	var hits []int
+	server := newFakePandaVideosServer(t, [][]pandaVideoListItem{
+		{{ID: "internal-1", ExternalID: "external-1"}},
+	}, &hits)
+	defer server.Close()
+
+	f := &Feature{pandaBaseURL: server.URL, pandaAPIKey: "test-key", httpClient: server.Client()}
+
+	// A URL that already carries the internal id resolves to itself.
+	id, err := f.resolvePandaInternalID(context.Background(), "internal-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "internal-1" {
+		t.Fatalf("id = %q, want internal-1", id)
+	}
+}
+
+func TestResolvePandaInternalID_Pagination(t *testing.T) {
+	var hits []int
+	server := newFakePandaVideosServer(t, [][]pandaVideoListItem{
+		{{ID: "internal-1", ExternalID: "external-1"}},
+		{{ID: "internal-2", ExternalID: "external-2"}},
+	}, &hits)
+	defer server.Close()
+
+	f := &Feature{pandaBaseURL: server.URL, pandaAPIKey: "test-key", httpClient: server.Client()}
+
+	// Target lives on page 2 — the scan must walk both pages.
+	id, err := f.resolvePandaInternalID(context.Background(), "external-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "internal-2" {
+		t.Fatalf("id = %q, want internal-2", id)
+	}
+	if len(hits) != 2 || hits[0] != 1 || hits[1] != 2 {
+		t.Fatalf("pages requested = %v, want [1 2]", hits)
+	}
+}
+
+func TestResolvePandaInternalID_NotFoundThenRescan(t *testing.T) {
+	var hits []int
+	server := newFakePandaVideosServer(t, [][]pandaVideoListItem{
+		{{ID: "internal-1", ExternalID: "external-1"}},
+	}, &hits)
+	defer server.Close()
+
+	f := &Feature{pandaBaseURL: server.URL, pandaAPIKey: "test-key", httpClient: server.Client()}
+
+	_, err := f.resolvePandaInternalID(context.Background(), "external-missing")
+	if err == nil || !strings.Contains(err.Error(), "not found in Panda account") {
+		t.Fatalf("expected not-found error, got %v", err)
+	}
+	scansAfterMiss := len(hits)
+	if scansAfterMiss == 0 {
+		t.Fatal("expected at least one /videos request on first miss")
+	}
+
+	// A later call for another unknown id must rescan (cache miss → new
+	// requests), so newly-uploaded videos get picked up.
+	_, err = f.resolvePandaInternalID(context.Background(), "external-also-missing")
+	if err == nil || !strings.Contains(err.Error(), "not found in Panda account") {
+		t.Fatalf("expected not-found error, got %v", err)
+	}
+	if len(hits) <= scansAfterMiss {
+		t.Fatalf("expected a rescan for a new id: requests before=%d after=%d", scansAfterMiss, len(hits))
+	}
+}
+
+func TestResolvePandaInternalID_PropagatesHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server exploded", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	f := &Feature{pandaBaseURL: server.URL, pandaAPIKey: "test-key", httpClient: server.Client()}
+	_, err := f.resolvePandaInternalID(context.Background(), "external-1")
+	if err == nil || !strings.Contains(err.Error(), "status=500") {
+		t.Fatalf("expected status=500 error, got %v", err)
 	}
 }
 

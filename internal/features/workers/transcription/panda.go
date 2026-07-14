@@ -86,6 +86,107 @@ func isPandaHost(host string) bool {
 		host == "pandavideo.com" || strings.HasSuffix(host, ".pandavideo.com")
 }
 
+// pandaVideoListItem is the subset of GET /videos entries we need to map
+// player URLs (which carry video_external_id) to internal API ids.
+type pandaVideoListItem struct {
+	ID         string `json:"id"`
+	ExternalID string `json:"video_external_id"`
+}
+
+type pandaVideoListResponse struct {
+	Videos []pandaVideoListItem `json:"videos"`
+	Pages  int                  `json:"pages"`
+	Total  int                  `json:"total"`
+}
+
+// pandaVideosPageLimit is the page size for GET /videos scans; at 100 the
+// whole account (~400 videos today) resolves in a handful of requests.
+const pandaVideosPageLimit = 100
+
+// pandaVideosMaxPages hard-caps the scan (100 pages × 100 videos = 10k).
+// Past that the failure should be loud, not an endless crawl.
+const pandaVideosMaxPages = 100
+
+// fetchPandaVideosPage fetches one page of the account's video list.
+func (f *Feature) fetchPandaVideosPage(ctx context.Context, page int) (*pandaVideoListResponse, error) {
+	endpoint := fmt.Sprintf("%s/videos?limit=%d&page=%d",
+		strings.TrimRight(f.pandaBaseURL, "/"), pandaVideosPageLimit, page)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build panda videos request: %w", err)
+	}
+	req.Header.Set("Authorization", f.pandaAPIKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := f.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("panda videos http: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, pandaMaxSubtitleBytes))
+		return nil, fmt.Errorf("panda videos status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	var parsed pandaVideoListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, fmt.Errorf("panda videos decode: %w", err)
+	}
+	return &parsed, nil
+}
+
+// resolvePandaInternalID maps the id carried by a player URL — the
+// video_external_id — to the account's internal video id, which is the only
+// id GET /subtitles/{video_id} accepts. Panda has no external-id lookup
+// endpoint, so on a cache miss we scan the paginated GET /videos list and
+// cache the whole map. The mutex only guards cache reads/swaps, never the
+// HTTP scan itself: a duplicate concurrent scan is cheaper than serializing
+// both workers behind network I/O.
+func (f *Feature) resolvePandaInternalID(ctx context.Context, urlVideoID string) (string, error) {
+	f.pandaIDCacheMu.Lock()
+	if id, ok := f.pandaIDCache[urlVideoID]; ok {
+		f.pandaIDCacheMu.Unlock()
+		return id, nil
+	}
+	f.pandaIDCacheMu.Unlock()
+
+	fresh := make(map[string]string)
+	seen := 0
+	for page := 1; page <= pandaVideosMaxPages; page++ {
+		resp, err := f.fetchPandaVideosPage(ctx, page)
+		if err != nil {
+			return "", err
+		}
+		if len(resp.Videos) == 0 {
+			// Guards a lying Pages value: an empty page means we're done.
+			break
+		}
+		for _, v := range resp.Videos {
+			if v.ExternalID != "" {
+				fresh[v.ExternalID] = v.ID
+			}
+			// A URL that already carries an internal id resolves to itself.
+			fresh[v.ID] = v.ID
+			seen++
+		}
+		if page >= resp.Pages {
+			break
+		}
+	}
+
+	f.pandaIDCacheMu.Lock()
+	f.pandaIDCache = fresh
+	id, ok := f.pandaIDCache[urlVideoID]
+	f.pandaIDCacheMu.Unlock()
+	if !ok {
+		return "", fmt.Errorf(
+			"video %s not found in Panda account (checked %d videos) — check that PANDA_API_KEY belongs to the account hosting this video",
+			urlVideoID, seen)
+	}
+	return id, nil
+}
+
 // pandaSubtitleTrack mirrors one entry of the GET /subtitles/{video_id}
 // response.
 type pandaSubtitleTrack struct {
@@ -181,6 +282,13 @@ func (f *Feature) fetchPandaVTT(ctx context.Context, videoID, srclang string) (s
 // parses it into Whisper-shaped segments. No audio, no Whisper cost.
 func (f *Feature) resolvePandaTranscript(ctx context.Context, mediaURL string) (segs []whisperSegment, text string, duration float64, language string, err error) {
 	videoID, err := pandaVideoIDFromURL(mediaURL)
+	if err != nil {
+		return nil, "", 0, "", err
+	}
+
+	// The URL carries the video_external_id; the subtitles API only accepts
+	// the account's internal id, so resolve before any subtitle call.
+	videoID, err = f.resolvePandaInternalID(ctx, videoID)
 	if err != nil {
 		return nil, "", 0, "", err
 	}

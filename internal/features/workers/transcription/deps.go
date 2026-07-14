@@ -85,6 +85,12 @@ type Feature struct {
 	// Empty map = Panda path disabled everywhere.
 	pandaAllowedTenants map[string]bool
 
+	// pandaIDCache maps video_external_id → internal API id, filled by
+	// scanning GET /videos (the API has no external-id lookup). Guarded by
+	// pandaIDCacheMu; rebuilt on miss so newly-uploaded videos are found.
+	pandaIDCacheMu sync.Mutex
+	pandaIDCache   map[string]string
+
 	pollInterval time.Duration
 	workers      int
 
