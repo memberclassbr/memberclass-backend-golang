@@ -128,7 +128,8 @@ func (f *Feature) enqueueAllUnprocessed(ctx context.Context, tenantID string) (*
 		return nil, http.StatusForbidden, fmt.Errorf("IA não está habilitada para este tenant")
 	}
 
-	rows, err := f.memberclassDB.QueryContext(ctx, sqlSelectUnprocessedLessons, tenantID)
+	includePanda := f.pandaAllowedTenants[tenantID] && f.pandaAPIKey != ""
+	rows, err := f.memberclassDB.QueryContext(ctx, sqlSelectUnprocessedLessons, tenantID, includePanda)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("listar lessons pendentes: %w", err)
 	}
@@ -224,7 +225,8 @@ func (f *Feature) enqueueSelectedLessons(ctx context.Context, tenantID string, l
 
 	// Pull lessons that match the id set AND belong to this tenant
 	// (the Vitrine join enforces ownership).
-	rows, err := f.memberclassDB.QueryContext(ctx, sqlSelectLessonsByIDs, tenantID, pq.Array(lessonIDs))
+	includePanda := f.pandaAllowedTenants[tenantID] && f.pandaAPIKey != ""
+	rows, err := f.memberclassDB.QueryContext(ctx, sqlSelectLessonsByIDs, tenantID, pq.Array(lessonIDs), includePanda)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("listar lessons: %w", err)
 	}
@@ -271,7 +273,7 @@ func (f *Feature) enqueueSelectedLessons(ctx context.Context, tenantID string, l
 		if !ok {
 			resp.Skipped = append(resp.Skipped, skippedLesson{
 				LessonID: id,
-				Reason:   "lesson não encontrada para este tenant ou mediaUrl não é Bunny",
+				Reason:   "lesson não encontrada para este tenant ou mediaUrl não é de um provedor suportado (Bunny/Panda)",
 			})
 			continue
 		}

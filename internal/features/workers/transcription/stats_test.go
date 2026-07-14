@@ -40,8 +40,9 @@ func TestGetTranscriptionStats_TenantScope(t *testing.T) {
 	memberclassDB, mock, _ := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherRegexp))
 	defer memberclassDB.Close()
 
+	// Fourth arg is includePanda — false here since no PANDA_* env is set.
 	mock.ExpectQuery(`FROM "Lesson"`).
-		WithArgs("t-1", "", "").
+		WithArgs("t-1", "", "", false).
 		WillReturnRows(sqlmock.NewRows([]string{"total", "transcribed", "pending"}).
 			AddRow(50, 12, 38))
 
@@ -69,7 +70,7 @@ func TestGetTranscriptionStats_CourseAndModuleFilters(t *testing.T) {
 	defer memberclassDB.Close()
 
 	mock.ExpectQuery(`FROM "Lesson"`).
-		WithArgs("t-1", "course-9", "module-2").
+		WithArgs("t-1", "course-9", "module-2", false).
 		WillReturnRows(sqlmock.NewRows([]string{"total", "transcribed", "pending"}).
 			AddRow(8, 8, 0))
 

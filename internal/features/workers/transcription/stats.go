@@ -47,8 +47,9 @@ func (f *Feature) GetTranscriptionStats(w http.ResponseWriter, r *http.Request) 
 	stats.CourseID = courseID
 	stats.ModuleID = moduleID
 
+	includePanda := f.pandaAllowedTenants[tenantID] && f.pandaAPIKey != ""
 	row := f.memberclassDB.QueryRowContext(r.Context(),
-		sqlTranscriptionStats, tenantID, courseID, moduleID)
+		sqlTranscriptionStats, tenantID, courseID, moduleID, includePanda)
 	if err := row.Scan(&stats.Total, &stats.Transcribed, &stats.Pending); err != nil {
 		f.log.Error("transcription.stats.scan_failed",
 			"tenant", tenantID, "course", courseID, "module", moduleID,
