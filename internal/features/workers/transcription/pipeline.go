@@ -76,73 +76,104 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
 	if !aiEnabled.Valid || !aiEnabled.Bool {
 		return fmt.Errorf("tenant %s has aiEnabled=false", tenantID)
 	}
-	if !bunnyLibID.Valid || bunnyLibID.String == "" || !bunnyAPIKey.Valid || bunnyAPIKey.String == "" {
-		return fmt.Errorf("tenant %s missing Bunny credentials", tenantID)
-	}
 
-	// 2. Extract libraryId + guid from the iframe URL. We trust the URL
-	// over the tenant's library id; if they disagree it's a config error
-	// the operator needs to fix manually.
-	libID, guid, err := guidFromEmbedURL(p.VideoURL)
-	if err != nil {
-		return fmt.Errorf("parse media URL: %w", err)
-	}
-	if libID != bunnyLibID.String {
-		f.log.Warn("transcription.pipeline.bunny_library_mismatch",
-			"tenant", tenantID, "tenantLibraryId", bunnyLibID.String, "urlLibraryId", libID)
-	}
-
-	// 3. Resolve playable audio. Production: validate via Bunny meta then
-	// pull HLS through ffmpeg. Tests inject testHookResolveAudio to skip
-	// the network round-trip.
-	tmpDir, err := os.MkdirTemp("", "tx_"+jobID+"_")
-	if err != nil {
-		return fmt.Errorf("mktemp: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	parts, duration, err := f.resolveAudio(ctx, libID, guid, bunnyAPIKey.String, tmpDir)
-	if err != nil {
-		return fmt.Errorf("resolve audio: %w", err)
-	}
-	if len(parts) == 0 {
-		return fmt.Errorf("no audio parts produced")
-	}
-
-	// 4. Transcribe each part; concatenate text + segments with timestamp
-	// offsets so a chunked-audio lesson still produces a single coherent
-	// transcript.
-	var allSegments []whisperSegment
-	var transcriptText strings.Builder
-	var elapsed float64
-	costCents := 0
-	for i, part := range parts {
-		fh, err := os.Open(part)
-		if err != nil {
-			return fmt.Errorf("open part %d (%s): %w", i, part, err)
+	// 2. Source dispatch: Panda lessons come with server-side subtitles we
+	// can download directly; Bunny lessons go through audio + Whisper.
+	// Both branches fill the same set of vars so the shared chunk/embed/
+	// persist steps below don't need to know which source produced them.
+	var (
+		allSegments    []whisperSegment
+		transcriptText string
+		duration       float64 // seconds; feeds videos.duration, transcripts.processing_time and jobResult.DurationSecs alike
+		costCents      int
+		sourceType     string
+		transcriberTag string // stored as transcripts.model + videos.metadata.transcriber
+		language       string
+	)
+	if isPandaURL(p.VideoURL) {
+		if !f.pandaAllowedTenants[tenantID] {
+			return fmt.Errorf("tenant %s is not enabled for Panda Video transcription", tenantID)
 		}
-		resp, err := f.transcribeAudio(ctx, fh, filepath.Base(part))
-		_ = fh.Close()
-		if err != nil {
-			return fmt.Errorf("whisper part %d: %w", i, err)
+		if f.pandaAPIKey == "" {
+			return fmt.Errorf("PANDA_API_KEY not configured")
 		}
-		for _, s := range resp.Segments {
-			allSegments = append(allSegments, whisperSegment{
-				Start: s.Start + elapsed,
-				End:   s.End + elapsed,
-				Text:  s.Text,
-			})
+		var pandaErr error
+		allSegments, transcriptText, duration, language, pandaErr = f.resolvePandaTranscript(ctx, p.VideoURL)
+		if pandaErr != nil {
+			return fmt.Errorf("panda transcript: %w", pandaErr)
 		}
-		transcriptText.WriteString(strings.TrimSpace(resp.Text))
-		transcriptText.WriteString(" ")
-		elapsed += resp.Duration
-		costCents += whisperCostCents(resp.Duration)
-	}
-	if duration == 0 {
-		duration = elapsed
-	}
-	if transcriptText.Len() == 0 {
-		return fmt.Errorf("whisper returned empty transcript")
+		sourceType, transcriberTag = SourceTypePandaVideo, "panda-subtitles"
+	} else {
+		if !bunnyLibID.Valid || bunnyLibID.String == "" || !bunnyAPIKey.Valid || bunnyAPIKey.String == "" {
+			return fmt.Errorf("tenant %s missing Bunny credentials", tenantID)
+		}
+
+		// Extract libraryId + guid from the iframe URL. We trust the URL
+		// over the tenant's library id; if they disagree it's a config
+		// error the operator needs to fix manually.
+		libID, guid, parseErr := guidFromEmbedURL(p.VideoURL)
+		if parseErr != nil {
+			return fmt.Errorf("parse media URL: %w", parseErr)
+		}
+		if libID != bunnyLibID.String {
+			f.log.Warn("transcription.pipeline.bunny_library_mismatch",
+				"tenant", tenantID, "tenantLibraryId", bunnyLibID.String, "urlLibraryId", libID)
+		}
+
+		// Resolve playable audio. Production: validate via Bunny meta then
+		// pull HLS through ffmpeg. Tests inject testHookResolveAudio to
+		// skip the network round-trip.
+		tmpDir, mkErr := os.MkdirTemp("", "tx_"+jobID+"_")
+		if mkErr != nil {
+			return fmt.Errorf("mktemp: %w", mkErr)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		parts, bunnyDuration, resolveErr := f.resolveAudio(ctx, libID, guid, bunnyAPIKey.String, tmpDir)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve audio: %w", resolveErr)
+		}
+		if len(parts) == 0 {
+			return fmt.Errorf("no audio parts produced")
+		}
+
+		// Transcribe each part; concatenate text + segments with timestamp
+		// offsets so a chunked-audio lesson still produces a single
+		// coherent transcript.
+		var transcriptBuilder strings.Builder
+		var elapsed float64
+		for i, part := range parts {
+			fh, openErr := os.Open(part)
+			if openErr != nil {
+				return fmt.Errorf("open part %d (%s): %w", i, part, openErr)
+			}
+			resp, whisperErr := f.transcribeAudio(ctx, fh, filepath.Base(part))
+			_ = fh.Close()
+			if whisperErr != nil {
+				return fmt.Errorf("whisper part %d: %w", i, whisperErr)
+			}
+			for _, s := range resp.Segments {
+				allSegments = append(allSegments, whisperSegment{
+					Start: s.Start + elapsed,
+					End:   s.End + elapsed,
+					Text:  s.Text,
+				})
+			}
+			transcriptBuilder.WriteString(strings.TrimSpace(resp.Text))
+			transcriptBuilder.WriteString(" ")
+			elapsed += resp.Duration
+			costCents += whisperCostCents(resp.Duration)
+		}
+		if bunnyDuration == 0 {
+			bunnyDuration = elapsed
+		}
+		if transcriptBuilder.Len() == 0 {
+			return fmt.Errorf("whisper returned empty transcript")
+		}
+
+		duration = bunnyDuration
+		transcriptText = strings.TrimSpace(transcriptBuilder.String())
+		sourceType, transcriberTag, language = SourceTypeBunnyCDN, whisperModel, "pt"
 	}
 
 	// 5. Chunk + embed.
@@ -183,11 +214,11 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
 	videoMetadata, _ := json.Marshal(map[string]any{
 		"jobId":         jobID,
 		"embeddingModel": embedModel,
-		"transcriber":   whisperModel,
+		"transcriber":   transcriberTag,
 	})
 	if err := tx.QueryRowContext(ctx, sqlUpsertVideo,
 		videoID, tenantID, p.CourseID, p.LessonID, p.Title,
-		SourceTypeBunnyCDN, p.VideoURL, VideoStatusGeneratingEmbeddings, duration, videoMetadata,
+		sourceType, p.VideoURL, VideoStatusGeneratingEmbeddings, duration, videoMetadata,
 	).Scan(&videoID); err != nil {
 		return fmt.Errorf("upsert video: %w", err)
 	}
@@ -207,8 +238,8 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
 	transcriptMeta, _ := json.Marshal(map[string]any{"jobId": jobID})
 	if _, err := tx.ExecContext(ctx, sqlInsertTranscript,
 		transcriptID, videoID, tenantID, p.LessonID,
-		strings.TrimSpace(transcriptText.String()),
-		"pt", whisperModel, nil, segmentsJSON, elapsed, transcriptMeta,
+		transcriptText,
+		language, transcriberTag, nil, segmentsJSON, duration, transcriptMeta,
 	); err != nil {
 		return fmt.Errorf("insert transcript: %w", err)
 	}
@@ -258,12 +289,12 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
 
 	tokenMeta, _ := json.Marshal(map[string]any{
 		"chunks":   len(chunks),
-		"duration": elapsed,
+		"duration": duration,
 	})
 	if _, err := tx.ExecContext(ctx, sqlInsertTokenUsage,
 		uuid.NewString(), tenantID, nullableString(p.CourseID), videoID, transcriptID,
 		0, 0, 0, costCents, 0, costCents,
-		whisperModel+"+"+embedModel, "transcribe+embed", tokenMeta,
+		transcriberTag+"+"+embedModel, "transcribe+embed", tokenMeta,
 	); err != nil {
 		return fmt.Errorf("insert token_usage: %w", err)
 	}
@@ -286,7 +317,7 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
 		VideoID:      videoID,
 		TranscriptID: transcriptID,
 		ChunksCount:  len(chunks),
-		DurationSecs: elapsed,
+		DurationSecs: duration,
 		CostCents:    costCents,
 	})
 	if _, err := f.transcriptionDB.ExecContext(ctx, sqlMarkJobCompleted, jobID, result); err != nil {
