@@ -28,7 +28,8 @@ const (
 	VideoStatusCompleted            = "COMPLETED"
 	VideoStatusFailed               = "FAILED"
 
-	SourceTypeBunnyCDN = "BUNNY_CDN"
+	SourceTypeBunnyCDN   = "BUNNY_CDN"
+	SourceTypePandaVideo = "PANDA_VIDEO"
 )
 
 // ============================================================================
@@ -196,12 +197,14 @@ const sqlSelectTenantBunnyCreds = `
 // owned by Vitrine), filtered to the explicit set of lessonIds the admin
 // UI selected. The Vitrine tenantId predicate prevents one tenant from
 // enqueueing lessons that belong to another. The `mediaUrl LIKE` clause
-// keeps non-Bunny rows (PDF, text) out of the transcription path.
+// keeps non-Bunny/non-Panda rows (PDF, text) out of the transcription path.
 //
 // $1 = tenantId, $2 = lesson id array (pq.Array(ids)).
-// sqlSelectUnprocessedLessons returns every Bunny-backed, unprocessed
-// lesson under a tenant. Used by the enqueue handler when the caller
-// did not pass an explicit lessonIds list (i.e. "process all pending").
+// sqlSelectUnprocessedLessons returns every unprocessed lesson under a
+// tenant whose mediaUrl is Bunny (always eligible) or Panda (eligible only
+// when $2 = true — Panda is gated per-tenant by pandaAllowedTenants, see
+// process_lessons.go). Used by the enqueue handler when the caller did not
+// pass an explicit lessonIds list (i.e. "process all pending").
 const sqlSelectUnprocessedLessons = `
     SELECT l.id,
            l.name,
@@ -226,7 +229,10 @@ const sqlSelectUnprocessedLessons = `
      WHERE v."tenantId" = $1
        AND l.published  = true
        AND COALESCE(l."transcriptionCompleted", false) = false
-       AND l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+       AND (
+            l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+         OR ($2 AND (l."mediaUrl" LIKE '%pandavideo.com.br%' OR l."mediaUrl" LIKE '%pandavideo.com/%'))
+       )
      ORDER BY COALESCE(v."order", 0) ASC,
               COALESCE(c."order", 0) ASC,
               COALESCE(s."order", 0) ASC,
@@ -235,11 +241,13 @@ const sqlSelectUnprocessedLessons = `
 `
 
 // sqlTranscriptionStats reports per-tenant (and optionally per-course /
-// per-module) counts of lessons split by transcriptionCompleted. Bunny-
-// only filter mirrors the enqueue queries so the stats line up with what
-// the pipeline can actually process.
+// per-module) counts of lessons split by transcriptionCompleted. The
+// Bunny-or-Panda gate mirrors the enqueue queries (sqlSelectUnprocessedLessons
+// / sqlSelectLessonsByIDs) so the stats line up with what the pipeline can
+// actually process. $4 = include Panda (same "tenant allowlisted + Panda
+// key configured" boolean the enqueue handlers compute).
 //
-// $1 tenantId, $2 courseId or '' (empty disables the filter), $3 moduleId or ''.
+// $1 tenantId, $2 courseId or '' (empty disables the filter), $3 moduleId or '', $4 includePanda.
 const sqlTranscriptionStats = `
     SELECT
         COUNT(*)                                                          AS total,
@@ -252,7 +260,10 @@ const sqlTranscriptionStats = `
       JOIN "Vitrine" v ON c."vitrineId" = v.id
      WHERE v."tenantId" = $1
        AND l.published  = true
-       AND l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+       AND (
+            l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+         OR ($4 AND (l."mediaUrl" LIKE '%pandavideo.com.br%' OR l."mediaUrl" LIKE '%pandavideo.com/%'))
+       )
        AND ($2 = '' OR c.id = $2)
        AND ($3 = '' OR m.id = $3)
 `
@@ -273,6 +284,8 @@ const sqlLessonsBySection = `
      WHERE m."sectionId" = $1
 `
 
+// $1 = tenantId, $2 = lesson id array (pq.Array(ids)), $3 = include Panda
+// (same gate as sqlSelectUnprocessedLessons — see that comment).
 const sqlSelectLessonsByIDs = `
     SELECT l.id,
            l.name,
@@ -297,7 +310,10 @@ const sqlSelectLessonsByIDs = `
       JOIN "Vitrine" v ON c."vitrineId" = v.id
      WHERE l.id = ANY($2)
        AND v."tenantId" = $1
-       AND l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+       AND (
+            l."mediaUrl" LIKE '%https://iframe.mediadelivery.net%'
+         OR ($3 AND (l."mediaUrl" LIKE '%pandavideo.com.br%' OR l."mediaUrl" LIKE '%pandavideo.com/%'))
+       )
 `
 
 const sqlMarkLessonTranscribed = `

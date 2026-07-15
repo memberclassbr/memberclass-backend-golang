@@ -70,8 +70,9 @@ func TestProcessLessonsTenant_EmptyLessonIDsEnqueuesAllUnprocessed(t *testing.T)
 			AddRow(tenantID, "T", true, "lib", "key"))
 
 	// Unprocessed lookup returns 2 lessons; both should be enqueued.
+	// Second arg is includePanda — false here since no PANDA_* env is set.
 	mcMock.ExpectQuery(`FROM "Lesson"`).
-		WithArgs(tenantID).
+		WithArgs(tenantID, false).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "name", "slug", "type", "mediaUrl", "thumbnail", "content",
 			"module_id", "module_name", "section_id", "section_name",

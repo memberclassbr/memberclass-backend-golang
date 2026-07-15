@@ -33,6 +33,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,6 +77,19 @@ type Feature struct {
 	bunnyBaseURL       string
 	bunnyAccountAPIKey string // account-level key (BUNNY_API_KEY); resolves CDN hostname per library
 	httpClient         *http.Client
+
+	pandaAPIKey  string
+	pandaBaseURL string
+	// pandaAllowedTenants gates the Panda source path while it is
+	// single-tenant. Parsed from PANDA_ALLOWED_TENANT_IDS (comma-separated).
+	// Empty map = Panda path disabled everywhere.
+	pandaAllowedTenants map[string]bool
+
+	// pandaIDCache maps video_external_id → internal API id, filled by
+	// scanning GET /videos (the API has no external-id lookup). Guarded by
+	// pandaIDCacheMu; rebuilt on miss so newly-uploaded videos are found.
+	pandaIDCacheMu sync.Mutex
+	pandaIDCache   map[string]string
 
 	pollInterval time.Duration
 	workers      int
@@ -131,6 +145,17 @@ func New(
 		log.Warn("transcription: OPENAI_API_KEY not set — pipeline will refuse to run jobs")
 	}
 
+	pandaKey := os.Getenv("PANDA_API_KEY")
+	pandaTenants := map[string]bool{}
+	for _, id := range strings.Split(os.Getenv("PANDA_ALLOWED_TENANT_IDS"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			pandaTenants[id] = true
+		}
+	}
+	if len(pandaTenants) > 0 && pandaKey == "" {
+		log.Warn("transcription: PANDA_ALLOWED_TENANT_IDS set but PANDA_API_KEY missing — Panda jobs will fail")
+	}
+
 	return &Feature{
 		transcriptionDB: transcriptionDB,
 		memberclassDB:   memberclassDB,
@@ -141,6 +166,9 @@ func New(
 		bunnyBaseURL:       defaultBunnyBaseURL,
 		bunnyAccountAPIKey: os.Getenv("BUNNY_API_KEY"),
 		httpClient:         &http.Client{Timeout: 5 * time.Minute},
+		pandaAPIKey:         pandaKey,
+		pandaBaseURL:        defaultPandaBaseURL,
+		pandaAllowedTenants: pandaTenants,
 		pollInterval:    poll,
 		workers:         workers,
 	}
