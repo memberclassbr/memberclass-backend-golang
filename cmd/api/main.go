@@ -17,8 +17,6 @@ import (
 	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
-	user4 "github.com/memberclass-backend-golang/internal/application/handlers/http/user"
-	purchase2 "github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
@@ -42,6 +40,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
+	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
@@ -109,11 +108,10 @@ func main() {
 				return comment3.NewCommentUseCase(logger, commentRepo, userRepo)
 			},
 			auth.NewApiTokenTenantUseCase,
-			user3.NewUserPurchaseUseCase,
-			user3.NewUserInformationsUseCase,
 			comment3.NewSocialCommentUseCase,
 			activity_summary.New,
 			studentfeat.New,
+			userfeat.New,
 			vitrinefeat.New,
 			user_activities.New,
 			member_import.New,
@@ -125,7 +123,6 @@ func main() {
 			func(txDB database.TranscriptionDB, db *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
 				return transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 			},
-			lessons.NewLessonsCompletedUseCase,
 			auth.NewAuthUseCase,
 			ai2.NewAILessonUseCase,
 			func(tenantRepo tenant2.TenantRepository, logger ports.Logger) ai.AITenantUseCase {
@@ -145,10 +142,7 @@ func main() {
 			lesson2.NewLessonHandler,
 			video.NewVideoHandler,
 			comment4.NewCommentHandler,
-			purchase2.NewUserPurchaseHandler,
-			user4.NewUserInformationsHandler,
 			comment4.NewSocialCommentHandler,
-			lesson2.NewLessonsCompletedHandler,
 			internalhttp.NewSwaggerHandler,
 			auth2.NewAuthHandler,
 			sso2.NewSSOHandler,

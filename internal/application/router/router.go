@@ -12,14 +12,13 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
+	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/workers/transcription"
@@ -31,13 +30,11 @@ type Router struct {
 	lessonHandler             *lesson.LessonHandler
 	commentHandler            *comment.CommentHandler
 	userActivities            *user_activities.Feature
-	userPurchaseHandler       *purchase.UserPurchaseHandler
-	userInformationsHandler   *user.UserInformationsHandler
+	user                      *userfeat.Feature
 	socialCommentHandler      *comment.SocialCommentHandler
 	activitySummary           *activity_summary.Feature
 	memberImport              *member_import.Feature
 	transcription             *transcription.Feature
-	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
 	student                   *studentfeat.Feature
 	swaggerHandler            *internalhttp.SwaggerHandler
 	authHandler               *auth.AuthHandler
@@ -58,13 +55,11 @@ func NewRouter(
 	lessonHandler *lesson.LessonHandler,
 	commentHandler *comment.CommentHandler,
 	userActivities *user_activities.Feature,
-	userPurchaseHandler *purchase.UserPurchaseHandler,
-	userInformationsHandler *user.UserInformationsHandler,
+	userFeat *userfeat.Feature,
 	socialCommentHandler *comment.SocialCommentHandler,
 	activitySummary *activity_summary.Feature,
 	memberImport *member_import.Feature,
 	transcriptionFeat *transcription.Feature,
-	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
 	studentFeat *studentfeat.Feature,
 	swaggerHandler *internalhttp.SwaggerHandler,
 	authHandler *auth.AuthHandler,
@@ -106,13 +101,11 @@ func NewRouter(
 		lessonHandler:             lessonHandler,
 		commentHandler:            commentHandler,
 		userActivities:            userActivities,
-		userPurchaseHandler:       userPurchaseHandler,
-		userInformationsHandler:   userInformationsHandler,
+		user:                      userFeat,
 		socialCommentHandler:      socialCommentHandler,
 		activitySummary:           activitySummary,
 		memberImport:              memberImport,
 		transcription:             transcriptionFeat,
-		lessonsCompletedHandler:   lessonsCompletedHandler,
 		student:                   studentFeat,
 		swaggerHandler:            swaggerHandler,
 		authHandler:               authHandler,
@@ -197,9 +190,10 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/user", func(router chi.Router) {
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-			).Get("/informations", r.userInformationsHandler.GetUserInformations)
+			r.user.Register(router, userfeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 
 			r.userActivities.Register(router, user_activities.MiddlewareSet{
 				AuthExternal:    r.authExternalMiddleware.Authenticate,
@@ -211,19 +205,13 @@ func (r *Router) SetupRoutes() {
 				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
 			})
 
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/lessons/completed", r.lessonsCompletedHandler.GetLessonsCompleted)
-			router.With(
-				r.rateLimitTenantMiddleware.LimitByTenant)
 		})
 
 		router.Route("/users", func(router chi.Router) {
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/purchases", r.userPurchaseHandler.GetUserPurchases)
+			r.user.RegisterUsers(router, userfeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 		})
 
 		router.Route("/social", func(router chi.Router) {

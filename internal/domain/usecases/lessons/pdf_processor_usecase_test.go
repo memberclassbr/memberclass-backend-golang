@@ -4,10 +4,8 @@ import (
 	"context"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	lesson2 "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
@@ -200,10 +198,6 @@ func (m *mockLessonRepository) DeletePDFPagesByAssetID(ctx context.Context, asse
 	defer m.mu.Unlock()
 	delete(m.pdfPages, assetID)
 	return nil
-}
-
-func (m *mockLessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]lesson.CompletedLesson, int64, error) {
-	return []lesson.CompletedLesson{}, int64(0), nil
 }
 
 // --- Mock PDF Service ---
@@ -412,10 +406,6 @@ func (m *mockLessonRepositoryWithError) DeletePDFPage(ctx context.Context, pageI
 
 func (m *mockLessonRepositoryWithError) DeletePDFPagesByAssetID(ctx context.Context, assetID string) error {
 	return assert.AnError
-}
-
-func (m *mockLessonRepositoryWithError) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]lesson.CompletedLesson, int64, error) {
-	return nil, int64(0), assert.AnError
 }
 
 // --- Helper ---

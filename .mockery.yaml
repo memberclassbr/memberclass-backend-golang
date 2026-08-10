@@ -34,7 +34,6 @@ packages:
   github.com/memberclass-backend-golang/internal/domain/ports/lesson:
     interfaces:
       LessonRepository:
-      LessonsCompletedUseCase:
   github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor:
     interfaces:
       PdfProcessorUseCase:
@@ -62,6 +61,4 @@ packages:
   github.com/memberclass-backend-golang/internal/domain/ports/user:
     interfaces:
       UserRepository:
-      UserPurchaseUseCase:
-      UserInformationsUseCase:
       SessionValidatorUseCase:

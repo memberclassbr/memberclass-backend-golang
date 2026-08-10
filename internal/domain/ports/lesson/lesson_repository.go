@@ -2,9 +2,7 @@ package lesson
 
 import (
 	"context"
-	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 )
@@ -26,7 +24,6 @@ type LessonRepository interface {
 	GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*lessons.LessonPDFPage, error)
 	DeletePDFPage(ctx context.Context, pageID string) error
 	DeletePDFPagesByAssetID(ctx context.Context, assetID string) error
-	FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]lesson.CompletedLesson, int64, error)
 	GetByIDWithTenant(ctx context.Context, lessonID string) (*lessons.Lesson, *tenant.Tenant, error)
 	GetLessonsWithHierarchyByTenant(ctx context.Context, tenantID string, onlyUnprocessed bool) ([]AILessonWithHierarchy, error)
 }
