@@ -29,6 +29,21 @@ func NewLessonHandler(useCase pdf_processor.PdfProcessorUseCase, logger ports.Lo
 	}
 }
 
+// authorized validates the internal API key shared with the admin frontend.
+// An empty apiKey is rejected outright: without that guard an unset
+// INTERNAL_AI_API_KEY makes expectedKey empty too, and a request with no
+// header would compare equal and pass. Mirrors the check already used by the
+// ai and sso handlers.
+func (h *LessonHandler) authorized(w http.ResponseWriter, r *http.Request) bool {
+	apiKey := r.Header.Get("x-internal-api-key")
+	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
+	if apiKey == "" || apiKey != expectedKey {
+		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+		return false
+	}
+	return true
+}
+
 // ProcessLesson - POST /api/lessons/pdf-process
 func (h *LessonHandler) ProcessLesson(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -36,10 +51,7 @@ func (h *LessonHandler) ProcessLesson(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey := r.Header.Get("x-internal-api-key")
-	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
-	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+	if !h.authorized(w, r) {
 		return
 	}
 
@@ -128,10 +140,7 @@ func (h *LessonHandler) ProcessAllPendingLessons(w http.ResponseWriter, r *http.
 		return
 	}
 
-	apiKey := r.Header.Get("x-internal-api-key")
-	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
-	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+	if !h.authorized(w, r) {
 		return
 	}
 
@@ -182,10 +191,7 @@ func (h *LessonHandler) RegeneratePDF(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey := r.Header.Get("x-internal-api-key")
-	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
-	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+	if !h.authorized(w, r) {
 		return
 	}
 
@@ -214,10 +220,7 @@ func (h *LessonHandler) RegeneratePDF(w http.ResponseWriter, r *http.Request) {
 // GetLessonsPage - GET /api/lessons/:lessonId/pdf-pages
 func (h *LessonHandler) GetLessonsPage(w http.ResponseWriter, r *http.Request) {
 
-	apiKey := r.Header.Get("x-internal-api-key")
-	expectedKey := os.Getenv("INTERNAL_AI_API_KEY")
-	if apiKey != expectedKey {
-		h.sendErrorResponse(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório")
+	if !h.authorized(w, r) {
 		return
 	}
 

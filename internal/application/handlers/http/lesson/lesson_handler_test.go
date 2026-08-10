@@ -105,7 +105,54 @@ func (m *MockLogger) Debug(msg string, args ...any) {
 	m.Called(msg, args)
 }
 
+const testInternalKey = "test-internal-key"
+
+// newInternalRequest builds a request carrying the internal API key and points
+// INTERNAL_AI_API_KEY at the same value for the duration of the test. Requests
+// without the header are rejected, so every handler test must go through here.
+func newInternalRequest(t *testing.T, method, target string) *http.Request {
+	t.Helper()
+	t.Setenv("INTERNAL_AI_API_KEY", testInternalKey)
+	req := httptest.NewRequest(method, target, nil)
+	req.Header.Set("x-internal-api-key", testInternalKey)
+	return req
+}
+
 // Test cases
+func TestGetLessonsPage_Unauthorized(t *testing.T) {
+	handler := &LessonHandler{
+		useCase:         new(MockPdfProcessorUseCase),
+		logger:          new(MockLogger),
+		paginationUtils: pagination.NewPaginationUtils(),
+	}
+
+	tests := []struct {
+		name        string
+		expectedKey string
+		sentKey     string
+	}{
+		{name: "no header and no configured key", expectedKey: "", sentKey: ""},
+		{name: "no header with configured key", expectedKey: testInternalKey, sentKey: ""},
+		{name: "wrong header", expectedKey: testInternalKey, sentKey: "nope"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("INTERNAL_AI_API_KEY", tt.expectedKey)
+
+			req := httptest.NewRequest("GET", "/api/lessons/any/pdf-pages", nil)
+			if tt.sentKey != "" {
+				req.Header.Set("x-internal-api-key", tt.sentKey)
+			}
+			w := httptest.NewRecorder()
+
+			handler.GetLessonsPage(w, req)
+
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+		})
+	}
+}
+
 func TestGetLessonsPage_Success(t *testing.T) {
 	// Setup
 	mockUseCase := new(MockPdfProcessorUseCase)
@@ -164,7 +211,7 @@ func TestGetLessonsPage_Success(t *testing.T) {
 	mockUseCase.On("GetPDFPagesByAssetID", mock.Anything, assetID).Return(pages, nil)
 
 	// Create request
-	req := httptest.NewRequest("GET", "/api/lessons/"+lessonID+"/pdf-pages", nil)
+	req := newInternalRequest(t, "GET", "/api/lessons/"+lessonID+"/pdf-pages")
 
 	// Add lessonId to URL params
 	rctx := chi.NewRouteContext()
@@ -220,7 +267,7 @@ func TestGetLessonsPage_NoAsset(t *testing.T) {
 	mockUseCase.On("GetLessonWithPDFAsset", mock.Anything, lessonID).Return(lesson, nil)
 
 	// Create request
-	req := httptest.NewRequest("GET", "/api/lessons/"+lessonID+"/pdf-pages", nil)
+	req := newInternalRequest(t, "GET", "/api/lessons/"+lessonID+"/pdf-pages")
 
 	// Add lessonId to URL params
 	rctx := chi.NewRouteContext()
@@ -259,7 +306,7 @@ func TestGetLessonsPage_MissingLessonId(t *testing.T) {
 	}
 
 	// Create request without lessonId
-	req := httptest.NewRequest("GET", "/api/lessons//pdf-pages", nil)
+	req := newInternalRequest(t, "GET", "/api/lessons//pdf-pages")
 	w := httptest.NewRecorder()
 
 	// Execute
@@ -295,7 +342,7 @@ func TestGetLessonsPage_LessonNotFound(t *testing.T) {
 	mockLogger.On("Error", mock.AnythingOfType("string"), mock.Anything).Return()
 
 	// Create request
-	req := httptest.NewRequest("GET", "/api/lessons/"+lessonID+"/pdf-pages", nil)
+	req := newInternalRequest(t, "GET", "/api/lessons/"+lessonID+"/pdf-pages")
 
 	// Add lessonId to URL params
 	rctx := chi.NewRouteContext()
