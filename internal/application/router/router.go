@@ -15,13 +15,13 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
-	vitrine2 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
+	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/workers/transcription"
 )
 
@@ -44,7 +44,7 @@ type Router struct {
 	ssoHandler                *sso.SSOHandler
 	aiLessonHandler           *ai.AILessonHandler
 	aiTenantHandler           *ai.AITenantHandler
-	vitrineHandler            *vitrine2.VitrineHandler
+	vitrine                   *vitrinefeat.Feature
 	rateLimitMiddleware       *rate_limit.RateLimitMiddleware
 	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware
 	rateLimitIPMiddleware     *rate_limit.RateLimitIPMiddleware
@@ -71,7 +71,7 @@ func NewRouter(
 	ssoHandler *sso.SSOHandler,
 	aiLessonHandler *ai.AILessonHandler,
 	aiTenantHandler *ai.AITenantHandler,
-	vitrineHandler *vitrine2.VitrineHandler,
+	vitrineFeat *vitrinefeat.Feature,
 	rateLimitMiddleware *rate_limit.RateLimitMiddleware,
 	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware,
 	rateLimitIPMiddleware *rate_limit.RateLimitIPMiddleware,
@@ -119,7 +119,7 @@ func NewRouter(
 		ssoHandler:                ssoHandler,
 		aiLessonHandler:           aiLessonHandler,
 		aiTenantHandler:           aiTenantHandler,
-		vitrineHandler:            vitrineHandler,
+		vitrine:                   vitrineFeat,
 		rateLimitMiddleware:       rateLimitMiddleware,
 		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
 		rateLimitIPMiddleware:     rateLimitIPMiddleware,
@@ -241,30 +241,10 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/vitrine", func(router chi.Router) {
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/", r.vitrineHandler.GetVitrines)
-
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/{vitrineId}", r.vitrineHandler.GetVitrine)
-
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/courses/{courseId}", r.vitrineHandler.GetCourse)
-
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/modules/{moduleId}", r.vitrineHandler.GetModule)
-
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/lessons/{lessonId}", r.vitrineHandler.GetLesson)
+			r.vitrine.Register(router, vitrinefeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 		})
 
 	})

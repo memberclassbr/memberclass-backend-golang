@@ -25,10 +25,6 @@ packages:
     interfaces:
       BunnyService:
       UploadVideoBunnyCdnUseCase:
-  github.com/memberclass-backend-golang/internal/domain/ports/vitrine:
-    interfaces:
-      VitrineRepository:
-      VitrineUseCase:
   github.com/memberclass-backend-golang/internal/domain/ports/comment:
     interfaces:
       CommentRepository:

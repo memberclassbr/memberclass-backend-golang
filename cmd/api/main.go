@@ -20,7 +20,6 @@ import (
 	user4 "github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	purchase2 "github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
-	vitrine4 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
 	auth3 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
@@ -33,7 +32,6 @@ import (
 	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
 	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
-	vitrine2 "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
@@ -41,11 +39,11 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
 	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
-	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
+	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
@@ -57,7 +55,6 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
-	vitrine_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/vitrine"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/database"
@@ -96,7 +93,6 @@ func main() {
 			comment.NewSocialCommentRepository,
 			topic.NewTopicRepository,
 			sso_repository.NewSSORepository,
-			vitrine_repository.NewVitrineRepository,
 
 			ratelimit.NewRateLimiterUpload,
 			ratelimit.NewRateLimiterTenant,
@@ -118,6 +114,7 @@ func main() {
 			comment3.NewSocialCommentUseCase,
 			activity_summary.New,
 			studentfeat.New,
+			vitrinefeat.New,
 			user_activities.New,
 			member_import.New,
 			notificationsworker.New,
@@ -136,9 +133,6 @@ func main() {
 			},
 			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
 				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
-			},
-			func(vitrineRepo vitrine2.VitrineRepository) vitrine2.VitrineUseCase {
-				return vitrine3.NewVitrineUseCase(vitrineRepo)
 			},
 
 			rate_limit.NewRateLimitMiddleware,
@@ -160,7 +154,6 @@ func main() {
 			sso2.NewSSOHandler,
 			ai3.NewAILessonHandler,
 			ai3.NewAITenantHandler,
-			vitrine4.NewVitrineHandler,
 
 			router.NewRouter,
 			jobs.NewScheduler,
