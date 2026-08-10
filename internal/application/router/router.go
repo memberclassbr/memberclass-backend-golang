@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
@@ -16,6 +15,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
 	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
 	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
@@ -40,8 +40,7 @@ type Router struct {
 	swaggerHandler            *internalhttp.SwaggerHandler
 	authHandler               *auth.AuthHandler
 	ssoHandler                *sso.SSOHandler
-	aiLessonHandler           *ai.AILessonHandler
-	aiTenantHandler           *ai.AITenantHandler
+	ai                        *aifeat.Feature
 	vitrine                   *vitrinefeat.Feature
 	rateLimitMiddleware       *rate_limit.RateLimitMiddleware
 	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware
@@ -65,8 +64,7 @@ func NewRouter(
 	swaggerHandler *internalhttp.SwaggerHandler,
 	authHandler *auth.AuthHandler,
 	ssoHandler *sso.SSOHandler,
-	aiLessonHandler *ai.AILessonHandler,
-	aiTenantHandler *ai.AITenantHandler,
+	aiFeat *aifeat.Feature,
 	vitrineFeat *vitrinefeat.Feature,
 	rateLimitMiddleware *rate_limit.RateLimitMiddleware,
 	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware,
@@ -111,8 +109,7 @@ func NewRouter(
 		swaggerHandler:            swaggerHandler,
 		authHandler:               authHandler,
 		ssoHandler:                ssoHandler,
-		aiLessonHandler:           aiLessonHandler,
-		aiTenantHandler:           aiTenantHandler,
+		ai:                        aiFeat,
 		vitrine:                   vitrineFeat,
 		rateLimitMiddleware:       rateLimitMiddleware,
 		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
@@ -151,21 +148,12 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/ai", func(router chi.Router) {
-			router.Route("/lessons", func(router chi.Router) {
-				// /lessons/{lessonId}/transcription PATCH lives in the
-				// transcription slice; keep the GET / endpoint here for
-				// the AI dashboard (paginated lessons listing).
-				router.With(
-					r.rateLimitTenantMiddleware.LimitByTenant,
-				).Get("/", r.aiLessonHandler.GetLessons)
-			})
-			router.Route("/tenants", func(router chi.Router) {
-				router.Get("/", r.aiTenantHandler.GetTenantsWithAIEnabled)
-				// process-lessons now flows through the transcription
-				// slice (registered below) — old handler removed.
+			// The dashboard's read endpoints.
+			r.ai.Register(router, aifeat.MiddlewareSet{
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
 			})
 
-			// Transcription slice owns:
+			// Transcription owns the rest of this prefix:
 			//   POST  /tenants/process-lessons
 			//   GET   /jobs/{jobId}
 			//   PATCH /lessons/{lessonId}/transcription

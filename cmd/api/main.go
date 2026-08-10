@@ -12,7 +12,6 @@ import (
 
 	"github.com/joho/godotenv"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	ai3 "github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
@@ -23,12 +22,9 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/ai"
 	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
 	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
-	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
-	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
@@ -36,6 +32,7 @@ import (
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
 	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
 	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
@@ -102,6 +99,7 @@ func main() {
 			activity_summary.New,
 			studentfeat.New,
 			commentfeat.New,
+			aifeat.New,
 			socialfeat.New,
 			userfeat.New,
 			vitrinefeat.New,
@@ -116,10 +114,6 @@ func main() {
 				return transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 			},
 			auth.NewAuthUseCase,
-			ai2.NewAILessonUseCase,
-			func(tenantRepo tenant2.TenantRepository, logger ports.Logger) ai.AITenantUseCase {
-				return ai2.NewAITenantUseCase(tenantRepo, logger)
-			},
 			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
 				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
 			},
@@ -136,8 +130,6 @@ func main() {
 			internalhttp.NewSwaggerHandler,
 			auth2.NewAuthHandler,
 			sso2.NewSSOHandler,
-			ai3.NewAILessonHandler,
-			ai3.NewAITenantHandler,
 
 			router.NewRouter,
 			jobs.NewScheduler,

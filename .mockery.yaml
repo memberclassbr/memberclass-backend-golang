@@ -13,10 +13,6 @@ packages:
       Cache:
       Storage:
       Job:
-  github.com/memberclass-backend-golang/internal/domain/ports/ai:
-    interfaces:
-      AILessonUseCase:
-      AITenantUseCase:
   github.com/memberclass-backend-golang/internal/domain/ports/auth:
     interfaces:
       AuthUseCase:
