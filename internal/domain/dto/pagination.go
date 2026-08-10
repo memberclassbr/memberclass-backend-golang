@@ -1,6 +1,15 @@
 package dto
 
-import "math"
+import (
+	"math"
+
+	"github.com/memberclass-backend-golang/internal/shared/pagination"
+)
+
+// PaginationMeta aliases the shared envelope. Transitional: the layered
+// packages under internal/domain and internal/application still refer to
+// dto.PaginationMeta, while slices use pagination.Meta directly. The alias
+// goes away with those packages.
 
 type PaginationRequest struct {
 	Page    int    `json:"page" form:"page" validate:"min=1"`
@@ -9,22 +18,12 @@ type PaginationRequest struct {
 	SortDir string `json:"sortDir" form:"sortDir" validate:"oneof=asc desc"`
 }
 
-
 type PaginationResponse[T any] struct {
 	Data       []T            `json:"data"`
 	Pagination PaginationMeta `json:"pagination"`
 }
 
-
-type PaginationMeta struct {
-	Page        int   `json:"page"`
-	Limit       int   `json:"limit"`
-	TotalCount  int64 `json:"totalCount"`
-	TotalPages  int   `json:"totalPages"`
-	HasNextPage bool  `json:"hasNextPage"`
-	HasPrevPage bool  `json:"hasPrevPage"`
-}
-
+type PaginationMeta = pagination.Meta
 
 var DefaultAllowedSortFields = []string{
 	"createdAt",
@@ -35,14 +34,12 @@ var DefaultAllowedSortFields = []string{
 	"date",
 }
 
-
 func (p *PaginationRequest) GetOffset() int {
 	if p.Page <= 0 {
 		p.Page = 1
 	}
 	return (p.Page - 1) * p.Limit
 }
-
 
 func (p *PaginationRequest) GetLimit() int {
 	if p.Limit <= 0 {
@@ -54,7 +51,6 @@ func (p *PaginationRequest) GetLimit() int {
 	return p.Limit
 }
 
-
 func (p *PaginationRequest) GetSortBy() string {
 	if p.SortBy == "" {
 		return "createdAt"
@@ -62,25 +58,23 @@ func (p *PaginationRequest) GetSortBy() string {
 	return p.SortBy
 }
 
-
 func (p *PaginationRequest) GetSafeSortBy(allowedFields []string) string {
 	if p.SortBy == "" {
 		return "created_at"
 	}
-	
+
 	if len(allowedFields) == 0 {
 		allowedFields = DefaultAllowedSortFields
 	}
-	
+
 	for _, field := range allowedFields {
 		if p.SortBy == field {
 			return p.SortBy
 		}
 	}
-	
+
 	return "created_at"
 }
-
 
 func (p *PaginationRequest) GetSortDir() string {
 	if p.SortDir == "" {
@@ -89,7 +83,6 @@ func (p *PaginationRequest) GetSortDir() string {
 	return p.SortDir
 }
 
-
 func NewPaginationMeta(total int64, req *PaginationRequest) PaginationMeta {
 	limit := req.GetLimit()
 	page := req.Page
@@ -97,7 +90,7 @@ func NewPaginationMeta(total int64, req *PaginationRequest) PaginationMeta {
 		page = 1
 	}
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
-	
+
 	return PaginationMeta{
 		Page:        page,
 		Limit:       limit,
@@ -107,7 +100,6 @@ func NewPaginationMeta(total int64, req *PaginationRequest) PaginationMeta {
 		HasPrevPage: page > 1,
 	}
 }
-
 
 func NewPaginationResponse[T any](data []T, total int64, req *PaginationRequest) *PaginationResponse[T] {
 	return &PaginationResponse[T]{

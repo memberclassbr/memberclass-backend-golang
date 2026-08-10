@@ -40,4 +40,3 @@ func GetUserFromContext(ctx context.Context) *SessionPayload {
 	}
 	return user
 }
-

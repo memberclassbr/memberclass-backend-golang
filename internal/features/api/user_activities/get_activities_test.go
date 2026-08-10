@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/pagination"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -322,7 +322,7 @@ func TestGetActivities_ProdMode_CacheHitReturnsStoredMeta(t *testing.T) {
 		Events: []event{
 			{ID: "cached-1", Type: "login", Date: storedAt},
 		},
-		Pagination: dto.PaginationMeta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
+		Pagination: pagination.Meta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
 		Cache:      &cacheMeta{CachedAt: storedAt, RefreshAt: storedAt.Add(cacheTTL)},
 	}
 	raw, _ := json.Marshal(stored)

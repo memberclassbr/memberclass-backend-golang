@@ -17,6 +17,6 @@ type UserInformation struct {
 }
 
 type UserInformationsResponse struct {
-	Users      []UserInformation `json:"users"`
+	Users      []UserInformation  `json:"users"`
 	Pagination dto.PaginationMeta `json:"pagination"`
 }

@@ -504,4 +504,3 @@ func TestExecuteJob_BunnyURLStillUsesAudioWhisperPath(t *testing.T) {
 		t.Fatalf("memberclass DB expectations: %v", err)
 	}
 }
-

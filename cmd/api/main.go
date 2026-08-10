@@ -17,7 +17,6 @@ import (
 	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
-	student2 "github.com/memberclass-backend-golang/internal/application/handlers/http/student"
 	user4 "github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	purchase2 "github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
@@ -41,11 +40,11 @@ import (
 	comment3 "github.com/memberclass-backend-golang/internal/domain/usecases/comment"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
 	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
-	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
@@ -55,7 +54,6 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
-	student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
@@ -97,7 +95,6 @@ func main() {
 			comment.NewCommentRepository,
 			comment.NewSocialCommentRepository,
 			topic.NewTopicRepository,
-			student_report.NewStudentReportRepository,
 			sso_repository.NewSSORepository,
 			vitrine_repository.NewVitrineRepository,
 
@@ -120,6 +117,7 @@ func main() {
 			user3.NewUserInformationsUseCase,
 			comment3.NewSocialCommentUseCase,
 			activity_summary.New,
+			studentfeat.New,
 			user_activities.New,
 			member_import.New,
 			notificationsworker.New,
@@ -131,7 +129,6 @@ func main() {
 				return transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 			},
 			lessons.NewLessonsCompletedUseCase,
-			student.NewStudentReportUseCase,
 			auth.NewAuthUseCase,
 			ai2.NewAILessonUseCase,
 			func(tenantRepo tenant2.TenantRepository, logger ports.Logger) ai.AITenantUseCase {
@@ -158,7 +155,6 @@ func main() {
 			user4.NewUserInformationsHandler,
 			comment4.NewSocialCommentHandler,
 			lesson2.NewLessonsCompletedHandler,
-			student2.NewStudentReportHandler,
 			internalhttp.NewSwaggerHandler,
 			auth2.NewAuthHandler,
 			sso2.NewSSOHandler,

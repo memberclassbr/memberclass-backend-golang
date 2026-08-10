@@ -45,12 +45,12 @@ func (f *Feature) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		resp         jobStatusResponse
-		jobErr       sql.NullString
-		startedAt    sql.NullTime
-		completedAt  sql.NullTime
-		payload      []byte
-		result       []byte
+		resp        jobStatusResponse
+		jobErr      sql.NullString
+		startedAt   sql.NullTime
+		completedAt sql.NullTime
+		payload     []byte
+		result      []byte
 	)
 	row := f.transcriptionDB.QueryRowContext(r.Context(), sqlGetJobStatus, jobID)
 	if err := row.Scan(

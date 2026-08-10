@@ -12,15 +12,15 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/student"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	vitrine2 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
 	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
-	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
+	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	"github.com/memberclass-backend-golang/internal/features/workers/transcription"
 )
@@ -38,7 +38,7 @@ type Router struct {
 	memberImport              *member_import.Feature
 	transcription             *transcription.Feature
 	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
-	studentReportHandler      *student.StudentReportHandler
+	student                   *studentfeat.Feature
 	swaggerHandler            *internalhttp.SwaggerHandler
 	authHandler               *auth.AuthHandler
 	ssoHandler                *sso.SSOHandler
@@ -65,7 +65,7 @@ func NewRouter(
 	memberImport *member_import.Feature,
 	transcriptionFeat *transcription.Feature,
 	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
-	studentReportHandler *student.StudentReportHandler,
+	studentFeat *studentfeat.Feature,
 	swaggerHandler *internalhttp.SwaggerHandler,
 	authHandler *auth.AuthHandler,
 	ssoHandler *sso.SSOHandler,
@@ -113,7 +113,7 @@ func NewRouter(
 		memberImport:              memberImport,
 		transcription:             transcriptionFeat,
 		lessonsCompletedHandler:   lessonsCompletedHandler,
-		studentReportHandler:      studentReportHandler,
+		student:                   studentFeat,
 		swaggerHandler:            swaggerHandler,
 		authHandler:               authHandler,
 		ssoHandler:                ssoHandler,
@@ -234,10 +234,10 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/student", func(router chi.Router) {
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/report", r.studentReportHandler.GetStudentReport)
+			r.student.Register(router, studentfeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 		})
 
 		router.Route("/vitrine", func(router chi.Router) {

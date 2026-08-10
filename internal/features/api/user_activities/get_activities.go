@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/shared/constants"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/pagination"
 )
 
 // errUserNotFoundOrNotInTenant is the slice's sentinel: the email does not
@@ -51,10 +51,10 @@ type cacheMeta struct {
 }
 
 type activitiesResponse struct {
-	Email      string             `json:"email"`
-	Events     []event            `json:"events"`
-	Pagination dto.PaginationMeta `json:"pagination"`
-	Cache      *cacheMeta         `json:"cache,omitempty"`
+	Email      string          `json:"email"`
+	Events     []event         `json:"events"`
+	Pagination pagination.Meta `json:"pagination"`
+	Cache      *cacheMeta      `json:"cache,omitempty"`
 }
 
 const cacheTTL = 5 * time.Minute
@@ -196,12 +196,12 @@ func resolveDateRange(req getActivitiesRequest) (time.Time, time.Time) {
 	return *req.StartDate, *req.EndDate
 }
 
-func buildPaginationMeta(page, limit int, total int64) dto.PaginationMeta {
+func buildPaginationMeta(page, limit int, total int64) pagination.Meta {
 	totalPages := int(total) / limit
 	if int(total)%limit > 0 {
 		totalPages++
 	}
-	return dto.PaginationMeta{
+	return pagination.Meta{
 		Page:        page,
 		Limit:       limit,
 		TotalCount:  total,

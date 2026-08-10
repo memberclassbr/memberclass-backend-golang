@@ -27,8 +27,10 @@ const defaultBunnyBaseURL = "https://video.bunnycdn.com/library"
 const iframeMediaDeliveryDomain = "iframe.mediadelivery.net"
 
 // bunnyVideoStatus codes (from the Stream API):
-//   0 Created · 1 Uploaded · 2 Processing · 3 Transcoding · 4 Finished
-//   5 Error · 6 UploadFailed · 7 JitSegmenting · 8 JitPlaylistsCreated
+//
+//	0 Created · 1 Uploaded · 2 Processing · 3 Transcoding · 4 Finished
+//	5 Error · 6 UploadFailed · 7 JitSegmenting · 8 JitPlaylistsCreated
+//
 // We only transcribe Finished videos (status=4).
 const bunnyVideoStatusFinished = 4
 

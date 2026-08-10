@@ -56,10 +56,6 @@ packages:
     interfaces:
       SSORepository:
       SSOUseCase:
-  github.com/memberclass-backend-golang/internal/domain/ports/student:
-    interfaces:
-      StudentReportRepository:
-      StudentReportUseCase:
   github.com/memberclass-backend-golang/internal/domain/ports/tenant:
     interfaces:
       TenantRepository:

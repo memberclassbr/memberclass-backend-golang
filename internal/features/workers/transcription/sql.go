@@ -145,7 +145,7 @@ const sqlUpdateVideoStatus = `
 
 // Reprocessing housekeeping: drop prior chunks/transcripts so we don't end
 // up with stale text alongside fresh.
-const sqlDeleteChunksByVideo      = `DELETE FROM chunks      WHERE video_id = $1`
+const sqlDeleteChunksByVideo = `DELETE FROM chunks      WHERE video_id = $1`
 const sqlDeleteTranscriptsByVideo = `DELETE FROM transcripts WHERE video_id = $1`
 
 const sqlInsertTranscript = `
@@ -247,7 +247,7 @@ const sqlSelectUnprocessedLessons = `
 // actually process. $4 = include Panda (same "tenant allowlisted + Panda
 // key configured" boolean the enqueue handlers compute).
 //
-// $1 tenantId, $2 courseId or '' (empty disables the filter), $3 moduleId or '', $4 includePanda.
+// $1 tenantId, $2 courseId or ” (empty disables the filter), $3 moduleId or ”, $4 includePanda.
 const sqlTranscriptionStats = `
     SELECT
         COUNT(*)                                                          AS total,
@@ -329,4 +329,3 @@ const sqlMarkLessonTranscriptionStatus = `
            "updatedAt"              = NOW()
      WHERE id = $1
 `
-
