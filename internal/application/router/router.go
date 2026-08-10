@@ -9,7 +9,6 @@ import (
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
@@ -17,6 +16,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
+	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
@@ -28,10 +29,10 @@ type Router struct {
 	chi.Router
 	videoHandler              *video.VideoHandler
 	lessonHandler             *lesson.LessonHandler
-	commentHandler            *comment.CommentHandler
+	comment                   *commentfeat.Feature
 	userActivities            *user_activities.Feature
 	user                      *userfeat.Feature
-	socialCommentHandler      *comment.SocialCommentHandler
+	social                    *socialfeat.Feature
 	activitySummary           *activity_summary.Feature
 	memberImport              *member_import.Feature
 	transcription             *transcription.Feature
@@ -53,10 +54,10 @@ type Router struct {
 func NewRouter(
 	videoHandler *video.VideoHandler,
 	lessonHandler *lesson.LessonHandler,
-	commentHandler *comment.CommentHandler,
+	commentFeat *commentfeat.Feature,
 	userActivities *user_activities.Feature,
 	userFeat *userfeat.Feature,
-	socialCommentHandler *comment.SocialCommentHandler,
+	socialFeat *socialfeat.Feature,
 	activitySummary *activity_summary.Feature,
 	memberImport *member_import.Feature,
 	transcriptionFeat *transcription.Feature,
@@ -99,10 +100,10 @@ func NewRouter(
 		Router:                    router,
 		videoHandler:              videoHandler,
 		lessonHandler:             lessonHandler,
-		commentHandler:            commentHandler,
+		comment:                   commentFeat,
 		userActivities:            userActivities,
 		user:                      userFeat,
-		socialCommentHandler:      socialCommentHandler,
+		social:                    socialFeat,
 		activitySummary:           activitySummary,
 		memberImport:              memberImport,
 		transcription:             transcriptionFeat,
@@ -179,14 +180,10 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/comments", func(router chi.Router) {
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Get("/", r.commentHandler.GetComments)
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Patch("/{commentID}", r.commentHandler.UpdateComment)
+			r.comment.Register(router, commentfeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 		})
 
 		router.Route("/user", func(router chi.Router) {
@@ -215,10 +212,10 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/social", func(router chi.Router) {
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Post("/", r.socialCommentHandler.CreateOrUpdatePost)
+			r.social.Register(router, socialfeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 		})
 
 		router.Route("/student", func(router chi.Router) {
@@ -248,8 +245,9 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/comments", func(router chi.Router) {
-			router.With(
-				r.authMiddleware.Authenticate).Get("/", r.commentHandler.GetComments)
+			r.comment.RegisterLegacy(router, commentfeat.MiddlewareSet{
+				AuthAPIKey: r.authMiddleware.Authenticate,
+			})
 		})
 
 	})

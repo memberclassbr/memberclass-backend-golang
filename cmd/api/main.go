@@ -14,7 +14,6 @@ import (
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	ai3 "github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
-	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
@@ -26,19 +25,19 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/ai"
 	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
-	comment2 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
 	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
-	comment3 "github.com/memberclass-backend-golang/internal/domain/usecases/comment"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
 	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
+	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
@@ -48,11 +47,9 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
@@ -88,9 +85,6 @@ func main() {
 			tenant.NewTenantRepository,
 			user.NewUserRepository,
 			lesson.NewLessonRepository,
-			comment.NewCommentRepository,
-			comment.NewSocialCommentRepository,
-			topic.NewTopicRepository,
 			sso_repository.NewSSORepository,
 
 			ratelimit.NewRateLimiterUpload,
@@ -104,13 +98,11 @@ func main() {
 			lessons.NewPdfProcessorUseCase,
 			bunny2.NewTenantGetTenantBunnyCredentialsUseCase,
 			bunny2.NewUploadVideoBunnyCdnUseCase,
-			func(logger ports.Logger, commentRepo comment2.CommentRepository, userRepo user2.UserRepository) comment2.CommentUseCase {
-				return comment3.NewCommentUseCase(logger, commentRepo, userRepo)
-			},
 			auth.NewApiTokenTenantUseCase,
-			comment3.NewSocialCommentUseCase,
 			activity_summary.New,
 			studentfeat.New,
+			commentfeat.New,
+			socialfeat.New,
 			userfeat.New,
 			vitrinefeat.New,
 			user_activities.New,
@@ -141,8 +133,6 @@ func main() {
 
 			lesson2.NewLessonHandler,
 			video.NewVideoHandler,
-			comment4.NewCommentHandler,
-			comment4.NewSocialCommentHandler,
 			internalhttp.NewSwaggerHandler,
 			auth2.NewAuthHandler,
 			sso2.NewSSOHandler,

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/application/middlewares/auth"
-	"github.com/memberclass-backend-golang/internal/domain/utils"
+	"github.com/memberclass-backend-golang/internal/shared/utils"
 )
 
 // ---------- Request/response DTOs ----------

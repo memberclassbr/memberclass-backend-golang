@@ -9,7 +9,6 @@ import (
 	httpHandlers "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
@@ -17,6 +16,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
+	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
@@ -29,10 +30,10 @@ import (
 func createTestRouter(t *testing.T) *Router {
 	mockVideoHandler := &video.VideoHandler{}
 	mockLessonHandler := &lesson.LessonHandler{}
-	mockCommentHandler := &comment.CommentHandler{}
+	mockComment := commentfeat.New(nil, nil)
 	mockUserActivities := user_activities.New(nil, nil, nil)
 	mockUser := userfeat.New(nil, nil, nil)
-	mockSocialCommentHandler := &comment.SocialCommentHandler{}
+	mockSocial := socialfeat.New(nil, nil)
 	mockActivitySummary := activity_summary.New(nil, nil, nil)
 	mockMemberImport := member_import.New(nil, nil, nil)
 	mockStudent := studentfeat.New(nil, nil, nil)
@@ -61,7 +62,7 @@ func createTestRouter(t *testing.T) *Router {
 	authExternalMiddleware := auth2.NewAuthExternalMiddleware(mockApiTokenUseCase)
 	bearerMiddleware := auth2.NewBearerMiddleware(mockLogger)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockCommentHandler, mockUserActivities, mockUser, mockSocialCommentHandler, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAILessonHandler, mockAITenantHandler, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
