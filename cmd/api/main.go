@@ -85,15 +85,14 @@ func main() {
 		fx.Supply(cfg),
 		fx.Provide(
 			logger.NewLogger,
-			database.NewMultiDB,
-			database.DefaultDB,
+			database.Open,
+			database.OpenTranscription,
 			database.NewMigrationService,
 			cache.NewRedisCache,
 			storage.NewDigitalOceanSpaces,
 
 			tenant.NewTenantRepository,
 			user.NewUserRepository,
-			lesson.NewLessonRepoResolver,
 			lesson.NewLessonRepository,
 			comment.NewCommentRepository,
 			comment.NewSocialCommentRepository,
@@ -125,16 +124,11 @@ func main() {
 			member_import.New,
 			notificationsworker.New,
 			// Transcription slice owns the entire pipeline (Bunny → Whisper →
-			// chunk → embed → Railway pgvector). Pulls its own *sql.DB out
-			// of the DBMap (transcription bucket) + memberclass DefaultDB.
-			// No cron — the internal admin UI POSTs to the slice with the
-			// explicit list of lessonIds it wants transcribed.
-			func(dbMap database.DBMap, defaultDB *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
-				txDB := dbMap["transcription"]
-				if txDB == nil {
-					log.Warn("transcription slice will be inert: DB_TRANSCRIPTION_DSN not configured")
-				}
-				return transcriptionworker.New(txDB, defaultDB, log, bunnySvc)
+			// chunk → embed → Railway pgvector). It reads the tenant database
+			// for lesson metadata and writes vectors to its own. No cron — the
+			// internal admin UI POSTs the explicit list of lessonIds.
+			func(txDB database.TranscriptionDB, db *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
+				return transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 			},
 			lessons.NewLessonsCompletedUseCase,
 			student.NewStudentReportUseCase,
@@ -183,8 +177,8 @@ func main() {
 func startApplication(
 	log ports.Logger,
 	cfg *config.Config,
-	dbMap database.DBMap,
 	db *sql.DB,
+	txDB database.TranscriptionDB,
 	cache ports.Cache,
 	migrationService *database.MigrationService,
 	router *router.Router,
@@ -282,8 +276,14 @@ func startApplication(
 		log.Error("Error closing cache: " + err.Error())
 	}
 
-	if err := dbMap.CloseAll(); err != nil {
-		log.Error("Error closing databases: " + err.Error())
+	if txDB.DB != nil {
+		if err := txDB.Close(); err != nil {
+			log.Error("Error closing transcription database: " + err.Error())
+		}
+	}
+
+	if err := db.Close(); err != nil {
+		log.Error("Error closing database: " + err.Error())
 	}
 
 	log.Info("Server exited")

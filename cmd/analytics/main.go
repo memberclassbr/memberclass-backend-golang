@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/database"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
@@ -34,7 +35,12 @@ func main() {
 
 	logr := logger.NewLogger()
 
-	db, err := database.NewDB()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
+
+	db, err := database.Open(cfg, logr)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}

@@ -10,8 +10,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	lesson2 "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -204,68 +204,6 @@ func (m *mockLessonRepository) DeletePDFPagesByAssetID(ctx context.Context, asse
 
 func (m *mockLessonRepository) FindCompletedLessonsByEmail(ctx context.Context, userID, tenantID string, startDate, endDate time.Time, courseID string, page, limit int) ([]lesson.CompletedLesson, int64, error) {
 	return []lesson.CompletedLesson{}, int64(0), nil
-}
-
-// --- Mock Lesson Repo Resolver ---
-
-type mockLessonRepoResolver struct {
-	repo lesson2.LessonRepository
-}
-
-func newMockRepoResolver(repo lesson2.LessonRepository) *mockLessonRepoResolver {
-	return &mockLessonRepoResolver{repo: repo}
-}
-
-func (r *mockLessonRepoResolver) Resolve(bucket string) lesson2.LessonRepository {
-	return r.repo
-}
-
-func (r *mockLessonRepoResolver) All() map[string]lesson2.LessonRepository {
-	return map[string]lesson2.LessonRepository{"default": r.repo}
-}
-
-func (r *mockLessonRepoResolver) Default() lesson2.LessonRepository {
-	return r.repo
-}
-
-func (r *mockLessonRepoResolver) FindByLessonID(ctx context.Context, lessonID string) (lesson2.LessonRepository, string, error) {
-	l, err := r.repo.GetByID(ctx, lessonID)
-	if err == nil && l != nil {
-		return r.repo, "default", nil
-	}
-	return nil, "", &memberclasserrors.MemberClassError{
-		Code:    404,
-		Message: "lesson not found in any database",
-	}
-}
-
-// --- Mock Error Repo Resolver (always returns error repo) ---
-
-type mockErrorRepoResolver struct {
-	repo lesson2.LessonRepository
-}
-
-func newMockErrorRepoResolver(repo lesson2.LessonRepository) *mockErrorRepoResolver {
-	return &mockErrorRepoResolver{repo: repo}
-}
-
-func (r *mockErrorRepoResolver) Resolve(bucket string) lesson2.LessonRepository {
-	return r.repo
-}
-
-func (r *mockErrorRepoResolver) All() map[string]lesson2.LessonRepository {
-	return map[string]lesson2.LessonRepository{"default": r.repo}
-}
-
-func (r *mockErrorRepoResolver) Default() lesson2.LessonRepository {
-	return r.repo
-}
-
-func (r *mockErrorRepoResolver) FindByLessonID(ctx context.Context, lessonID string) (lesson2.LessonRepository, string, error) {
-	return nil, "", &memberclasserrors.MemberClassError{
-		Code:    404,
-		Message: "lesson not found in any database",
-	}
 }
 
 // --- Mock PDF Service ---
@@ -498,22 +436,20 @@ func stringPtr(s string) *string {
 
 func TestNewPdfProcessorUseCase(t *testing.T) {
 	repo := newMockLessonRepository()
-	resolver := newMockRepoResolver(repo)
 	pdfService := newMockPdfService()
 	storageService := &mockStorageService{}
 	logger := &mockLogger{}
 
-	useCase := NewPdfProcessorUseCase(resolver, pdfService, storageService, logger)
+	useCase := NewPdfProcessorUseCase(repo, pdfService, storageService, logger)
 
 	assert.NotNil(t, useCase)
 }
 
 func TestProcessAllPendingLessons_NoLessons(t *testing.T) {
 	repo := newMockLessonRepository()
-	resolver := newMockRepoResolver(repo)
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   resolver,
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -529,10 +465,9 @@ func TestProcessAllPendingLessons_NoLessons(t *testing.T) {
 
 func TestProcessAllPendingLessons_WithLessons(t *testing.T) {
 	repo := newMockLessonRepository()
-	resolver := newMockRepoResolver(repo)
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   resolver,
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -557,10 +492,9 @@ func TestProcessAllPendingLessons_WithLessons(t *testing.T) {
 
 func TestProcessLesson_Success(t *testing.T) {
 	repo := newMockLessonRepository()
-	resolver := newMockRepoResolver(repo)
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   resolver,
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -582,10 +516,9 @@ func TestProcessLesson_Success(t *testing.T) {
 
 func TestProcessLesson_NoMediaURL(t *testing.T) {
 	repo := newMockLessonRepository()
-	resolver := newMockRepoResolver(repo)
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   resolver,
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -606,10 +539,9 @@ func TestProcessLesson_NoMediaURL(t *testing.T) {
 
 func TestProcessLesson_LessonNotFound(t *testing.T) {
 	repo := newMockLessonRepository()
-	resolver := newMockRepoResolver(repo)
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   resolver,
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -626,7 +558,7 @@ func TestSaveSinglePage_NewPage(t *testing.T) {
 	repo := newMockLessonRepository()
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -655,7 +587,7 @@ func TestSaveSinglePage_ExistingPage(t *testing.T) {
 	repo.pdfPages["test-asset"] = []*lessons.LessonPDFPage{existingPage}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -677,7 +609,7 @@ func TestSaveSinglePage_InvalidBase64(t *testing.T) {
 	repo := newMockLessonRepository()
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -697,7 +629,7 @@ func TestSaveSinglePage_InvalidBase64(t *testing.T) {
 
 func TestConvertPdfToImages_Success(t *testing.T) {
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		repo:           newMockLessonRepository(),
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -717,7 +649,7 @@ func TestCreateOrUpdatePDFAsset_Success(t *testing.T) {
 	repo.lessons[lessonID] = &lessons.Lesson{ID: &lessonID, MediaURL: stringPtr("http://example.com/test.pdf")}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -748,7 +680,7 @@ func TestValidateLessonHasPDF_Success(t *testing.T) {
 	repo.lessons["lesson1"] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -768,7 +700,7 @@ func TestValidateLessonHasPDF_NoPDF(t *testing.T) {
 	repo.lessons["lesson1"] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -793,7 +725,7 @@ func TestGetLessonWithPDFAsset_Success(t *testing.T) {
 	repo.lessons["lesson1"] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -812,7 +744,7 @@ func TestGetLessonWithPDFAsset_NotFound(t *testing.T) {
 	repo := newMockLessonRepository()
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -828,7 +760,7 @@ func TestRetryFailedAssets_NoFailedAssets(t *testing.T) {
 	repo := newMockLessonRepository()
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -845,7 +777,7 @@ func TestCleanupOrphanedPages_Success(t *testing.T) {
 	repo := newMockLessonRepository()
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -872,7 +804,7 @@ func TestRegeneratePDF_Success(t *testing.T) {
 	repo.pdfAssets["asset1"] = l.PDFAsset
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -894,7 +826,7 @@ func TestRetryFailedAssets_WithFailedAssets(t *testing.T) {
 	repo.pdfAssets["asset1"] = failedAsset
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -918,7 +850,7 @@ func TestCleanupOrphanedPages_WithOrphanedPages(t *testing.T) {
 	repo.pdfPages["nonexistent-asset"] = []*lessons.LessonPDFPage{orphanedPage}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -940,7 +872,7 @@ func TestProcessLesson_PdfServiceError(t *testing.T) {
 	repo.lessons[lessonID] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     &mockPdfServiceWithError{},
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -955,7 +887,7 @@ func TestProcessLesson_PdfServiceError(t *testing.T) {
 
 func TestConvertPdfToImages_PdfServiceError(t *testing.T) {
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		repo:           newMockLessonRepository(),
 		pdfService:     &mockPdfServiceWithError{},
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -983,7 +915,7 @@ func TestCreateOrUpdatePDFAsset_ExistingAsset(t *testing.T) {
 	repo.pdfAssets["asset1"] = existingAsset
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1014,7 +946,7 @@ func TestProcessAllPendingLessons_WithLimit(t *testing.T) {
 	}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1031,7 +963,7 @@ func TestProcessAllPendingLessons_WithLimit(t *testing.T) {
 
 func TestRegeneratePDF_LessonNotFound(t *testing.T) {
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		repo:           newMockLessonRepository(),
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1051,7 +983,7 @@ func TestRegeneratePDF_NoMediaURL(t *testing.T) {
 	repo.lessons["lesson1"] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1072,7 +1004,7 @@ func TestRegeneratePDF_NoPDFAsset(t *testing.T) {
 	repo.lessons["lesson1"] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1085,7 +1017,7 @@ func TestRegeneratePDF_NoPDFAsset(t *testing.T) {
 
 func TestValidateLessonHasPDF_LessonNotFound(t *testing.T) {
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		repo:           newMockLessonRepository(),
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1102,7 +1034,7 @@ func TestValidateLessonHasPDF_NoMediaURL(t *testing.T) {
 	repo.lessons["lesson1"] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1115,7 +1047,7 @@ func TestValidateLessonHasPDF_NoMediaURL(t *testing.T) {
 
 func TestGetLessonWithPDFAsset_LessonNotFound(t *testing.T) {
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		repo:           newMockLessonRepository(),
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1129,7 +1061,7 @@ func TestGetLessonWithPDFAsset_LessonNotFound(t *testing.T) {
 
 func TestCreateOrUpdatePDFAsset_LessonNotFound(t *testing.T) {
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(newMockLessonRepository()),
+		repo:           newMockLessonRepository(),
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1145,7 +1077,7 @@ func TestSaveSinglePage_StorageServiceError(t *testing.T) {
 	repo := newMockLessonRepository()
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageServiceWithError{},
 		logger:         &mockLogger{},
@@ -1180,7 +1112,7 @@ func TestCleanupOrphanedPages_WithFailedAssets(t *testing.T) {
 	repo.pdfPages["asset1"] = pages
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1197,7 +1129,7 @@ func TestCleanupOrphanedPages_RepositoryError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1212,7 +1144,7 @@ func TestRetryFailedAssets_RepositoryError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1229,7 +1161,7 @@ func TestProcessAllPendingLessons_RepositoryError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1246,7 +1178,7 @@ func TestProcessLesson_CreateAssetError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1268,7 +1200,7 @@ func TestProcessLesson_SavePagesError(t *testing.T) {
 	repo.lessons["lesson1"] = l
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockRepoResolver(repo),
+		repo:           repo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageServiceWithError{},
 		logger:         &mockLogger{},
@@ -1286,7 +1218,7 @@ func TestProcessLesson_UpdateStatusError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1302,7 +1234,7 @@ func TestRegeneratePDF_DeletePagesError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1317,7 +1249,7 @@ func TestRegeneratePDF_UpdateAssetError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1332,7 +1264,7 @@ func TestRegeneratePDF_CreateAssetError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1347,7 +1279,7 @@ func TestValidateLessonHasPDF_RepositoryError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1362,7 +1294,7 @@ func TestGetLessonWithPDFAsset_RepositoryError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1378,7 +1310,7 @@ func TestCreateOrUpdatePDFAsset_RepositoryError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
@@ -1394,7 +1326,7 @@ func TestSaveSinglePage_RepositoryError(t *testing.T) {
 	errorRepo := &mockLessonRepositoryWithError{}
 
 	useCase := &pdfProcessorUseCase{
-		repoResolver:   newMockErrorRepoResolver(errorRepo),
+		repo:           errorRepo,
 		pdfService:     newMockPdfService(),
 		storageService: &mockStorageService{},
 		logger:         &mockLogger{},
