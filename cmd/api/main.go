@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -64,13 +65,24 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 	vitrine_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/vitrine"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"go.uber.org/fx"
 )
 
 func main() {
 	_ = godotenv.Load()
 
+	// Config is resolved before anything else so a deployment with a missing
+	// variable dies here, naming every offender at once, instead of booting
+	// into a half-working state. Logging is not up yet, hence stderr.
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid configuration: %v\n", err)
+		os.Exit(1)
+	}
+
 	fx.New(
+		fx.Supply(cfg),
 		fx.Provide(
 			logger.NewLogger,
 			database.NewMultiDB,
@@ -170,6 +182,7 @@ func main() {
 
 func startApplication(
 	log ports.Logger,
+	cfg *config.Config,
 	dbMap database.DBMap,
 	db *sql.DB,
 	cache ports.Cache,
@@ -180,6 +193,14 @@ func startApplication(
 	memberImport *member_import.Feature,
 	notifWorker *notificationsworker.Feature,
 ) {
+	// One line per feature this deployment is running without. Missing
+	// optional variables are legitimate, but they must be visible: a silent
+	// warning is how a customer ends up with transcription switched off for
+	// a week before anyone notices.
+	for _, warning := range cfg.Warnings() {
+		log.Warn(warning)
+	}
+
 	router.SetupRoutes()
 
 	// Analytics rollup jobs. Scheduler uses WithSeconds() (6 fields).
@@ -215,19 +236,14 @@ func startApplication(
 	defer stopTxWorker()
 	transcriptionFeat.Start(txCtx)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8181"
-	}
-
 	server := &http.Server{
-		Addr:    ":" + port,
+		Addr:    ":" + cfg.App.Port,
 		Handler: router,
 	}
 
 	go func() {
 		log.Info("Application started successfully")
-		log.Info("Server running on :" + port)
+		log.Info("Server running on :" + cfg.App.Port)
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("Failed to start server: " + err.Error())
