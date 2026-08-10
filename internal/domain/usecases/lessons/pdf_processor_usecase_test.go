@@ -10,7 +10,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	lesson2 "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 	"github.com/stretchr/testify/assert"
 )

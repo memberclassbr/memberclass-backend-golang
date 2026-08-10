@@ -3,9 +3,9 @@ package vitrine
 import (
 	"context"
 
-	"github.com/memberclass-backend-golang/internal/domain/constants"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/vitrine"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	vitrineports "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
 )
 

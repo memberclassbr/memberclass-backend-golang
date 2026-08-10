@@ -9,7 +9,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/comment"
 	comment2 "github.com/memberclass-backend-golang/internal/domain/entities/comment"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

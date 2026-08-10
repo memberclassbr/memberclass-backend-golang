@@ -11,7 +11,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	lessondto "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	lessonsentities "github.com/memberclass-backend-golang/internal/domain/entities/lessons"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/pagination"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

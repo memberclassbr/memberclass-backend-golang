@@ -17,7 +17,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/ports/user"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 )
 

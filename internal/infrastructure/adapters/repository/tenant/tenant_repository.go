@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
 )

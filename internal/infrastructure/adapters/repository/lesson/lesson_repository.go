@@ -11,7 +11,7 @@ import (
 	dtoLessonResponse "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	lessonsentities "github.com/memberclass-backend-golang/internal/domain/entities/lessons"
 	tenantentities "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	lessonports "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 )

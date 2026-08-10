@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 type DigitalOceanSpaces struct {
@@ -23,10 +23,10 @@ type DigitalOceanSpaces struct {
 	region    string
 	endpoint  string
 	publicURL string
-	logger    ports.Logger
+	logger    logger.Logger
 }
 
-func NewDigitalOceanSpaces(logger ports.Logger) (ports.Storage, error) {
+func NewDigitalOceanSpaces(logger logger.Logger) (Storage, error) {
 	accessKey := os.Getenv("DO_SPACES_ID")
 	secretKey := os.Getenv("DO_SPACES_SECRET")
 	// bucket is optional: callers that use UploadToBucket / URL-based

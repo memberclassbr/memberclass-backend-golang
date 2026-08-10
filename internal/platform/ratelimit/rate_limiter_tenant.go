@@ -1,21 +1,22 @@
-package rate_limiter
+package ratelimit
 
 import (
 	"context"
 	"strconv"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/constants"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
+	"github.com/memberclass-backend-golang/internal/platform/cache"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 )
 
 type RateLimiterTenantImpl struct {
-	cache ports.Cache
-	log   ports.Logger
+	cache cache.Cache
+	log   logger.Logger
 }
 
-func NewRateLimiterTenant(cache ports.Cache, log ports.Logger) rate_limit.RateLimiterTenant {
+func NewRateLimiterTenant(cache cache.Cache, log logger.Logger) rate_limit.RateLimiterTenant {
 	return &RateLimiterTenantImpl{
 		cache: cache,
 		log:   log,

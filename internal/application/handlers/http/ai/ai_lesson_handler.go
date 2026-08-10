@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/ai"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/ports/ai"
 )

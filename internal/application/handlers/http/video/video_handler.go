@@ -7,7 +7,7 @@ import (
 
 	http2 "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/bunny"
 	"github.com/memberclass-backend-golang/internal/domain/ports/tenant"

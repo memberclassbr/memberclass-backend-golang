@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	lessonports "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
+	"github.com/memberclass-backend-golang/internal/platform/database"
 )
 
 type lessonRepoResolver struct {

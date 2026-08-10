@@ -5,10 +5,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/memberclass-backend-golang/internal/domain/constants"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	comment2 "github.com/memberclass-backend-golang/internal/domain/usecases/comment"

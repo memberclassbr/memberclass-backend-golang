@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/constants"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 	"github.com/memberclass-backend-golang/internal/mocks"

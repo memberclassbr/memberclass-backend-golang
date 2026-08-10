@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/user"
 	"golang.org/x/crypto/hkdf"

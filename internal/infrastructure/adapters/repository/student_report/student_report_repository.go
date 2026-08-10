@@ -9,7 +9,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/student"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	student2 "github.com/memberclass-backend-golang/internal/domain/ports/student"
 )

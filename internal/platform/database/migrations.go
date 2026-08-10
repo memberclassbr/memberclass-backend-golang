@@ -7,15 +7,15 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 type MigrationService struct {
 	db     *sql.DB
-	logger ports.Logger
+	logger logger.Logger
 }
 
-func NewMigrationService(db *sql.DB, logger ports.Logger) *MigrationService {
+func NewMigrationService(db *sql.DB, logger logger.Logger) *MigrationService {
 	return &MigrationService{
 		db:     db,
 		logger: logger,

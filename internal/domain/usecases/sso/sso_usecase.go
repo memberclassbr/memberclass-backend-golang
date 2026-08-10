@@ -10,7 +10,7 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/sso"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	ssoports "github.com/memberclass-backend-golang/internal/domain/ports/sso"
 	userports "github.com/memberclass-backend-golang/internal/domain/ports/user"

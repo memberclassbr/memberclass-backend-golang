@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/vitrine"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	vitrineports "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
 )

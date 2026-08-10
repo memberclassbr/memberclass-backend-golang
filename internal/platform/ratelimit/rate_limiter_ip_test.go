@@ -1,4 +1,4 @@
-package rate_limiter
+package ratelimit
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 	"github.com/memberclass-backend-golang/internal/mocks"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

@@ -1,4 +1,4 @@
-package rate_limiter
+package ratelimit
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/mocks"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -113,70 +113,70 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 
 func TestRateLimiterUpload_IncrementUploadSize(t *testing.T) {
 	tests := []struct {
-		name          string
-		key           string
-		fileSize      int64
-		exists        bool
-		existsError   error
-		increment     int64
+		name           string
+		key            string
+		fileSize       int64
+		exists         bool
+		existsError    error
+		increment      int64
 		incrementError error
-		setError      error
-		expectedError bool
+		setError       error
+		expectedError  bool
 	}{
 		{
-			name:          "should increment upload size successfully when key exists",
-			key:           "user123",
-			fileSize:      1024 * 1024,
-			exists:        true,
-			existsError:   nil,
-			increment:     1024 * 1024,
+			name:           "should increment upload size successfully when key exists",
+			key:            "user123",
+			fileSize:       1024 * 1024,
+			exists:         true,
+			existsError:    nil,
+			increment:      1024 * 1024,
 			incrementError: nil,
-			setError:      nil,
-			expectedError: false,
+			setError:       nil,
+			expectedError:  false,
 		},
 		{
-			name:          "should increment upload size and set expiration when key does not exist",
-			key:           "user123",
-			fileSize:      1024 * 1024,
-			exists:        false,
-			existsError:   nil,
-			increment:     1024 * 1024,
+			name:           "should increment upload size and set expiration when key does not exist",
+			key:            "user123",
+			fileSize:       1024 * 1024,
+			exists:         false,
+			existsError:    nil,
+			increment:      1024 * 1024,
 			incrementError: nil,
-			setError:      nil,
-			expectedError: false,
+			setError:       nil,
+			expectedError:  false,
 		},
 		{
-			name:          "should return error when exists check fails",
-			key:           "user123",
-			fileSize:      1024 * 1024,
-			exists:        false,
-			existsError:   errors.New("redis error"),
-			increment:     0,
+			name:           "should return error when exists check fails",
+			key:            "user123",
+			fileSize:       1024 * 1024,
+			exists:         false,
+			existsError:    errors.New("redis error"),
+			increment:      0,
 			incrementError: nil,
-			setError:      nil,
-			expectedError: true,
+			setError:       nil,
+			expectedError:  true,
 		},
 		{
-			name:          "should return error when increment fails",
-			key:           "user123",
-			fileSize:      1024 * 1024,
-			exists:        true,
-			existsError:   nil,
-			increment:     0,
+			name:           "should return error when increment fails",
+			key:            "user123",
+			fileSize:       1024 * 1024,
+			exists:         true,
+			existsError:    nil,
+			increment:      0,
 			incrementError: errors.New("redis error"),
-			setError:      nil,
-			expectedError: true,
+			setError:       nil,
+			expectedError:  true,
 		},
 		{
-			name:          "should return error when set expiration fails",
-			key:           "user123",
-			fileSize:      1024 * 1024,
-			exists:        false,
-			existsError:   nil,
-			increment:     1024 * 1024,
+			name:           "should return error when set expiration fails",
+			key:            "user123",
+			fileSize:       1024 * 1024,
+			exists:         false,
+			existsError:    nil,
+			increment:      1024 * 1024,
 			incrementError: nil,
-			setError:      errors.New("redis error"),
-			expectedError: true,
+			setError:       errors.New("redis error"),
+			expectedError:  true,
 		},
 	}
 

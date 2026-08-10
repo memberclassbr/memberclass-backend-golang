@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	lessondto "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/pagination"

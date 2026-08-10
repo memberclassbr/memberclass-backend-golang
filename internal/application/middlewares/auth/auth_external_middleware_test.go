@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/memberclass-backend-golang/internal/domain/constants"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
 	tenantentities "github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

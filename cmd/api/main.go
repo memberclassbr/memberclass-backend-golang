@@ -44,18 +44,14 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
-	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
+	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
@@ -64,8 +60,12 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 	vitrine_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/vitrine"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
+	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/platform/database"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
+	"github.com/memberclass-backend-golang/internal/platform/storage"
 	"go.uber.org/fx"
 )
 
@@ -102,9 +102,9 @@ func main() {
 			sso_repository.NewSSORepository,
 			vitrine_repository.NewVitrineRepository,
 
-			rate_limiter.NewRateLimiterUpload,
-			rate_limiter.NewRateLimiterTenant,
-			rate_limiter.NewRateLimiterIP,
+			ratelimit.NewRateLimiterUpload,
+			ratelimit.NewRateLimiterTenant,
+			ratelimit.NewRateLimiterIP,
 			ilovepdf.NewIlovePdfService,
 			bunny.NewBunnyService,
 			resend.New,

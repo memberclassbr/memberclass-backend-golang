@@ -6,16 +6,16 @@ import (
 	"os"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/redis/go-redis/v9"
 )
 
 type RedisCache struct {
 	client *redis.Client
-	log    ports.Logger
+	log    logger.Logger
 }
 
-func NewRedisCache(log ports.Logger) ports.Cache {
+func NewRedisCache(log logger.Logger) Cache {
 	redisURL := os.Getenv("UPSTASH_REDIS_URL")
 
 	// Parse the Redis URL if it's in the format redis://user:password@host:port

@@ -10,7 +10,7 @@ import (
 	purchasesdto "github.com/memberclass-backend-golang/internal/domain/dto/response/purchases"
 	userdto "github.com/memberclass-backend-golang/internal/domain/dto/response/user"
 	userentities "github.com/memberclass-backend-golang/internal/domain/entities/user"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	userports "github.com/memberclass-backend-golang/internal/domain/ports/user"
 )

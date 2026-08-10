@@ -6,7 +6,7 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/comments"
 	"github.com/memberclass-backend-golang/internal/domain/dto/response/comment"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	comment2 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
 	"github.com/memberclass-backend-golang/internal/domain/ports/user"

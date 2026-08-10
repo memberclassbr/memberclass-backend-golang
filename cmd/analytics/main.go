@@ -11,8 +11,8 @@ import (
 	"github.com/joho/godotenv"
 
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
+	"github.com/memberclass-backend-golang/internal/platform/database"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 func nowMinus24() time.Time { return time.Now().UTC().Add(-24 * time.Hour) }

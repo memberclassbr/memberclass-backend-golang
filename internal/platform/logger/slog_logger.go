@@ -3,8 +3,6 @@ package logger
 import (
 	"log/slog"
 	"os"
-
-	"github.com/memberclass-backend-golang/internal/domain/ports"
 )
 
 var (
@@ -43,7 +41,7 @@ func parseLevel(level string) slog.Level {
 	return lvl
 }
 
-func NewLogger() ports.Logger {
+func NewLogger() Logger {
 	level := parseLevel(os.Getenv("LOG_LEVEL"))
 	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: level,

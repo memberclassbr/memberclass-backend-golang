@@ -8,7 +8,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/ai"
 	ai2 "github.com/memberclass-backend-golang/internal/domain/dto/response/ai"
 	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	lesson3 "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/stretchr/testify/assert"

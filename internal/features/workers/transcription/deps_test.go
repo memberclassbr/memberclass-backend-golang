@@ -3,7 +3,7 @@ package transcription
 import (
 	"testing"
 
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // TestNew_DoesNotPanicWithMissingDeps guards New against panicking when

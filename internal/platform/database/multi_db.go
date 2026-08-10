@@ -8,7 +8,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // pingTimeout bounds the initial connection probe per bucket so a
@@ -43,7 +43,7 @@ const defaultBucket = "memberclass"
 
 // NewMultiDB creates database connections for all configured buckets.
 // It skips buckets whose DSN env var is not set.
-func NewMultiDB(logger ports.Logger) (DBMap, error) {
+func NewMultiDB(logger logger.Logger) (DBMap, error) {
 	driver := os.Getenv("DB_DRIVER")
 	if driver == "" {
 		driver = "postgres"
