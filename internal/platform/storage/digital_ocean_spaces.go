@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
@@ -26,26 +26,22 @@ type DigitalOceanSpaces struct {
 	logger    logger.Logger
 }
 
-func NewDigitalOceanSpaces(logger logger.Logger) (Storage, error) {
-	accessKey := os.Getenv("DO_SPACES_ID")
-	secretKey := os.Getenv("DO_SPACES_SECRET")
-	// bucket is optional: callers that use UploadToBucket / URL-based
-	// methods resolve the bucket per-request. The default bucket is only
-	// used by Upload() / GetPublicURL() when set.
-	bucket := os.Getenv("DO_SPACES_BUCKET")
-	spacesURL := os.Getenv("DO_SPACES_URL")
-
-	if accessKey == "" || secretKey == "" || spacesURL == "" {
-		return nil, fmt.Errorf("missing required environment variables: DO_SPACES_ID, DO_SPACES_SECRET, DO_SPACES_URL")
-	}
+func NewDigitalOceanSpaces(appCfg *config.Config, logger logger.Logger) (Storage, error) {
+	accessKey := appCfg.Storage.AccessKey
+	secretKey := appCfg.Storage.SecretKey
+	// Every write goes to this one bucket. Reads still resolve the bucket
+	// from the object URL, so media uploaded before this deployment owned
+	// its own bucket stays readable.
+	bucket := appCfg.Storage.Bucket
+	spacesURL := appCfg.Storage.URL
 
 	region := extractRegionFromURL(spacesURL)
 	endpoint := spacesURL
 	publicURL := fmt.Sprintf("https://%s.%s.digitaloceanspaces.com", bucket, region)
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+	cfg, err := awsconfig.LoadDefaultConfig(context.TODO(),
+		awsconfig.WithRegion(region),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
+		awsconfig.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
 			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 				return aws.Endpoint{
 					URL:           endpoint,
@@ -86,24 +82,6 @@ func (d *DigitalOceanSpaces) Upload(ctx context.Context, data []byte, filename s
 	}
 
 	publicURL := fmt.Sprintf("%s/%s", d.publicURL, filename)
-	return publicURL, nil
-}
-
-func (d *DigitalOceanSpaces) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
-	input := &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(filename),
-		Body:        bytes.NewReader(data),
-		ContentType: aws.String(contentType),
-		ACL:         types.ObjectCannedACLPublicRead,
-	}
-	_, err := d.client.PutObject(ctx, input)
-	if err != nil {
-		d.logger.Error("Failed to upload file to DigitalOcean Spaces", "filename", filename, "bucket", bucket, "error", err)
-		return "", fmt.Errorf("failed to upload file: %w", err)
-	}
-
-	publicURL := fmt.Sprintf("https://%s.%s.digitaloceanspaces.com/%s", bucket, d.region, filename)
 	return publicURL, nil
 }
 

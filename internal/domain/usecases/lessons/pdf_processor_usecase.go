@@ -5,17 +5,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
-	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 )
 
 type pdfProcessorUseCase struct {
@@ -111,10 +110,6 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 		}
 	}
 
-	// Extract bucket from lesson media URL for dynamic storage routing
-	storageBucket := extractBucketFromMediaURL(*lessonData.MediaURL)
-	u.logger.Info(fmt.Sprintf("Resolved storage bucket '%s' from media URL for lesson %s", storageBucket, lessonID))
-
 	// 5. Process PDF to images using the complete flow
 	images, err := u.ConvertPdfToImages(*lessonData.MediaURL)
 	if err != nil {
@@ -128,7 +123,7 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 	}
 
 	// 6. Save pages directly
-	processedPages, err := u.savePagesDirectlyWithRepo(ctx, repo, asset.ID, lessonID, images, storageBucket)
+	processedPages, err := u.savePagesDirectlyWithRepo(ctx, repo, asset.ID, lessonID, images)
 	totalImages := len(images)
 	if err != nil {
 		errorMsg := err.Error()
@@ -710,7 +705,7 @@ func (u *pdfProcessorUseCase) createOrUpdatePDFAsset(ctx context.Context, repo l
 }
 
 // saveSinglePage - Save a single page using specific repo (thread-safe)
-func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.LessonRepository, assetID string, pageNumber int, imageBase64 string, bucket string) (bool, error) {
+func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.LessonRepository, assetID string, pageNumber int, imageBase64 string) (bool, error) {
 	existingPage, err := repo.GetPDFPageByAssetAndNumber(ctx, assetID, pageNumber)
 	if err != nil && !errors.Is(err, memberclasserrors.ErrPDFPageNotFound) {
 		return false, err
@@ -736,14 +731,8 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.Le
 	// 3. Generate unique filename
 	filename := fmt.Sprintf("lessons/%s/page-%d.jpg", assetID, pageNumber)
 
-	// 4. Upload to DigitalOcean Spaces (dynamic bucket)
-	var imageURL string
-	var uploadErr error
-	if bucket != "" {
-		imageURL, uploadErr = u.storageService.UploadToBucket(ctx, bucket, imageData, filename, "image/jpeg")
-	} else {
-		imageURL, uploadErr = u.storageService.Upload(ctx, imageData, filename, "image/jpeg")
-	}
+	// 4. Upload to this deployment's Spaces bucket
+	imageURL, uploadErr := u.storageService.Upload(ctx, imageData, filename, "image/jpeg")
 	if uploadErr != nil {
 		u.logger.Error(fmt.Sprintf("Failed to upload page %d to storage for asset %s: %v", pageNumber, assetID, uploadErr))
 		return false, fmt.Errorf("failed to upload image to storage: %w", uploadErr)
@@ -766,17 +755,17 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.Le
 	return true, nil
 }
 
-// SavePagesDirectly - Save pages directly (public interface, searches all databases)
-func (u *pdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string, bucket string) (int, error) {
+// SavePagesDirectly - Save pages directly (public interface)
+func (u *pdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error) {
 	if err := u.requireLesson(ctx, lessonID); err != nil {
 		return 0, err
 	}
 	repo := u.repo
-	return u.savePagesDirectlyWithRepo(ctx, repo, assetID, lessonID, images, bucket)
+	return u.savePagesDirectlyWithRepo(ctx, repo, assetID, lessonID, images)
 }
 
 // savePagesDirectlyWithRepo - Internal: save pages using specific repo
-func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, repo lesson.LessonRepository, assetID, lessonID string, images []string, bucket string) (int, error) {
+func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, repo lesson.LessonRepository, assetID, lessonID string, images []string) (int, error) {
 	if len(images) == 0 {
 		return 0, nil
 	}
@@ -818,7 +807,7 @@ func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, rep
 				case <-ctx.Done():
 					return
 				default:
-					success, err := u.saveSinglePage(ctx, repo, assetID, job.pageNumber, job.imageBase64, bucket)
+					success, err := u.saveSinglePage(ctx, repo, assetID, job.pageNumber, job.imageBase64)
 					select {
 					case resultChan <- pageResult{
 						index:      job.index,
@@ -867,7 +856,7 @@ func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, rep
 		mu.Unlock()
 	}
 
-	u.logger.Info(fmt.Sprintf("Pages saved for asset %s: %d/%d (bucket: %s)", assetID, processedPages, len(images), bucket))
+	u.logger.Info(fmt.Sprintf("Pages saved for asset %s: %d/%d", assetID, processedPages, len(images)))
 
 	return processedPages, nil
 }
@@ -936,35 +925,4 @@ func (u *pdfProcessorUseCase) GetPDFPagesByAssetID(ctx context.Context, assetID 
 		return []*lessons.LessonPDFPage{}, nil
 	}
 	return pages, nil
-}
-
-// hostToBucket maps CDN hostname prefixes to real DigitalOcean Spaces bucket names.
-var hostToBucket = map[string]string{
-	"storage":      "memberclass",
-	"ephra":        "ephra",
-	"celetusclass": "celetusclass",
-}
-
-func extractBucketFromMediaURL(mediaURL string) string {
-	if !strings.HasPrefix(mediaURL, "http") {
-		return ""
-	}
-
-	parsed, err := url.Parse(mediaURL)
-	if err != nil {
-		return ""
-	}
-
-	host := parsed.Hostname()
-	parts := strings.SplitN(host, ".", 2)
-	if len(parts) < 2 {
-		return ""
-	}
-
-	subdomain := parts[0]
-	if bucket, ok := hostToBucket[subdomain]; ok {
-		return bucket
-	}
-
-	return subdomain
 }

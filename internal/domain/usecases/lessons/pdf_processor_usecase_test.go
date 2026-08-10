@@ -274,10 +274,6 @@ func (m *mockStorageService) Upload(ctx context.Context, data []byte, filename s
 	return "https://storage.example.com/" + filename, nil
 }
 
-func (m *mockStorageService) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
-	return "https://" + bucket + ".nyc3.digitaloceanspaces.com/" + filename, nil
-}
-
 func (m *mockStorageService) Download(ctx context.Context, urlOrKey string) ([]byte, error) {
 	return []byte("mock-data"), nil
 }
@@ -295,10 +291,6 @@ func (m *mockStorageService) Exists(ctx context.Context, urlOrKey string) (bool,
 type mockStorageServiceWithError struct{}
 
 func (m *mockStorageServiceWithError) Upload(ctx context.Context, data []byte, filename string, contentType string) (string, error) {
-	return "", assert.AnError
-}
-
-func (m *mockStorageServiceWithError) UploadToBucket(ctx context.Context, bucket string, data []byte, filename string, contentType string) (string, error) {
 	return "", assert.AnError
 }
 
@@ -569,7 +561,7 @@ func TestSaveSinglePage_NewPage(t *testing.T) {
 	pageNumber := 1
 	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
-	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64)
 
 	assert.NoError(t, err)
 	assert.True(t, created)
@@ -598,7 +590,7 @@ func TestSaveSinglePage_ExistingPage(t *testing.T) {
 	pageNumber := 1
 	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
-	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64)
 
 	assert.NoError(t, err)
 	assert.True(t, created)
@@ -620,7 +612,7 @@ func TestSaveSinglePage_InvalidBase64(t *testing.T) {
 	pageNumber := 1
 	imageBase64 := "invalid-base64"
 
-	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64)
 
 	assert.Error(t, err)
 	assert.False(t, created)
@@ -1088,7 +1080,7 @@ func TestSaveSinglePage_StorageServiceError(t *testing.T) {
 	pageNumber := 1
 	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
-	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64, "")
+	created, err := useCase.saveSinglePage(ctx, repo, assetID, pageNumber, imageBase64)
 
 	assert.Error(t, err)
 	assert.False(t, created)
@@ -1337,7 +1329,7 @@ func TestSaveSinglePage_RepositoryError(t *testing.T) {
 	pageNumber := 1
 	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
-	created, err := useCase.saveSinglePage(ctx, errorRepo, assetID, pageNumber, imageBase64, "")
+	created, err := useCase.saveSinglePage(ctx, errorRepo, assetID, pageNumber, imageBase64)
 
 	assert.Error(t, err)
 	assert.False(t, created)

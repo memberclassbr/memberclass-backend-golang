@@ -11,8 +11,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	lessondto "github.com/memberclass-backend-golang/internal/domain/dto/response/lesson"
 	lessonsentities "github.com/memberclass-backend-golang/internal/domain/entities/lessons"
-	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -65,8 +65,8 @@ func (m *MockPdfProcessorUseCase) CreateOrUpdatePDFAsset(ctx context.Context, le
 	return args.Get(0).(*lessonsentities.LessonPDFAsset), args.Error(1)
 }
 
-func (m *MockPdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string, bucket string) (int, error) {
-	args := m.Called(ctx, assetID, lessonID, images, bucket)
+func (m *MockPdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error) {
+	args := m.Called(ctx, assetID, lessonID, images)
 	return args.Int(0), args.Error(1)
 }
 

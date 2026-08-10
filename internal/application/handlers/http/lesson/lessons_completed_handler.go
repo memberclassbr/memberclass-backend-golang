@@ -5,13 +5,13 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/lesson"
-	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	lesson2 "github.com/memberclass-backend-golang/internal/domain/ports/lesson"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 )
 
 type LessonsCompletedHandler struct {
