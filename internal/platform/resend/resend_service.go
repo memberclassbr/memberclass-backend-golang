@@ -14,10 +14,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 const (
@@ -52,21 +52,17 @@ type client struct {
 	http    *http.Client
 	apiKey  string
 	baseURL string
-	log     ports.Logger
+	log     logger.Logger
 }
 
-// New builds a Service. Requires RESEND_API_KEY; otherwise the client fails
-// fast on the first send (it does NOT fail at construction — the app should
-// still boot so non-email slices keep working during a misconfiguration).
-func New(log ports.Logger) Service {
-	baseURL := os.Getenv("RESEND_BASE_URL")
-	if baseURL == "" {
-		baseURL = defaultBaseURL
-	}
+// New builds a Service from the validated config. A deployment without an API
+// key still boots — email is optional and config reports it as disabled — and
+// the client fails on the first send instead.
+func New(cfg *config.Config, log logger.Logger) Service {
 	return &client{
 		http:    &http.Client{Timeout: defaultTimeout},
-		apiKey:  os.Getenv("RESEND_API_KEY"),
-		baseURL: baseURL,
+		apiKey:  cfg.Resend.APIKey,
+		baseURL: cfg.Resend.BaseURL,
 		log:     log,
 	}
 }

@@ -3,9 +3,11 @@ package cache
 import (
 	"context"
 	"crypto/tls"
-	"os"
+	"fmt"
+	"strings"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/redis/go-redis/v9"
 )
@@ -15,38 +17,32 @@ type RedisCache struct {
 	log    logger.Logger
 }
 
-func NewRedisCache(log logger.Logger) Cache {
-	redisURL := os.Getenv("UPSTASH_REDIS_URL")
+// NewRedisCache connects to Redis. It returns an error rather than panicking:
+// an unreachable cache is a startup failure the composition root reports, not
+// a stack trace on stderr.
+func NewRedisCache(cfg *config.Config, log logger.Logger) (Cache, error) {
+	redisURL := cfg.Redis.URL
 
-	// Parse the Redis URL if it's in the format redis://user:password@host:port
-	// or rediss:// for TLS connections
 	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
-		log.Error("Failed to parse Redis URL: " + err.Error())
-		panic(err)
+		return nil, fmt.Errorf("parse Redis URL: %w", err)
 	}
 
-	// If TLS is not configured but we need it, add it
-	if opts.TLSConfig == nil && len(redisURL) > 8 && redisURL[:8] == "rediss://" {
-		opts.TLSConfig = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		}
+	// rediss:// means TLS; ParseURL only sets it for some URL shapes, so it is
+	// forced here when the scheme asks for it.
+	if opts.TLSConfig == nil && strings.HasPrefix(redisURL, "rediss://") {
+		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
 
 	client := redis.NewClient(opts)
 
-	_, err = client.Ping(context.Background()).Result()
-	if err != nil {
-		log.Error("Failed to connect to Redis: " + err.Error())
-		panic(err)
+	if _, err := client.Ping(context.Background()).Result(); err != nil {
+		return nil, fmt.Errorf("connect to Redis: %w", err)
 	}
 
 	log.Info("Redis connection established successfully")
 
-	return &RedisCache{
-		client: client,
-		log:    log,
-	}
+	return &RedisCache{client: client, log: log}, nil
 }
 
 func (u *RedisCache) Get(ctx context.Context, key string) (string, error) {

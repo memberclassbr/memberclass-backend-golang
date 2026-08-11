@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-redis/redismock/v9"
 	"github.com/memberclass-backend-golang/internal/mocks"
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -339,18 +340,14 @@ func TestRedisCache_Close(t *testing.T) {
 	}
 }
 
-func TestNewRedisCache(t *testing.T) {
-	t.Run("should create new redis cache instance", func(t *testing.T) {
-		mockLogger := mocks.NewMockLogger(t)
+// An unusable Redis URL is a startup error the composition root reports, not a
+// panic on stderr.
+func TestNewRedisCache_InvalidURLReturnsError(t *testing.T) {
+	cfg := &config.Config{Redis: config.Redis{URL: "not-a-url"}}
 
-		mockLogger.EXPECT().Error(mock.Anything).Return()
+	client, err := NewRedisCache(cfg, mocks.NewMockLogger(t))
 
-		defer func() {
-			if r := recover(); r != nil {
-				assert.Contains(t, r.(error).Error(), "redis: invalid URL scheme: ")
-			}
-		}()
-
-		NewRedisCache(mockLogger)
-	})
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "parse Redis URL")
 }

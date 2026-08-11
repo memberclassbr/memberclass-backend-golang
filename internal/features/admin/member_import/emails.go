@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
+	"github.com/memberclass-backend-golang/internal/platform/resend"
 )
 
 // Template types in the TenantEmailTemplate table — match the Next.js constants.

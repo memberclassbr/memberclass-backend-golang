@@ -55,7 +55,7 @@ func (p *PaginationUtils) BuildSQLPagination(baseQuery string, req *dto.Paginati
 func (p *PaginationUtils) BuildSafeSQLPagination(baseQuery string, req *dto.PaginationRequest, allowedSortFields []string) string {
 	sortBy := req.GetSafeSortBy(allowedSortFields)
 	sortDir := strings.ToUpper(req.GetSortDir())
-	
+
 	if sortDir != "ASC" && sortDir != "DESC" {
 		sortDir = "DESC"
 	}

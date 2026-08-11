@@ -26,7 +26,7 @@ import (
 	"sync"
 
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
+	"github.com/memberclass-backend-golang/internal/platform/resend"
 )
 
 // Feature holds the shared dependencies for every action in this slice.
