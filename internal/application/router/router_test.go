@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
+	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
@@ -39,7 +39,7 @@ func createTestRouter(t *testing.T) *Router {
 	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "test-secret"}}
 
 	mockVideo := videofeat.New(nil, nil, log)
-	mockLessonHandler := &lesson.LessonHandler{}
+	mockLessonPDF := lessonpdf.New(nil, nil, nil, cfg, log)
 	mockComment := commentfeat.New(nil, nil)
 	mockUserActivities := user_activities.New(nil, nil, nil)
 	mockUser := userfeat.New(nil, nil, nil)
@@ -59,7 +59,7 @@ func createTestRouter(t *testing.T) *Router {
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
 	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
 
-	return NewRouter(mockVideo, mockLessonHandler, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return NewRouter(mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
@@ -68,7 +68,7 @@ func TestNewRouter(t *testing.T) {
 	assert.NotNil(t, router)
 	assert.NotNil(t, router.Router)
 	assert.NotNil(t, router.video)
-	assert.NotNil(t, router.lessonHandler)
+	assert.NotNil(t, router.lessonPDF)
 	assert.NotNil(t, router.rateLimitMiddleware)
 	assert.NotNil(t, router.authMiddleware)
 }

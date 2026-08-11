@@ -7,9 +7,9 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
+	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
@@ -28,7 +28,7 @@ import (
 type Router struct {
 	chi.Router
 	video                     *videofeat.Feature
-	lessonHandler             *lesson.LessonHandler
+	lessonPDF                 *lessonpdf.Feature
 	comment                   *commentfeat.Feature
 	userActivities            *user_activities.Feature
 	user                      *userfeat.Feature
@@ -52,7 +52,7 @@ type Router struct {
 
 func NewRouter(
 	videoFeat *videofeat.Feature,
-	lessonHandler *lesson.LessonHandler,
+	lessonPDFFeat *lessonpdf.Feature,
 	commentFeat *commentfeat.Feature,
 	userActivities *user_activities.Feature,
 	userFeat *userfeat.Feature,
@@ -97,7 +97,7 @@ func NewRouter(
 	return &Router{
 		Router:                    router,
 		video:                     videoFeat,
-		lessonHandler:             lessonHandler,
+		lessonPDF:                 lessonPDFFeat,
 		comment:                   commentFeat,
 		userActivities:            userActivities,
 		user:                      userFeat,
@@ -222,12 +222,7 @@ func (r *Router) SetupRoutes() {
 
 	r.Route("/api", func(router chi.Router) {
 		router.Route("/lessons", func(router chi.Router) {
-			router.Post("/pdf-process", r.lessonHandler.ProcessLesson)
-			router.Post("/process-all-pdfs", r.lessonHandler.ProcessAllPendingLessons)
-			router.Route("/{lessonId}", func(router chi.Router) {
-				router.Post("/pdf-regenerate", r.lessonHandler.RegeneratePDF)
-				router.Get("/pdf-pages", r.lessonHandler.GetLessonsPage)
-			})
+			r.lessonPDF.Register(router, lessonpdf.MiddlewareSet{})
 		})
 
 		router.Route("/comments", func(router chi.Router) {

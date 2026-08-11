@@ -11,71 +11,41 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor"
+	"github.com/memberclass-backend-golang/internal/platform/cache"
+	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 type IlovePdfService struct {
-	apiKeys []dto.ApiKeyInfo
+	apiKeys []ApiKeyInfo
 	baseURL string
-	log     ports.Logger
-	cache   ports.Cache
+	log     logger.Logger
+	cache   cache.Cache
 	mutex   sync.RWMutex
 }
 
-func NewIlovePdfService(log ports.Logger, cache ports.Cache) (pdf_processor.PdfProcessService, error) {
-	service := &IlovePdfService{
-		log:   log,
-		cache: cache,
+// NewIlovePdfService builds the client from the validated config. The API keys
+// are rotated between calls, so several are expected.
+func NewIlovePdfService(cfg *config.Config, log logger.Logger, c cache.Cache) (Service, error) {
+	if !cfg.IlovePDF.Enabled {
+		return nil, errors.New("iLovePDF is not configured: ILOVEPDF_API_KEYS is empty")
 	}
 
-	if err := service.loadApiKeys(); err != nil {
-		return nil, fmt.Errorf("failed to load API keys: %w", err)
+	keys := make([]ApiKeyInfo, 0, len(cfg.IlovePDF.APIKeys))
+	for _, key := range cfg.IlovePDF.APIKeys {
+		keys = append(keys, ApiKeyInfo{Key: key})
 	}
 
-	baseURL := os.Getenv("ILOVEPDF_BASE_URL")
-	if baseURL == "" {
-		baseURL = "https://api.ilovepdf.com/v1"
-	}
-	service.baseURL = baseURL
-
-	return service, nil
-}
-
-func (i *IlovePdfService) loadApiKeys() error {
-	keysEnv := os.Getenv("ILOVEPDF_API_KEYS")
-	if keysEnv == "" {
-		return errors.New("ILOVEPDF_API_KEYS environment variable not set")
-	}
-
-	keyStrings := strings.Split(keysEnv, ",")
-	i.apiKeys = make([]dto.ApiKeyInfo, 0, len(keyStrings))
-
-	for _, keyStr := range keyStrings {
-		keyStr = strings.TrimSpace(keyStr)
-		if keyStr == "" {
-			continue
-		}
-
-		keyInfo := dto.ApiKeyInfo{
-			Key:      keyStr,
-			LastUsed: "",
-		}
-
-		i.apiKeys = append(i.apiKeys, keyInfo)
-	}
-
-	if len(i.apiKeys) == 0 {
-		return errors.New("no valid API keys found")
-	}
-
-	return nil
+	return &IlovePdfService{
+		log:     log,
+		cache:   c,
+		apiKeys: keys,
+		baseURL: cfg.IlovePDF.BaseURL,
+	}, nil
 }
 
 func (i *IlovePdfService) getActiveKey() (string, error) {
@@ -199,7 +169,7 @@ func (i *IlovePdfService) tryAuthenticate(apiKey string) (string, error) {
 		return "", fmt.Errorf("authentication failed: %s - %s", resp.Status, string(body))
 	}
 
-	var result dto.AuthResponse
+	var result AuthResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", fmt.Errorf("failed to decode auth response: %w", err)
 	}
@@ -217,7 +187,7 @@ func (i *IlovePdfService) keyPreview(key string) string {
 
 // GetTokenAndCreateTask - Get token and create task with automatic key rotation
 // This handles the case where auth succeeds but task creation fails due to exhausted credits
-func (i *IlovePdfService) GetTokenAndCreateTask() (string, *dto.TaskResponse, error) {
+func (i *IlovePdfService) GetTokenAndCreateTask() (string, *TaskResponse, error) {
 	maxRetries := len(i.apiKeys)
 	var lastErr error
 
@@ -264,7 +234,7 @@ func (i *IlovePdfService) GetTokenAndCreateTask() (string, *dto.TaskResponse, er
 }
 
 // CreateTask - Create new task
-func (i *IlovePdfService) CreateTask(token string) (*dto.TaskResponse, error) {
+func (i *IlovePdfService) CreateTask(token string) (*TaskResponse, error) {
 	taskURL := fmt.Sprintf("%s/start/pdfjpg/us", i.baseURL)
 
 	req, err := http.NewRequest("GET", taskURL, nil)
@@ -286,7 +256,7 @@ func (i *IlovePdfService) CreateTask(token string) (*dto.TaskResponse, error) {
 		return nil, fmt.Errorf("create task failed: %s - %s", resp.Status, string(body))
 	}
 
-	var result dto.TaskResponse
+	var result TaskResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode task response: %w", err)
 	}
@@ -357,7 +327,7 @@ func (i *IlovePdfService) AddFile(token, taskID, pdfURL, server string) (string,
 		return "", fmt.Errorf("failed to add file: %s - %s", resp.Status, string(body))
 	}
 
-	var result dto.UploadResponse
+	var result UploadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
@@ -407,7 +377,7 @@ func (i *IlovePdfService) ProcessTask(token, taskID, serverFilename, server stri
 		return fmt.Errorf("process task failed: %s - %s", resp.Status, string(body))
 	}
 
-	var result dto.ProcessResponse
+	var result ProcessResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("failed to decode process response: %w", err)
 	}

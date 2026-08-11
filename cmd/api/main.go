@@ -12,14 +12,13 @@ import (
 
 	"github.com/joho/godotenv"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
 	"github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
+	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
@@ -34,15 +33,14 @@ import (
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/database"
+	"github.com/memberclass-backend-golang/internal/platform/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
 	"github.com/memberclass-backend-golang/internal/platform/storage"
@@ -73,7 +71,6 @@ func main() {
 
 			tenant.NewTenantRepository,
 			user.NewUserRepository,
-			lesson.NewLessonRepository,
 
 			ratelimit.NewRateLimiterUpload,
 			ratelimit.NewRateLimiterTenant,
@@ -82,13 +79,13 @@ func main() {
 			bunny.NewBunnyService,
 			resend.New,
 
-			lessons.NewPdfProcessorUseCase,
 			activity_summary.New,
 			studentfeat.New,
 			commentfeat.New,
 			aifeat.New,
 			authfeat.New,
 			videofeat.New,
+			lessonpdf.New,
 			ssofeat.New,
 			socialfeat.New,
 			userfeat.New,
@@ -111,7 +108,6 @@ func main() {
 			middleware.NewAuthExternalMiddleware,
 			middleware.NewBearerMiddleware,
 
-			lesson2.NewLessonHandler,
 			internalhttp.NewSwaggerHandler,
 
 			router.NewRouter,

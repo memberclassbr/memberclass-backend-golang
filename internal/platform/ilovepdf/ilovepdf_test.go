@@ -8,106 +8,59 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/mocks"
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
+// enabledConfig is a config with iLovePDF switched on, which is the only state
+// in which the constructor is expected to succeed.
+func enabledConfig(keys []string, baseURL string) *config.Config {
+	return &config.Config{
+		IlovePDF: config.IlovePDF{Enabled: true, APIKeys: keys, BaseURL: baseURL},
+	}
+}
+
 func TestNewIlovePdfService_Success(t *testing.T) {
-	originalKeys := os.Getenv("ILOVEPDF_API_KEYS")
-	originalURL := os.Getenv("ILOVEPDF_BASE_URL")
-	
-	defer func() {
-		if originalKeys != "" {
-			os.Setenv("ILOVEPDF_API_KEYS", originalKeys)
-		} else {
-			os.Unsetenv("ILOVEPDF_API_KEYS")
-		}
-		if originalURL != "" {
-			os.Setenv("ILOVEPDF_BASE_URL", originalURL)
-		} else {
-			os.Unsetenv("ILOVEPDF_BASE_URL")
-		}
-	}()
-
-	os.Setenv("ILOVEPDF_API_KEYS", "test-key-1,test-key-2,test-key-3")
-	os.Setenv("ILOVEPDF_BASE_URL", "https://test.api.com")
-	
-	mockLogger := &mocks.MockLogger{}
-	mockCache := &mocks.MockCache{}
-
-	service, err := NewIlovePdfService(mockLogger, mockCache)
+	service, err := NewIlovePdfService(
+		enabledConfig([]string{"test-key-1", "test-key-2", "test-key-3"}, "https://test.api.com"),
+		&mocks.MockLogger{}, &mocks.MockCache{})
 
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
 	assert.IsType(t, &IlovePdfService{}, service)
 }
 
-func TestNewIlovePdfService_MissingAPIKey(t *testing.T) {
-	originalKeys := os.Getenv("ILOVEPDF_API_KEYS")
-	
-	defer func() {
-		if originalKeys != "" {
-			os.Setenv("ILOVEPDF_API_KEYS", originalKeys)
-		} else {
-			os.Unsetenv("ILOVEPDF_API_KEYS")
-		}
-	}()
-
-	os.Unsetenv("ILOVEPDF_API_KEYS")
-	
-	mockLogger := &mocks.MockLogger{}
-	mockCache := &mocks.MockCache{}
-
-	service, err := NewIlovePdfService(mockLogger, mockCache)
+// With no keys configured the feature is off, and building the client is an
+// error rather than a client that fails on first use.
+func TestNewIlovePdfService_DisabledWithoutKeys(t *testing.T) {
+	service, err := NewIlovePdfService(&config.Config{}, &mocks.MockLogger{}, &mocks.MockCache{})
 
 	assert.Error(t, err)
 	assert.Nil(t, service)
-	assert.Contains(t, err.Error(), "ILOVEPDF_API_KEYS environment variable not set")
+	assert.Contains(t, err.Error(), "ILOVEPDF_API_KEYS")
 }
 
-func TestNewIlovePdfService_DefaultURL(t *testing.T) {
-	originalKeys := os.Getenv("ILOVEPDF_API_KEYS")
-	originalURL := os.Getenv("ILOVEPDF_BASE_URL")
-	
-	defer func() {
-		if originalKeys != "" {
-			os.Setenv("ILOVEPDF_API_KEYS", originalKeys)
-		} else {
-			os.Unsetenv("ILOVEPDF_API_KEYS")
-		}
-		if originalURL != "" {
-			os.Setenv("ILOVEPDF_BASE_URL", originalURL)
-		} else {
-			os.Unsetenv("ILOVEPDF_BASE_URL")
-		}
-	}()
-
-	os.Setenv("ILOVEPDF_API_KEYS", "test-key-1,test-key-2")
-	os.Unsetenv("ILOVEPDF_BASE_URL")
-	
-	mockLogger := &mocks.MockLogger{}
-	mockCache := &mocks.MockCache{}
-
-	service, err := NewIlovePdfService(mockLogger, mockCache)
+// The base URL comes from config, which supplies the public API default when
+// the variable is unset.
+func TestNewIlovePdfService_UsesConfiguredBaseURL(t *testing.T) {
+	service, err := NewIlovePdfService(
+		enabledConfig([]string{"test-key-1"}, "https://api.ilovepdf.com/v1"),
+		&mocks.MockLogger{}, &mocks.MockCache{})
 
 	assert.NoError(t, err)
-	assert.NotNil(t, service)
-	
-	ilovePdfService := service.(*IlovePdfService)
-	assert.Equal(t, "https://api.ilovepdf.com/v1", ilovePdfService.baseURL)
+	assert.Equal(t, "https://api.ilovepdf.com/v1", service.(*IlovePdfService).baseURL)
 }
 
 func TestIlovePdfService_GetToken_Success(t *testing.T) {
 	mockLogger := &mocks.MockLogger{}
 	mockCache := &mocks.MockCache{}
-	
-	expectedResponse := dto.AuthResponse{
+
+	expectedResponse := AuthResponse{
 		Token: "test-token-123",
 	}
 
@@ -129,7 +82,7 @@ func TestIlovePdfService_GetToken_Success(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -159,7 +112,7 @@ func TestIlovePdfService_GetToken_HTTPError(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -190,7 +143,7 @@ func TestIlovePdfService_GetToken_InvalidJSON(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -210,8 +163,8 @@ func TestIlovePdfService_GetToken_InvalidJSON(t *testing.T) {
 
 func TestIlovePdfService_CreateTask_Success(t *testing.T) {
 	mockLogger := &mocks.MockLogger{}
-	
-	expectedResponse := dto.TaskResponse{
+
+	expectedResponse := TaskResponse{
 		Task:   "task-123",
 		Server: "server-123",
 	}
@@ -230,7 +183,7 @@ func TestIlovePdfService_CreateTask_Success(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -262,7 +215,7 @@ func TestIlovePdfService_CreateTask_HTTPError(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -309,7 +262,7 @@ func TestIlovePdfService_ExtractImagesFromZip_Success(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -324,11 +277,11 @@ func TestIlovePdfService_ExtractImagesFromZip_Success(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Len(t, images, 2)
-	
+
 	// Check that images are base64 encoded
 	assert.True(t, strings.HasPrefix(images[0], "data:image/jpeg;base64,"))
 	assert.True(t, strings.HasPrefix(images[1], "data:image/jpeg;base64,"))
-	
+
 	// Decode and verify content
 	base64Data1 := strings.TrimPrefix(images[0], "data:image/jpeg;base64,")
 	decoded1, err := base64.StdEncoding.DecodeString(base64Data1)
@@ -348,7 +301,7 @@ func TestIlovePdfService_ExtractImagesFromZip_InvalidZip(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -383,7 +336,7 @@ func TestIlovePdfService_ExtractImagesFromZip_NoImages(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -409,7 +362,7 @@ func TestIlovePdfService_GetToken_BlacklistedKey(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:test-key").Return(true, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{
 				Key:      "test-key",
 				LastUsed: "",
@@ -447,7 +400,7 @@ func TestIlovePdfService_GetToken_CreditsExhaustedSingleKey(t *testing.T) {
 	mockLogger.EXPECT().Warn(mock.AnythingOfType("string")).Return()
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{Key: "test-key"},
 		},
 		baseURL: server.URL,
@@ -467,7 +420,7 @@ func TestIlovePdfService_IsCreditsExhaustedError(t *testing.T) {
 	mockCache := &mocks.MockCache{}
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{},
+		apiKeys: []ApiKeyInfo{},
 		baseURL: "https://api.ilovepdf.com/v1",
 		log:     mockLogger,
 		cache:   mockCache,
@@ -502,7 +455,7 @@ func TestIlovePdfService_BlacklistKey(t *testing.T) {
 	mockCache := &mocks.MockCache{}
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{},
+		apiKeys: []ApiKeyInfo{},
 		baseURL: "https://api.ilovepdf.com/v1",
 		log:     mockLogger,
 		cache:   mockCache,
@@ -542,7 +495,7 @@ func TestIlovePdfService_GetToken_RetryWithNextKeyOnCreditsExhausted(t *testing.
 
 		// Second key: success
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(dto.AuthResponse{Token: "valid-token-from-key-2"})
+		json.NewEncoder(w).Encode(AuthResponse{Token: "valid-token-from-key-2"})
 	}))
 	defer server.Close()
 
@@ -558,7 +511,7 @@ func TestIlovePdfService_GetToken_RetryWithNextKeyOnCreditsExhausted(t *testing.
 	mockLogger.EXPECT().Warn(mock.AnythingOfType("string")).Return()
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{Key: "exhausted-key"},
 			{Key: "good-key"},
 		},
@@ -600,7 +553,7 @@ func TestIlovePdfService_GetToken_AllKeysExhausted(t *testing.T) {
 	mockLogger.EXPECT().Warn(mock.AnythingOfType("string")).Return()
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{Key: "key-1"},
 			{Key: "key-2"},
 		},
@@ -627,7 +580,7 @@ func TestIlovePdfService_GetToken_SkipsAlreadyBlacklistedKey(t *testing.T) {
 		assert.Equal(t, "good-key", payload["public_key"], "should skip blacklisted key and use good-key directly")
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(dto.AuthResponse{Token: "token-from-good-key"})
+		json.NewEncoder(w).Encode(AuthResponse{Token: "token-from-good-key"})
 	}))
 	defer server.Close()
 
@@ -637,7 +590,7 @@ func TestIlovePdfService_GetToken_SkipsAlreadyBlacklistedKey(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:good-key").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{Key: "blacklisted-key"},
 			{Key: "good-key"},
 		},
@@ -667,7 +620,7 @@ func TestIlovePdfService_GetToken_NonCreditErrorDoesNotRetry(t *testing.T) {
 	mockCache.EXPECT().Exists(mock.Anything, "ilovepdf_blacklist:key-1").Return(false, nil)
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{
+		apiKeys: []ApiKeyInfo{
 			{Key: "key-1"},
 			{Key: "key-2"},
 		},
@@ -689,7 +642,7 @@ func TestIlovePdfService_IsJPEGImage(t *testing.T) {
 	mockCache := &mocks.MockCache{}
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{},
+		apiKeys: []ApiKeyInfo{},
 		baseURL: "https://test.api.com",
 		log:     mockLogger,
 		cache:   mockCache,
@@ -717,7 +670,7 @@ func TestIlovePdfService_IsZIPFile(t *testing.T) {
 	mockCache := &mocks.MockCache{}
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{},
+		apiKeys: []ApiKeyInfo{},
 		baseURL: "https://test.api.com",
 		log:     mockLogger,
 		cache:   mockCache,
@@ -745,7 +698,7 @@ func TestIlovePdfService_HandleSingleJPEG(t *testing.T) {
 	mockCache := &mocks.MockCache{}
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{},
+		apiKeys: []ApiKeyInfo{},
 		baseURL: "https://test.api.com",
 		log:     mockLogger,
 		cache:   mockCache,
@@ -766,7 +719,7 @@ func TestIlovePdfService_ExtractImagesFromZip_SingleJPEG(t *testing.T) {
 	mockCache := &mocks.MockCache{}
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{},
+		apiKeys: []ApiKeyInfo{},
 		baseURL: "https://test.api.com",
 		log:     mockLogger,
 		cache:   mockCache,
@@ -787,7 +740,7 @@ func TestIlovePdfService_ExtractImagesFromZip_TooShortData(t *testing.T) {
 	mockCache := &mocks.MockCache{}
 
 	service := &IlovePdfService{
-		apiKeys: []dto.ApiKeyInfo{},
+		apiKeys: []ApiKeyInfo{},
 		baseURL: "https://test.api.com",
 		log:     mockLogger,
 		cache:   mockCache,
@@ -802,4 +755,3 @@ func TestIlovePdfService_ExtractImagesFromZip_TooShortData(t *testing.T) {
 	assert.Nil(t, images)
 	assert.Contains(t, err.Error(), "data too short to be a valid file")
 }
-

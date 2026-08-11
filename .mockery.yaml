@@ -13,13 +13,6 @@ packages:
       Cache:
       Storage:
       Job:
-  github.com/memberclass-backend-golang/internal/domain/ports/lesson:
-    interfaces:
-      LessonRepository:
-  github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor:
-    interfaces:
-      PdfProcessorUseCase:
-      PdfProcessService:
   github.com/memberclass-backend-golang/internal/domain/ports/tenant:
     interfaces:
       TenantRepository:

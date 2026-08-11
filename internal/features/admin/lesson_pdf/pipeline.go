@@ -1,4 +1,4 @@
-package lessons
+package lesson_pdf
 
 import (
 	"context"
@@ -9,44 +9,18 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/entities/lessons"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/lesson"
-	"github.com/memberclass-backend-golang/internal/domain/ports/pdf_processor"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 )
 
-type pdfProcessorUseCase struct {
-	repo           lesson.LessonRepository
-	pdfService     pdf_processor.PdfProcessService
-	storageService ports.Storage
-	logger         ports.Logger
-}
-
 type ProcessingJob struct {
 	LessonID string
-	Lesson   *lessons.Lesson
+	Lesson   *Lesson
 }
 
 type ProcessingResult struct {
 	LessonID string
-	Result   *dto.ProcessResult
+	Result   *processResult
 	Error    error
-}
-
-func NewPdfProcessorUseCase(
-	repo lesson.LessonRepository,
-	pdfService pdf_processor.PdfProcessService,
-	storageService ports.Storage,
-	logger ports.Logger,
-) pdf_processor.PdfProcessorUseCase {
-	return &pdfProcessorUseCase{
-		repo:           repo,
-		pdfService:     pdfService,
-		storageService: storageService,
-		logger:         logger,
-	}
 }
 
 // requireLesson returns a 404 unless the lesson exists.
@@ -55,8 +29,8 @@ func NewPdfProcessorUseCase(
 // lesson and returned whichever one held it. With one database per deployment
 // there is nothing to search, but callers still rely on being told "not found"
 // before any work starts, so the existence check stays.
-func (u *pdfProcessorUseCase) requireLesson(ctx context.Context, lessonID string) error {
-	lessonData, err := u.repo.GetByID(ctx, lessonID)
+func (f *Feature) requireLesson(ctx context.Context, lessonID string) error {
+	lessonData, err := f.GetByID(ctx, lessonID)
 	if err != nil || lessonData == nil {
 		return &memberclasserrors.MemberClassError{
 			Code:    404,
@@ -67,17 +41,16 @@ func (u *pdfProcessorUseCase) requireLesson(ctx context.Context, lessonID string
 }
 
 // ProcessLesson - Process a single lesson PDF
-func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string) (*dto.ProcessResult, error) {
+func (f *Feature) processLesson(ctx context.Context, lessonID string) (*processResult, error) {
 	// 1. Reject unknown lessons before doing any work
-	if err := u.requireLesson(ctx, lessonID); err != nil {
+	if err := f.requireLesson(ctx, lessonID); err != nil {
 		return nil, err
 	}
-	repo := u.repo
 
-	u.logger.Info(fmt.Sprintf("Processing lesson %s", lessonID))
+	f.log.Info(fmt.Sprintf("Processing lesson %s", lessonID))
 
 	// 2. Get lesson with PDF asset
-	lessonData, err := repo.GetByIDWithPDFAsset(ctx, lessonID)
+	lessonData, err := f.GetByIDWithPDFAsset(ctx, lessonID)
 	if err != nil {
 		if errors.Is(err, memberclasserrors.ErrLessonNotFound) {
 			return nil, &memberclasserrors.MemberClassError{
@@ -85,7 +58,7 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 				Message: "lesson not found",
 			}
 		}
-		u.logger.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
+		f.log.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error getting lesson",
@@ -101,9 +74,9 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 	}
 
 	// 4. Create or update PDF asset
-	asset, err := u.createOrUpdatePDFAsset(ctx, repo, lessonID, *lessonData.MediaURL)
+	asset, err := f.createOrUpdatePDFAsset(ctx, lessonID, *lessonData.MediaURL)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Error creating/updating PDF asset for lesson %s: %v", lessonID, err))
+		f.log.Error(fmt.Sprintf("Error creating/updating PDF asset for lesson %s: %v", lessonID, err))
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error creating PDF asset",
@@ -111,11 +84,11 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 	}
 
 	// 5. Process PDF to images using the complete flow
-	images, err := u.ConvertPdfToImages(*lessonData.MediaURL)
+	images, err := f.convertPdfToImages(*lessonData.MediaURL)
 	if err != nil {
 		errorMsg := err.Error()
-		repo.UpdatePDFAssetStatus(ctx, asset.ID, "failed", nil, &errorMsg)
-		u.logger.Error(fmt.Sprintf("Error converting PDF to images for lesson %s: %v", lessonID, err))
+		f.UpdatePDFAssetStatus(ctx, asset.ID, "failed", nil, &errorMsg)
+		f.log.Error(fmt.Sprintf("Error converting PDF to images for lesson %s: %v", lessonID, err))
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error converting PDF to images",
@@ -123,12 +96,12 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 	}
 
 	// 6. Save pages directly
-	processedPages, err := u.savePagesDirectlyWithRepo(ctx, repo, asset.ID, lessonID, images)
+	processedPages, err := f.savePagesDirectlyWithRepo(ctx, asset.ID, lessonID, images)
 	totalImages := len(images)
 	if err != nil {
 		errorMsg := err.Error()
-		repo.UpdatePDFAssetStatus(ctx, asset.ID, "partial", &totalImages, &errorMsg)
-		u.logger.Error(fmt.Sprintf("Error saving pages for lesson %s: %v", lessonID, err))
+		f.UpdatePDFAssetStatus(ctx, asset.ID, "partial", &totalImages, &errorMsg)
+		f.log.Error(fmt.Sprintf("Error saving pages for lesson %s: %v", lessonID, err))
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error saving pages",
@@ -141,16 +114,16 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 		status = "partial"
 	}
 
-	err = repo.UpdatePDFAssetStatus(ctx, asset.ID, status, &totalImages, nil)
+	err = f.UpdatePDFAssetStatus(ctx, asset.ID, status, &totalImages, nil)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Error updating PDF asset status for lesson %s: %v", lessonID, err))
+		f.log.Error(fmt.Sprintf("Error updating PDF asset status for lesson %s: %v", lessonID, err))
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error updating PDF asset status",
 		}
 	}
 
-	return &dto.ProcessResult{
+	return &processResult{
 		Success:        processedPages > 0,
 		TotalPages:     len(images),
 		ProcessedPages: processedPages,
@@ -158,20 +131,20 @@ func (u *pdfProcessorUseCase) ProcessLesson(ctx context.Context, lessonID string
 }
 
 // ProcessAllPendingLessons - Process all pending PDF lessons across all databases
-func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limit int) (*dto.BatchProcessResult, error) {
-	allLessons, err := u.repo.GetPendingPDFLessons(ctx, limit)
+func (f *Feature) processAllPending(ctx context.Context, limit int) (*batchProcessResult, error) {
+	allLessons, err := f.GetPendingPDFLessons(ctx, limit)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Error getting pending PDF lessons: %v", err))
+		f.log.Error(fmt.Sprintf("Error getting pending PDF lessons: %v", err))
 		allLessons = nil
 	} else {
-		u.logger.Info(fmt.Sprintf("Found %d pending lessons", len(allLessons)))
+		f.log.Info(fmt.Sprintf("Found %d pending lessons", len(allLessons)))
 	}
 
 	if len(allLessons) == 0 {
-		return &dto.BatchProcessResult{
+		return &batchProcessResult{
 			Processed: 0,
 			Total:     0,
-			Results:   []dto.ProcessResult{},
+			Results:   []processResult{},
 		}, nil
 	}
 
@@ -182,7 +155,7 @@ func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limi
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	results := make([]dto.ProcessResult, 0, len(allLessons))
+	results := make([]processResult, 0, len(allLessons))
 	processed := 0
 
 	// Start workers
@@ -195,7 +168,7 @@ func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limi
 				case <-ctx.Done():
 					return
 				default:
-					result, err := u.ProcessLesson(ctx, job.LessonID)
+					result, err := f.processLesson(ctx, job.LessonID)
 					select {
 					case resultChan <- ProcessingResult{LessonID: job.LessonID, Result: result, Error: err}:
 					case <-ctx.Done():
@@ -228,8 +201,8 @@ func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limi
 	for result := range resultChan {
 		mu.Lock()
 		if result.Error != nil {
-			u.logger.Error(fmt.Sprintf("Failed to process lesson %s: %v", result.LessonID, result.Error))
-			results = append(results, dto.ProcessResult{
+			f.log.Error(fmt.Sprintf("Failed to process lesson %s: %v", result.LessonID, result.Error))
+			results = append(results, processResult{
 				Success: false,
 				Error:   result.Error.Error(),
 			})
@@ -242,7 +215,7 @@ func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limi
 		mu.Unlock()
 	}
 
-	return &dto.BatchProcessResult{
+	return &batchProcessResult{
 		Processed: processed,
 		Total:     len(allLessons),
 		Results:   results,
@@ -250,31 +223,31 @@ func (u *pdfProcessorUseCase) ProcessAllPendingLessons(ctx context.Context, limi
 }
 
 // RetryFailedAssets - Retry processing failed PDF assets across all databases
-func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit int) (*dto.BatchProcessResult, error) {
-	allFailedAssets, err := u.repo.GetFailedPDFAssets(ctx, limit)
+func (f *Feature) retryFailedAssets(ctx context.Context, limit int) (*batchProcessResult, error) {
+	allFailedAssets, err := f.GetFailedPDFAssets(ctx, limit)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
+		f.log.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
 		allFailedAssets = nil
 	} else {
-		u.logger.Info(fmt.Sprintf("Found %d failed assets", len(allFailedAssets)))
+		f.log.Info(fmt.Sprintf("Found %d failed assets", len(allFailedAssets)))
 	}
 
 	if len(allFailedAssets) == 0 {
-		return &dto.BatchProcessResult{
+		return &batchProcessResult{
 			Processed: 0,
 			Total:     0,
-			Results:   []dto.ProcessResult{},
+			Results:   []processResult{},
 		}, nil
 	}
 
 	// Retry assets concurrently using worker pool
 	const maxWorkers = 3
-	jobChan := make(chan lessons.LessonPDFAsset, len(allFailedAssets))
+	jobChan := make(chan LessonPDFAsset, len(allFailedAssets))
 	resultChan := make(chan ProcessingResult, len(allFailedAssets))
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	results := make([]dto.ProcessResult, 0, len(allFailedAssets))
+	results := make([]processResult, 0, len(allFailedAssets))
 	processed := 0
 
 	// Start workers
@@ -287,7 +260,7 @@ func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit int) 
 				case <-ctx.Done():
 					return
 				default:
-					result, err := u.ProcessLesson(ctx, asset.LessonID)
+					result, err := f.processLesson(ctx, asset.LessonID)
 					select {
 					case resultChan <- ProcessingResult{LessonID: asset.LessonID, Result: result, Error: err}:
 					case <-ctx.Done():
@@ -320,8 +293,8 @@ func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit int) 
 	for result := range resultChan {
 		mu.Lock()
 		if result.Error != nil {
-			u.logger.Error(fmt.Sprintf("Failed to retry asset %s: %v", result.LessonID, result.Error))
-			results = append(results, dto.ProcessResult{
+			f.log.Error(fmt.Sprintf("Failed to retry asset %s: %v", result.LessonID, result.Error))
+			results = append(results, processResult{
 				Success: false,
 				Error:   result.Error.Error(),
 			})
@@ -334,7 +307,7 @@ func (u *pdfProcessorUseCase) RetryFailedAssets(ctx context.Context, limit int) 
 		mu.Unlock()
 	}
 
-	return &dto.BatchProcessResult{
+	return &batchProcessResult{
 		Processed: processed,
 		Total:     len(allFailedAssets),
 		Results:   results,
@@ -364,16 +337,14 @@ func isPermanentError(errorMsg *string) bool {
 }
 
 // CleanupPermanentlyFailedAssets - Mark permanently failed assets
-func (u *pdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context) (*dto.CleanupFailedResponse, error) {
-	var allResults []dto.CleanupFailedResult
+func (f *Feature) cleanupPermanentlyFailedAssets(ctx context.Context) (*cleanupFailedResponse, error) {
+	var allResults []cleanupFailedResult
 	totalFailed := 0
 	removed := 0
 
-	repo := u.repo
-
-	failedAssets, err := repo.GetFailedPDFAssets(ctx, 0)
+	failedAssets, err := f.GetFailedPDFAssets(ctx, 0)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
+		f.log.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
 		failedAssets = nil
 	}
 	totalFailed += len(failedAssets)
@@ -389,20 +360,20 @@ func (u *pdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context
 		}
 
 		// Delete orphaned pages first
-		err := repo.DeletePDFPagesByAssetID(ctx, asset.ID)
+		err := f.DeletePDFPagesByAssetID(ctx, asset.ID)
 		if err != nil {
-			u.logger.Error(fmt.Sprintf("Error deleting pages for asset %s: %v", asset.ID, err))
+			f.log.Error(fmt.Sprintf("Error deleting pages for asset %s: %v", asset.ID, err))
 		}
 
 		// Mark as permanently_failed
 		permanentErr := fmt.Sprintf("[permanently_failed] %s", errorMsg)
-		err = repo.UpdatePDFAssetStatus(ctx, asset.ID, "permanently_failed", nil, &permanentErr)
+		err = f.UpdatePDFAssetStatus(ctx, asset.ID, "permanently_failed", nil, &permanentErr)
 		if err != nil {
-			u.logger.Error(fmt.Sprintf("Error updating asset %s to permanently_failed: %v", asset.ID, err))
+			f.log.Error(fmt.Sprintf("Error updating asset %s to permanently_failed: %v", asset.ID, err))
 			continue
 		}
 
-		allResults = append(allResults, dto.CleanupFailedResult{
+		allResults = append(allResults, cleanupFailedResult{
 			AssetID:  asset.ID,
 			LessonID: asset.LessonID,
 			Error:    errorMsg,
@@ -410,7 +381,7 @@ func (u *pdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context
 		removed++
 	}
 
-	return &dto.CleanupFailedResponse{
+	return &cleanupFailedResponse{
 		Message: "Cleanup of permanently failed assets completed",
 		Removed: removed,
 		Total:   totalFailed,
@@ -419,12 +390,11 @@ func (u *pdfProcessorUseCase) CleanupPermanentlyFailedAssets(ctx context.Context
 }
 
 // CleanupOrphanedPages - Clean up orphaned PDF pages
-func (u *pdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) error {
-	repo := u.repo
+func (f *Feature) cleanupOrphanedPages(ctx context.Context) error {
 
-	failedAssets, err := repo.GetFailedPDFAssets(ctx, 0)
+	failedAssets, err := f.GetFailedPDFAssets(ctx, 0)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
+		f.log.Error(fmt.Sprintf("Error getting failed PDF assets: %v", err))
 		return nil
 	}
 
@@ -434,7 +404,7 @@ func (u *pdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) error {
 
 	// Clean up pages concurrently using worker pool
 	const maxWorkers = 3
-	jobChan := make(chan lessons.LessonPDFAsset, len(failedAssets))
+	jobChan := make(chan LessonPDFAsset, len(failedAssets))
 	resultChan := make(chan error, len(failedAssets))
 
 	var wg sync.WaitGroup
@@ -449,7 +419,7 @@ func (u *pdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) error {
 				case <-ctx.Done():
 					return
 				default:
-					err := u.cleanupAssetPages(ctx, repo, asset)
+					err := f.cleanupAssetPages(ctx, asset)
 					select {
 					case resultChan <- err:
 					case <-ctx.Done():
@@ -481,18 +451,18 @@ func (u *pdfProcessorUseCase) CleanupOrphanedPages(ctx context.Context) error {
 	// Process results
 	for err := range resultChan {
 		if err != nil {
-			u.logger.Error(fmt.Sprintf("Failed to cleanup asset pages: %v", err))
+			f.log.Error(fmt.Sprintf("Failed to cleanup asset pages: %v", err))
 		}
 	}
 
 	return nil
 }
 
-// cleanupAssetPages - Clean up pages for a single asset using the provided repo
-func (u *pdfProcessorUseCase) cleanupAssetPages(ctx context.Context, repo lesson.LessonRepository, asset lessons.LessonPDFAsset) error {
-	pages, err := repo.GetPDFPagesByAssetID(ctx, asset.ID)
+// cleanupAssetPages deletes every stored page image for one asset.
+func (f *Feature) cleanupAssetPages(ctx context.Context, asset LessonPDFAsset) error {
+	pages, err := f.GetPDFPagesByAssetID(ctx, asset.ID)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Error getting pages for asset %s: %v", asset.ID, err))
+		f.log.Error(fmt.Sprintf("Error getting pages for asset %s: %v", asset.ID, err))
 		return err
 	}
 
@@ -530,7 +500,7 @@ func (u *pdfProcessorUseCase) cleanupAssetPages(ctx context.Context, repo lesson
 				case <-ctx.Done():
 					return
 				default:
-					err := repo.DeletePDFPage(ctx, job.pageID)
+					err := f.DeletePDFPage(ctx, job.pageID)
 					select {
 					case resultChan <- deleteResult{pageID: job.pageID, err: err}:
 					case <-ctx.Done():
@@ -562,7 +532,7 @@ func (u *pdfProcessorUseCase) cleanupAssetPages(ctx context.Context, repo lesson
 	// Process delete results
 	for result := range resultChan {
 		if result.err != nil {
-			u.logger.Error(fmt.Sprintf("Error deleting page %s: %v", result.pageID, result.err))
+			f.log.Error(fmt.Sprintf("Error deleting page %s: %v", result.pageID, result.err))
 		}
 	}
 
@@ -570,15 +540,14 @@ func (u *pdfProcessorUseCase) cleanupAssetPages(ctx context.Context, repo lesson
 }
 
 // RegeneratePDF - Regenerate PDF processing for a lesson
-func (u *pdfProcessorUseCase) RegeneratePDF(ctx context.Context, lessonID string) error {
+func (f *Feature) regeneratePDF(ctx context.Context, lessonID string) error {
 	// 1. Find the correct repository
-	if err := u.requireLesson(ctx, lessonID); err != nil {
+	if err := f.requireLesson(ctx, lessonID); err != nil {
 		return err
 	}
-	repo := u.repo
 
 	// 2. Get lesson with PDF asset
-	lessonData, err := repo.GetByIDWithPDFAsset(ctx, lessonID)
+	lessonData, err := f.GetByIDWithPDFAsset(ctx, lessonID)
 	if err != nil {
 		if errors.Is(err, memberclasserrors.ErrLessonNotFound) {
 			return &memberclasserrors.MemberClassError{
@@ -586,7 +555,7 @@ func (u *pdfProcessorUseCase) RegeneratePDF(ctx context.Context, lessonID string
 				Message: "lesson not found",
 			}
 		}
-		u.logger.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
+		f.log.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
 		return &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error getting lesson",
@@ -604,26 +573,26 @@ func (u *pdfProcessorUseCase) RegeneratePDF(ctx context.Context, lessonID string
 	// 4. Delete existing PDF asset and pages if exists
 	if lessonData.PDFAsset != nil {
 		// Delete all pages
-		err = repo.DeletePDFPagesByAssetID(ctx, lessonData.PDFAsset.ID)
+		err = f.DeletePDFPagesByAssetID(ctx, lessonData.PDFAsset.ID)
 		if err != nil {
-			u.logger.Error(fmt.Sprintf("Error deleting pages for asset %s: %v", lessonData.PDFAsset.ID, err))
+			f.log.Error(fmt.Sprintf("Error deleting pages for asset %s: %v", lessonData.PDFAsset.ID, err))
 		}
 
 		// Reset asset status
-		err = repo.UpdatePDFAssetStatus(ctx, lessonData.PDFAsset.ID, "pending", nil, nil)
+		err = f.UpdatePDFAssetStatus(ctx, lessonData.PDFAsset.ID, "pending", nil, nil)
 		if err != nil {
-			u.logger.Error(fmt.Sprintf("Error resetting asset %s: %v", lessonData.PDFAsset.ID, err))
+			f.log.Error(fmt.Sprintf("Error resetting asset %s: %v", lessonData.PDFAsset.ID, err))
 		}
 	} else {
 		// Create new asset
-		asset := &lessons.LessonPDFAsset{
+		asset := &LessonPDFAsset{
 			LessonID:     lessonID,
 			SourcePDFURL: *lessonData.MediaURL,
 			Status:       "pending",
 		}
-		err = repo.CreatePDFAsset(ctx, asset)
+		err = f.CreatePDFAsset(ctx, asset)
 		if err != nil {
-			u.logger.Error(fmt.Sprintf("Error creating PDF asset for lesson %s: %v", lessonID, err))
+			f.log.Error(fmt.Sprintf("Error creating PDF asset for lesson %s: %v", lessonID, err))
 			return &memberclasserrors.MemberClassError{
 				Code:    500,
 				Message: "error creating PDF asset",
@@ -635,33 +604,33 @@ func (u *pdfProcessorUseCase) RegeneratePDF(ctx context.Context, lessonID string
 }
 
 // ConvertPdfToImages - Complete PDF to images conversion flow
-func (u *pdfProcessorUseCase) ConvertPdfToImages(pdfURL string) ([]string, error) {
+func (f *Feature) convertPdfToImages(pdfURL string) ([]string, error) {
 	// 1. Get authentication token and create task (with automatic key rotation)
-	token, task, err := u.pdfService.GetTokenAndCreateTask()
+	token, task, err := f.pdf.GetTokenAndCreateTask()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token and create task: %w", err)
 	}
 
 	// 2. Add file
-	serverFilename, err := u.pdfService.AddFile(token, task.Task, pdfURL, task.Server)
+	serverFilename, err := f.pdf.AddFile(token, task.Task, pdfURL, task.Server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add file: %w", err)
 	}
 
 	// 3. Process task
-	err = u.pdfService.ProcessTask(token, task.Task, serverFilename, task.Server)
+	err = f.pdf.ProcessTask(token, task.Task, serverFilename, task.Server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process task: %w", err)
 	}
 
 	// 4. Download result
-	zipData, err := u.pdfService.DownloadTask(token, task.Task, task.Server)
+	zipData, err := f.pdf.DownloadTask(token, task.Task, task.Server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download task: %w", err)
 	}
 
 	// 5. Extract images
-	images, err := u.pdfService.ExtractImagesFromZip(zipData)
+	images, err := f.pdf.ExtractImagesFromZip(zipData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract images: %w", err)
 	}
@@ -670,43 +639,43 @@ func (u *pdfProcessorUseCase) ConvertPdfToImages(pdfURL string) ([]string, error
 }
 
 // CreateOrUpdatePDFAsset - Create or update PDF asset (searches all databases)
-func (u *pdfProcessorUseCase) CreateOrUpdatePDFAsset(ctx context.Context, lessonID, pdfURL string) (*lessons.LessonPDFAsset, error) {
-	if err := u.requireLesson(ctx, lessonID); err != nil {
+func (f *Feature) createOrUpdatePDFAssetForLesson(ctx context.Context, lessonID, pdfURL string) (*LessonPDFAsset, error) {
+	if err := f.requireLesson(ctx, lessonID); err != nil {
 		return nil, err
 	}
-	repo := u.repo
-	return u.createOrUpdatePDFAsset(ctx, repo, lessonID, pdfURL)
+	return f.createOrUpdatePDFAsset(ctx, lessonID, pdfURL)
 }
 
 // createOrUpdatePDFAsset - Internal: create or update PDF asset using specific repo
-func (u *pdfProcessorUseCase) createOrUpdatePDFAsset(ctx context.Context, repo lesson.LessonRepository, lessonID, pdfURL string) (*lessons.LessonPDFAsset, error) {
-	asset, err := repo.GetPDFAssetByLessonID(ctx, lessonID)
+func (f *Feature) createOrUpdatePDFAsset(ctx context.Context, lessonID, pdfURL string) (*LessonPDFAsset, error) {
+	asset, err := f.GetPDFAssetByLessonID(ctx, lessonID)
 	if err != nil && !errors.Is(err, memberclasserrors.ErrPDFAssetNotFound) {
 		return nil, err
 	}
 
 	if asset == nil {
 		// Create new asset with generated ID
-		asset = &lessons.LessonPDFAsset{
+		asset = &LessonPDFAsset{
 			ID:           uuid.New().String(),
 			LessonID:     lessonID,
 			SourcePDFURL: pdfURL,
 			Status:       "processing",
 		}
-		err = repo.CreatePDFAsset(ctx, asset)
+		err = f.CreatePDFAsset(ctx, asset)
 	} else {
 		// Update existing asset
 		asset.Status = "processing"
 		asset.Error = nil
-		err = repo.UpdatePDFAsset(ctx, asset)
+		err = f.UpdatePDFAsset(ctx, asset)
 	}
 
 	return asset, err
 }
 
-// saveSinglePage - Save a single page using specific repo (thread-safe)
-func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.LessonRepository, assetID string, pageNumber int, imageBase64 string) (bool, error) {
-	existingPage, err := repo.GetPDFPageByAssetAndNumber(ctx, assetID, pageNumber)
+// saveSinglePage decodes one rendered page, uploads it and records the row.
+// Safe for concurrent use: each call owns its page number.
+func (f *Feature) saveSinglePage(ctx context.Context, assetID string, pageNumber int, imageBase64 string) (bool, error) {
+	existingPage, err := f.GetPDFPageByAssetAndNumber(ctx, assetID, pageNumber)
 	if err != nil && !errors.Is(err, memberclasserrors.ErrPDFPageNotFound) {
 		return false, err
 	}
@@ -724,7 +693,7 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.Le
 	// 2. Decode base64 to bytes
 	imageData, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Failed to decode base64 image for asset %s page %d: %v", assetID, pageNumber, err))
+		f.log.Error(fmt.Sprintf("Failed to decode base64 image for asset %s page %d: %v", assetID, pageNumber, err))
 		return false, fmt.Errorf("failed to decode base64 image: %w", err)
 	}
 
@@ -732,23 +701,23 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.Le
 	filename := fmt.Sprintf("lessons/%s/page-%d.jpg", assetID, pageNumber)
 
 	// 4. Upload to this deployment's Spaces bucket
-	imageURL, uploadErr := u.storageService.Upload(ctx, imageData, filename, "image/jpeg")
+	imageURL, uploadErr := f.storage.Upload(ctx, imageData, filename, "image/jpeg")
 	if uploadErr != nil {
-		u.logger.Error(fmt.Sprintf("Failed to upload page %d to storage for asset %s: %v", pageNumber, assetID, uploadErr))
+		f.log.Error(fmt.Sprintf("Failed to upload page %d to storage for asset %s: %v", pageNumber, assetID, uploadErr))
 		return false, fmt.Errorf("failed to upload image to storage: %w", uploadErr)
 	}
 
 	// 5. Save storage URL to database
-	page := &lessons.LessonPDFPage{
+	page := &LessonPDFPage{
 		ID:         uuid.New().String(),
 		AssetID:    assetID,
 		PageNumber: pageNumber,
 		ImageURL:   imageURL, // DigitalOcean Spaces URL
 	}
 
-	err = repo.CreatePDFPage(ctx, page)
+	err = f.CreatePDFPage(ctx, page)
 	if err != nil {
-		u.logger.Error(fmt.Sprintf("Failed to save page %d to database for asset %s: %v", pageNumber, assetID, err))
+		f.log.Error(fmt.Sprintf("Failed to save page %d to database for asset %s: %v", pageNumber, assetID, err))
 		return false, fmt.Errorf("failed to save page to database: %w", err)
 	}
 
@@ -756,16 +725,15 @@ func (u *pdfProcessorUseCase) saveSinglePage(ctx context.Context, repo lesson.Le
 }
 
 // SavePagesDirectly - Save pages directly (public interface)
-func (u *pdfProcessorUseCase) SavePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error) {
-	if err := u.requireLesson(ctx, lessonID); err != nil {
+func (f *Feature) savePagesDirectly(ctx context.Context, assetID, lessonID string, images []string) (int, error) {
+	if err := f.requireLesson(ctx, lessonID); err != nil {
 		return 0, err
 	}
-	repo := u.repo
-	return u.savePagesDirectlyWithRepo(ctx, repo, assetID, lessonID, images)
+	return f.savePagesDirectlyWithRepo(ctx, assetID, lessonID, images)
 }
 
 // savePagesDirectlyWithRepo - Internal: save pages using specific repo
-func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, repo lesson.LessonRepository, assetID, lessonID string, images []string) (int, error) {
+func (f *Feature) savePagesDirectlyWithRepo(ctx context.Context, assetID, lessonID string, images []string) (int, error) {
 	if len(images) == 0 {
 		return 0, nil
 	}
@@ -807,7 +775,7 @@ func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, rep
 				case <-ctx.Done():
 					return
 				default:
-					success, err := u.saveSinglePage(ctx, repo, assetID, job.pageNumber, job.imageBase64)
+					success, err := f.saveSinglePage(ctx, assetID, job.pageNumber, job.imageBase64)
 					select {
 					case resultChan <- pageResult{
 						index:      job.index,
@@ -851,24 +819,23 @@ func (u *pdfProcessorUseCase) savePagesDirectlyWithRepo(ctx context.Context, rep
 		if result.success {
 			processedPages++
 		} else if result.err != nil {
-			u.logger.Error(fmt.Sprintf("Failed to save page %d: %v", result.pageNumber, result.err))
+			f.log.Error(fmt.Sprintf("Failed to save page %d: %v", result.pageNumber, result.err))
 		}
 		mu.Unlock()
 	}
 
-	u.logger.Info(fmt.Sprintf("Pages saved for asset %s: %d/%d", assetID, processedPages, len(images)))
+	f.log.Info(fmt.Sprintf("Pages saved for asset %s: %d/%d", assetID, processedPages, len(images)))
 
 	return processedPages, nil
 }
 
 // ValidateLessonHasPDF - Validate that lesson has a PDF media URL (searches all databases)
-func (u *pdfProcessorUseCase) ValidateLessonHasPDF(ctx context.Context, lessonID string) error {
-	if err := u.requireLesson(ctx, lessonID); err != nil {
+func (f *Feature) validateLessonHasPDF(ctx context.Context, lessonID string) error {
+	if err := f.requireLesson(ctx, lessonID); err != nil {
 		return err
 	}
-	repo := u.repo
 
-	lesson, err := repo.GetByID(ctx, lessonID)
+	lesson, err := f.GetByID(ctx, lessonID)
 	if err != nil {
 		if errors.Is(err, memberclasserrors.ErrLessonNotFound) {
 			return &memberclasserrors.MemberClassError{
@@ -876,7 +843,7 @@ func (u *pdfProcessorUseCase) ValidateLessonHasPDF(ctx context.Context, lessonID
 				Message: "lesson not found",
 			}
 		}
-		u.logger.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
+		f.log.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
 		return &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error getting lesson",
@@ -894,13 +861,12 @@ func (u *pdfProcessorUseCase) ValidateLessonHasPDF(ctx context.Context, lessonID
 }
 
 // GetLessonWithPDFAsset - Get lesson with PDF asset relationship (searches all databases)
-func (u *pdfProcessorUseCase) GetLessonWithPDFAsset(ctx context.Context, lessonID string) (*lessons.Lesson, error) {
-	if err := u.requireLesson(ctx, lessonID); err != nil {
+func (f *Feature) getLessonWithPDFAsset(ctx context.Context, lessonID string) (*Lesson, error) {
+	if err := f.requireLesson(ctx, lessonID); err != nil {
 		return nil, err
 	}
-	repo := u.repo
 
-	lesson, err := repo.GetByIDWithPDFAsset(ctx, lessonID)
+	lesson, err := f.GetByIDWithPDFAsset(ctx, lessonID)
 	if err != nil {
 		if errors.Is(err, memberclasserrors.ErrLessonNotFound) {
 			return nil, &memberclasserrors.MemberClassError{
@@ -908,7 +874,7 @@ func (u *pdfProcessorUseCase) GetLessonWithPDFAsset(ctx context.Context, lessonI
 				Message: "lesson not found",
 			}
 		}
-		u.logger.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
+		f.log.Error(fmt.Sprintf("Error getting lesson %s: %v", lessonID, err))
 		return nil, &memberclasserrors.MemberClassError{
 			Code:    500,
 			Message: "error getting lesson",
@@ -919,10 +885,3 @@ func (u *pdfProcessorUseCase) GetLessonWithPDFAsset(ctx context.Context, lessonI
 }
 
 // GetPDFPagesByAssetID - Get PDF pages by asset ID (searches all databases)
-func (u *pdfProcessorUseCase) GetPDFPagesByAssetID(ctx context.Context, assetID string) ([]*lessons.LessonPDFPage, error) {
-	pages, err := u.repo.GetPDFPagesByAssetID(ctx, assetID)
-	if err != nil || len(pages) == 0 {
-		return []*lessons.LessonPDFPage{}, nil
-	}
-	return pages, nil
-}
