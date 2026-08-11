@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 // ---------- DTOs ----------
@@ -48,7 +48,7 @@ func (f *Feature) GetActivitySummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant := constants.GetTenantFromContext(r.Context())
+	tenant := tenant.FromContext(r.Context())
 	if tenant == nil {
 		writeCustomError(w, http.StatusUnauthorized, "API key invalid", "INVALID_API_KEY")
 		return

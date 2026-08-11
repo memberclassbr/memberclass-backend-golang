@@ -12,9 +12,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 // sqlTenantByToken resolves a hashed API key to its tenant.
@@ -55,7 +54,7 @@ func (m *AuthExternalMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), constants.TenantContextKey, found)
+		ctx := context.WithValue(r.Context(), tenant.ContextKey, found)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

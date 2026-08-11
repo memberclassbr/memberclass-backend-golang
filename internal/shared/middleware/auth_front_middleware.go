@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/shared/session"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -75,7 +75,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), dto.UserContextKey, payload)
+		ctx := context.WithValue(r.Context(), session.ContextKey, payload)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -103,7 +103,7 @@ func (m *AuthMiddleware) deriveEncryptionKey() ([]byte, error) {
 	return key, nil
 }
 
-func (m *AuthMiddleware) decryptToken(tokenString string) (*dto.SessionPayload, error) {
+func (m *AuthMiddleware) decryptToken(tokenString string) (*session.Payload, error) {
 	key, err := m.deriveEncryptionKey()
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (m *AuthMiddleware) decryptToken(tokenString string) (*dto.SessionPayload, 
 		return nil, err
 	}
 
-	var payload dto.SessionPayload
+	var payload session.Payload
 	if err := json.Unmarshal(decrypted, &payload); err != nil {
 		return nil, err
 	}

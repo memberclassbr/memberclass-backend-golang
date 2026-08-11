@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 // ---------- DTOs ----------
@@ -43,7 +43,7 @@ func (f *Feature) UpdateComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant := constants.GetTenantFromContext(r.Context())
+	tenant := tenant.FromContext(r.Context())
 	if tenant == nil {
 		writeError(w, http.StatusUnauthorized, "API key inválida", "INVALID_API_KEY")
 		return

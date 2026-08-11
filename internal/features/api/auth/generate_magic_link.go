@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 // magicTokenTTL is how long a minted link stays usable.
@@ -51,7 +51,7 @@ func (f *Feature) GenerateMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant := constants.GetTenantFromContext(r.Context())
+	tenant := tenant.FromContext(r.Context())
 	if tenant == nil {
 		writeCustomError(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório", "UNAUTHORIZED")
 		return

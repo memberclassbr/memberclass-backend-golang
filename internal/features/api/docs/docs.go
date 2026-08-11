@@ -1,34 +1,48 @@
-package http
+// Package docs serves the hand-maintained OpenAPI spec and a Swagger UI for
+// it at /docs. The spec is a file next to the binary, copied into the image by
+// the Dockerfile.
+package docs
 
 import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/go-chi/chi/v5"
 )
 
-type SwaggerHandler struct {
+// Feature serves the API documentation.
+type Feature struct {
 	swaggerPath string
 }
 
-func NewSwaggerHandler() *SwaggerHandler {
-	return &SwaggerHandler{
-		swaggerPath: "swagger.yaml",
-	}
+// New builds the slice.
+func New() *Feature {
+	return &Feature{swaggerPath: "swagger.yaml"}
 }
 
-func (h *SwaggerHandler) ServeSwaggerYAML(w http.ResponseWriter, r *http.Request) {
+// MiddlewareSet is empty: the docs are public.
+type MiddlewareSet struct{}
+
+// Register mounts the routes on r, which is expected to be scoped to `/docs`.
+func (f *Feature) Register(r chi.Router, _ MiddlewareSet) {
+	r.Get("/", f.ServeSwaggerUI)
+	r.Get("/swagger.yaml", f.ServeSwaggerYAML)
+}
+
+func (f *Feature) ServeSwaggerYAML(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	paths := []string{
-		h.swaggerPath,
-		filepath.Join(".", h.swaggerPath),
+		f.swaggerPath,
+		filepath.Join(".", f.swaggerPath),
 	}
 
 	workDir, _ := os.Getwd()
-	paths = append(paths, filepath.Join(workDir, h.swaggerPath))
+	paths = append(paths, filepath.Join(workDir, f.swaggerPath))
 
 	var content []byte
 	var err error
@@ -40,7 +54,7 @@ func (h *SwaggerHandler) ServeSwaggerYAML(w http.ResponseWriter, r *http.Request
 	}
 
 	if err != nil {
-		http.Error(w, "Swagger file not found: "+h.swaggerPath, http.StatusNotFound)
+		http.Error(w, "Swagger file not found: "+f.swaggerPath, http.StatusNotFound)
 		return
 	}
 
@@ -50,7 +64,7 @@ func (h *SwaggerHandler) ServeSwaggerYAML(w http.ResponseWriter, r *http.Request
 	w.Write(content)
 }
 
-func (h *SwaggerHandler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
+func (f *Feature) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return

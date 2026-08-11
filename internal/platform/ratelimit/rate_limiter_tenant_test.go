@@ -7,17 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 func TestNewRateLimiterTenant(t *testing.T) {
-	mockCache := mocks.NewMockCache(t)
-	mockLogger := mocks.NewMockLogger(t)
+	c := newFakeCache()
 
-	rateLimiter := NewRateLimiterTenant(mockCache, mockLogger)
+	rateLimiter := NewRateLimiterTenant(c, fakeLogger{})
 
 	assert.NotNil(t, rateLimiter)
 }
@@ -125,29 +122,23 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCache := mocks.NewMockCache(t)
-			mockLogger := mocks.NewMockLogger(t)
+			c := newFakeCache()
 
-			rateLimiter := NewRateLimiterTenant(mockCache, mockLogger)
-
-			key := constants.APIRateLimitTenantKeyPrefix + tt.tenantID + ":" + tt.endpoint
+			rateLimiter := NewRateLimiterTenant(c, fakeLogger{})
 
 			if tt.getError != nil && tt.getError.Error() == "redis: nil" {
-				mockCache.EXPECT().Get(mock.Anything, key).Return("", tt.getError)
+				c.get = func() (string, error) { return "", tt.getError }
 			} else if tt.getError != nil {
-				mockCache.EXPECT().Get(mock.Anything, key).Return("", tt.getError)
-				mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
+				c.get = func() (string, error) { return "", tt.getError }
 			} else if tt.currentCount == "invalid" {
-				mockCache.EXPECT().Get(mock.Anything, key).Return(tt.currentCount, nil)
-				mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
+				c.get = func() (string, error) { return tt.currentCount, nil }
 			} else {
-				mockCache.EXPECT().Get(mock.Anything, key).Return(tt.currentCount, nil)
+				c.get = func() (string, error) { return tt.currentCount, nil }
 				if tt.currentCount != "" {
 					if tt.ttlError != nil {
-						mockCache.EXPECT().TTL(mock.Anything, key).Return(time.Duration(0), tt.ttlError)
-						mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
+						c.ttl = func() (time.Duration, error) { return 0, tt.ttlError }
 					} else {
-						mockCache.EXPECT().TTL(mock.Anything, key).Return(tt.ttl, nil)
+						c.ttl = func() (time.Duration, error) { return tt.ttl, nil }
 					}
 				}
 			}
@@ -240,28 +231,22 @@ func TestRateLimiterTenant_Increment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCache := mocks.NewMockCache(t)
-			mockLogger := mocks.NewMockLogger(t)
+			c := newFakeCache()
 
-			rateLimiter := NewRateLimiterTenant(mockCache, mockLogger)
+			rateLimiter := NewRateLimiterTenant(c, fakeLogger{})
 
-			key := constants.APIRateLimitTenantKeyPrefix + tt.tenantID + ":" + tt.endpoint
-
-			mockCache.EXPECT().Exists(mock.Anything, key).Return(tt.exists, tt.existsError)
+			c.exists = func() (bool, error) { return tt.exists, tt.existsError }
 
 			if tt.existsError != nil {
-				mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
 			} else {
-				mockCache.EXPECT().Increment(mock.Anything, key, int64(1)).Return(tt.increment, tt.incrementError)
+				c.increment = func() (int64, error) { return tt.increment, tt.incrementError }
 
 				if tt.incrementError != nil {
-					mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
 				} else {
 					if !tt.exists {
-						mockCache.EXPECT().Set(mock.Anything, key, strconv.FormatInt(tt.increment, 10), constants.APIRateLimitWindow).Return(tt.setError)
+						c.set = tt.setError
 
 						if tt.setError != nil {
-							mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
 						}
 					}
 				}

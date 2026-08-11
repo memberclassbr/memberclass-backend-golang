@@ -7,11 +7,17 @@ import (
 	"time"
 
 	"github.com/go-redis/redismock/v9"
-	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
+
+// fakeLogger discards output: these tests assert on cache behaviour.
+type fakeLogger struct{}
+
+func (fakeLogger) Debug(string, ...any) {}
+func (fakeLogger) Info(string, ...any)  {}
+func (fakeLogger) Warn(string, ...any)  {}
+func (fakeLogger) Error(string, ...any) {}
 
 func TestRedisCache_Get(t *testing.T) {
 	tests := []struct {
@@ -39,12 +45,12 @@ func TestRedisCache_Get(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
+			log := fakeLogger{}
 			db, redisMock := redismock.NewClientMock()
 
 			cache := &RedisCache{
 				client: db,
-				log:    mockLogger,
+				log:    log,
 			}
 
 			if tt.expectedError {
@@ -96,12 +102,12 @@ func TestRedisCache_Set(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
+			log := fakeLogger{}
 			db, redisMock := redismock.NewClientMock()
 
 			cache := &RedisCache{
 				client: db,
-				log:    mockLogger,
+				log:    log,
 			}
 
 			if tt.expectError {
@@ -152,12 +158,12 @@ func TestRedisCache_Increment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
+			log := fakeLogger{}
 			db, redisMock := redismock.NewClientMock()
 
 			cache := &RedisCache{
 				client: db,
-				log:    mockLogger,
+				log:    log,
 			}
 
 			if tt.expectedError {
@@ -203,12 +209,12 @@ func TestRedisCache_Delete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
+			log := fakeLogger{}
 			db, redisMock := redismock.NewClientMock()
 
 			cache := &RedisCache{
 				client: db,
-				log:    mockLogger,
+				log:    log,
 			}
 
 			if tt.expectError {
@@ -263,17 +269,16 @@ func TestRedisCache_Exists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
+			log := fakeLogger{}
 			db, redisMock := redismock.NewClientMock()
 
 			cache := &RedisCache{
 				client: db,
-				log:    mockLogger,
+				log:    log,
 			}
 
 			if tt.expectedError {
 				redisMock.ExpectExists(tt.key).SetErr(tt.mockError)
-				mockLogger.EXPECT().Error(mock.Anything, mock.Anything).Return()
 			} else {
 				if tt.expectedValue {
 					redisMock.ExpectExists(tt.key).SetVal(1)
@@ -316,16 +321,13 @@ func TestRedisCache_Close(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
+			log := fakeLogger{}
 			db, redisMock := redismock.NewClientMock()
 
 			cache := &RedisCache{
 				client: db,
-				log:    mockLogger,
+				log:    log,
 			}
-
-			mockLogger.EXPECT().Info(mock.Anything).Return()
-			mockLogger.EXPECT().Info(mock.Anything).Return()
 
 			err := cache.Close()
 
@@ -345,7 +347,7 @@ func TestRedisCache_Close(t *testing.T) {
 func TestNewRedisCache_InvalidURLReturnsError(t *testing.T) {
 	cfg := &config.Config{Redis: config.Redis{URL: "not-a-url"}}
 
-	client, err := NewRedisCache(cfg, mocks.NewMockLogger(t))
+	client, err := NewRedisCache(cfg, fakeLogger{})
 
 	assert.Error(t, err)
 	assert.Nil(t, client)

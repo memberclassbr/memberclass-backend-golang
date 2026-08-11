@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/application/router"
 	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
@@ -41,7 +40,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/platform/resend"
 	"github.com/memberclass-backend-golang/internal/platform/storage"
 
-	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	"github.com/memberclass-backend-golang/internal/features/api/docs"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 )
 
@@ -59,7 +58,7 @@ type App struct {
 	txDB  database.TranscriptionDB
 	cache cache.Cache
 
-	router    *router.Router
+	router    *Router
 	scheduler *analytics.Scheduler
 
 	memberImport  *member_import.Feature
@@ -135,7 +134,7 @@ func New(cfg *config.Config) (*App, error) {
 	notifications := notificationsworker.New(db, log)
 	transcription := transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 
-	r := router.NewRouter(
+	r := newRouter(
 		videofeat.New(db, bunnySvc, log),
 		lessonpdf.New(db, pdfSvc, spaces, cfg, log),
 		commentfeat.New(db, log),
@@ -146,7 +145,7 @@ func New(cfg *config.Config) (*App, error) {
 		memberImport,
 		transcription,
 		studentfeat.New(db, redis, log),
-		internalhttp.NewSwaggerHandler(),
+		docs.New(),
 		authfeat.New(db, redis, cfg, log),
 		ssofeat.New(db, cfg, log),
 		aifeat.New(db, cfg, log),

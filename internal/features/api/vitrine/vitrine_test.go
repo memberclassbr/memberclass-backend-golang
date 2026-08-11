@@ -11,8 +11,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
-	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +46,7 @@ func requestWithTenant(target, tenantID string, params map[string]string) *http.
 		ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
 	}
 	if tenantID != "" {
-		ctx = context.WithValue(ctx, constants.TenantContextKey, &tenant.Tenant{ID: tenantID})
+		ctx = context.WithValue(ctx, tenant.ContextKey, &tenant.Tenant{ID: tenantID})
 	}
 	return req.WithContext(ctx)
 }

@@ -14,9 +14,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
 	"github.com/memberclass-backend-golang/internal/platform/config"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -80,7 +79,7 @@ func postRequest(tenantID, body string) *http.Request {
 	if tenantID == "" {
 		return req
 	}
-	ctx := context.WithValue(req.Context(), constants.TenantContextKey, &tenant.Tenant{ID: tenantID})
+	ctx := context.WithValue(req.Context(), tenant.ContextKey, &tenant.Tenant{ID: tenantID})
 	return req.WithContext(ctx)
 }
 

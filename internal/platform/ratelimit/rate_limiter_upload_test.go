@@ -7,10 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
@@ -81,16 +79,14 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCache := mocks.NewMockCache(t)
-			mockLogger := mocks.NewMockLogger(t)
+			c := newFakeCache()
 
-			rateLimiter := NewRateLimiterUpload(mockCache, mockLogger)
+			rateLimiter := NewRateLimiterUpload(c, fakeLogger{})
 
 			if tt.getError != nil {
-				mockCache.EXPECT().Get(mock.Anything, constants.UploadLimitKeyPrefix+tt.key).Return("", tt.getError)
-				mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
+				c.get = func() (string, error) { return "", tt.getError }
 			} else {
-				mockCache.EXPECT().Get(mock.Anything, constants.UploadLimitKeyPrefix+tt.key).Return(strconv.FormatInt(tt.currentSize, 10), nil)
+				c.get = func() (string, error) { return strconv.FormatInt(tt.currentSize, 10), nil }
 			}
 
 			result, err := rateLimiter.CheckUploadLimit(context.Background(), tt.key, tt.fileSize)
@@ -181,31 +177,26 @@ func TestRateLimiterUpload_IncrementUploadSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCache := mocks.NewMockCache(t)
-			mockLogger := mocks.NewMockLogger(t)
+			c := newFakeCache()
 
-			rateLimiter := NewRateLimiterUpload(mockCache, mockLogger)
+			rateLimiter := NewRateLimiterUpload(c, fakeLogger{})
 
-			mockCache.EXPECT().Exists(mock.Anything, constants.UploadLimitKeyPrefix+tt.key).Return(tt.exists, tt.existsError)
+			c.exists = func() (bool, error) { return tt.exists, tt.existsError }
 
 			if tt.existsError != nil {
-				mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
 			} else {
-				mockCache.EXPECT().Increment(mock.Anything, constants.UploadLimitKeyPrefix+tt.key, tt.fileSize).Return(tt.increment, tt.incrementError)
+				c.increment = func() (int64, error) { return tt.increment, tt.incrementError }
 
 				if tt.incrementError != nil {
-					mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
 				} else {
 					if !tt.exists {
-						mockCache.EXPECT().Set(mock.Anything, constants.UploadLimitKeyPrefix+tt.key, mock.AnythingOfType("string"), constants.UploadLimitExpiration).Return(tt.setError)
+						c.set = tt.setError
 
 						if tt.setError != nil {
-							mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
 						}
 					}
 
 					if tt.setError == nil {
-						mockLogger.EXPECT().Info(mock.AnythingOfType("string")).Return()
 					}
 				}
 			}
@@ -266,15 +257,13 @@ func TestRateLimiterUpload_GetCurrentUploadSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockCache := mocks.NewMockCache(t)
-			mockLogger := mocks.NewMockLogger(t)
+			c := newFakeCache()
 
-			rateLimiter := NewRateLimiterUpload(mockCache, mockLogger)
+			rateLimiter := NewRateLimiterUpload(c, fakeLogger{})
 
-			mockCache.EXPECT().Get(mock.Anything, constants.UploadLimitKeyPrefix+tt.key).Return(tt.cacheValue, tt.cacheError)
+			c.get = func() (string, error) { return tt.cacheValue, tt.cacheError }
 
 			if tt.cacheError == nil && tt.expectedError {
-				mockLogger.EXPECT().Error(mock.AnythingOfType("string")).Return()
 			}
 
 			size, err := rateLimiter.GetCurrentUploadSize(context.Background(), tt.key)

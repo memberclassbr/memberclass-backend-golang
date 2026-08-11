@@ -1,4 +1,4 @@
-package router
+package app
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	"github.com/memberclass-backend-golang/internal/features/api/docs"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
@@ -47,7 +47,7 @@ func createTestRouter(t *testing.T) *Router {
 	mockActivitySummary := activity_summary.New(nil, nil, nil)
 	mockMemberImport := member_import.New(nil, nil, nil)
 	mockStudent := studentfeat.New(nil, nil, nil)
-	mockSwaggerHandler := internalhttp.NewSwaggerHandler()
+	mockSwaggerHandler := docs.New()
 	mockAuth := authfeat.New(nil, nil, cfg, log)
 	mockSSO := ssofeat.New(nil, cfg, log)
 	mockAI := aifeat.New(nil, &config.Config{}, nil)
@@ -59,7 +59,7 @@ func createTestRouter(t *testing.T) *Router {
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
 	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
 
-	return NewRouter(mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return newRouter(mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {

@@ -1,4 +1,4 @@
-package router
+package app
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	"github.com/memberclass-backend-golang/internal/features/api/docs"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
@@ -37,7 +37,7 @@ type Router struct {
 	memberImport              *member_import.Feature
 	transcription             *transcription.Feature
 	student                   *studentfeat.Feature
-	swaggerHandler            *internalhttp.SwaggerHandler
+	docs                      *docs.Feature
 	auth                      *authfeat.Feature
 	sso                       *ssofeat.Feature
 	ai                        *aifeat.Feature
@@ -50,7 +50,7 @@ type Router struct {
 	bearerMiddleware          *mw.BearerMiddleware
 }
 
-func NewRouter(
+func newRouter(
 	videoFeat *videofeat.Feature,
 	lessonPDFFeat *lessonpdf.Feature,
 	commentFeat *commentfeat.Feature,
@@ -61,7 +61,7 @@ func NewRouter(
 	memberImport *member_import.Feature,
 	transcriptionFeat *transcription.Feature,
 	studentFeat *studentfeat.Feature,
-	swaggerHandler *internalhttp.SwaggerHandler,
+	docsFeat *docs.Feature,
 	authFeat *authfeat.Feature,
 	ssoFeat *ssofeat.Feature,
 	aiFeat *aifeat.Feature,
@@ -106,7 +106,7 @@ func NewRouter(
 		memberImport:              memberImport,
 		transcription:             transcriptionFeat,
 		student:                   studentFeat,
-		swaggerHandler:            swaggerHandler,
+		docs:                      docsFeat,
 		auth:                      authFeat,
 		sso:                       ssoFeat,
 		ai:                        aiFeat,
@@ -125,8 +125,7 @@ func (r *Router) SetupRoutes() {
 		http.Redirect(w, req, "/docs/", http.StatusMovedPermanently)
 	})
 	r.Route("/docs", func(router chi.Router) {
-		router.Get("/", r.swaggerHandler.ServeSwaggerUI)
-		router.Get("/swagger.yaml", r.swaggerHandler.ServeSwaggerYAML)
+		r.docs.Register(router, docs.MiddlewareSet{})
 	})
 
 	r.Route("/api/v1", func(router chi.Router) {

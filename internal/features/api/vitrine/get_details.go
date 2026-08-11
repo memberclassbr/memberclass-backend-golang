@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 type vitrineDetailResponse struct {
@@ -45,7 +45,7 @@ func (f *Feature) resolve(w http.ResponseWriter, r *http.Request, param string) 
 		return "", "", false
 	}
 
-	tenant := constants.GetTenantFromContext(r.Context())
+	tenant := tenant.FromContext(r.Context())
 	if tenant == nil {
 		writeCustomError(w, http.StatusUnauthorized, "Token de API inválido", "INVALID_API_KEY")
 		return "", "", false

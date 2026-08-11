@@ -22,13 +22,13 @@ import (
 	"database/sql"
 	"sync"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // Feature holds the shared dependencies for the notifications worker slice.
 type Feature struct {
 	db  *sql.DB
-	log ports.Logger
+	log logger.Logger
 	fcm *fcmClient
 
 	// running is set when Start() is called and cleared on Stop().
@@ -39,7 +39,7 @@ type Feature struct {
 }
 
 // New builds the slice. Wire it in cmd/api/main.go via fx.Provide.
-func New(db *sql.DB, log ports.Logger) *Feature {
+func New(db *sql.DB, log logger.Logger) *Feature {
 	return &Feature{
 		db:  db,
 		log: log,

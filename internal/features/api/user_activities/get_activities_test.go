@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +72,7 @@ func newTestFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, *fakeCache, func()
 
 func withTenant(r *http.Request) *http.Request {
 	t := &tenant.Tenant{ID: "tenant-123"}
-	ctx := context.WithValue(r.Context(), constants.TenantContextKey, t)
+	ctx := context.WithValue(r.Context(), tenant.ContextKey, t)
 	return r.WithContext(ctx)
 }
 

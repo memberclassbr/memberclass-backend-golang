@@ -37,8 +37,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // Tunables. Package-level so tests can read them; move into Feature if any
@@ -69,7 +69,7 @@ const (
 type Feature struct {
 	transcriptionDB *sql.DB // Railway pgvector (videos/transcripts/chunks/jobs/token_usage)
 	memberclassDB   *sql.DB // memberclass CockroachDB (Lesson/Tenant + transcriptionCompleted flag)
-	log             ports.Logger
+	log             logger.Logger
 	bunny           bunny.Service
 
 	openaiAPIKey       string
@@ -120,7 +120,7 @@ type Feature struct {
 func New(
 	transcriptionDB *sql.DB,
 	memberclassDB *sql.DB,
-	log ports.Logger,
+	log logger.Logger,
 	bunny bunny.Service,
 ) *Feature {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {

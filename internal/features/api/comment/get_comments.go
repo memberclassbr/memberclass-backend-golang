@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 // ---------- DTOs ----------
@@ -56,7 +56,7 @@ func (f *Feature) GetComments(w http.ResponseWriter, r *http.Request) {
 	// Both routes are authenticated, so a missing tenant means the middleware
 	// did not populate the context. The previous handler only checked this on
 	// the /api/v1 path and dereferenced the nil tenant on the other one.
-	tenant := constants.GetTenantFromContext(r.Context())
+	tenant := tenant.FromContext(r.Context())
 	if tenant == nil {
 		writeError(w, http.StatusUnauthorized, "API key inválida", "INVALID_API_KEY")
 		return

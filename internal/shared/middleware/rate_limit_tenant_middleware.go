@@ -7,7 +7,7 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 type RateLimitTenantMiddleware struct {
@@ -32,7 +32,7 @@ func (m *RateLimitTenantMiddleware) LimitByTenant(next http.Handler) http.Handle
 		if tenantIDFromQuery != "" {
 			tenantID = tenantIDFromQuery
 		} else {
-			tenant := constants.GetTenantFromContext(ctx)
+			tenant := tenant.FromContext(ctx)
 			if tenant == nil {
 				next.ServeHTTP(w, r)
 				return

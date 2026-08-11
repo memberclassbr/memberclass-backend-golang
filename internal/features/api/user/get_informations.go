@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 // ---------- DTOs ----------
@@ -56,7 +56,7 @@ func (f *Feature) GetUserInformations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant := constants.GetTenantFromContext(r.Context())
+	tenant := tenant.FromContext(r.Context())
 	if tenant == nil {
 		writeError(w, http.StatusUnauthorized, "Tenant not found in context")
 		return

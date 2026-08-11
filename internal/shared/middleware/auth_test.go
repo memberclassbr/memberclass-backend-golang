@@ -14,7 +14,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/memberclass-backend-golang/internal/platform/config"
-	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +53,7 @@ func TestAuthExternal_ValidKeyResolvesTenant(t *testing.T) {
 
 	var gotTenantID string
 	handler := m.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if tenant := constants.GetTenantFromContext(r.Context()); tenant != nil {
+		if tenant := tenant.FromContext(r.Context()); tenant != nil {
 			gotTenantID = tenant.ID
 		}
 		w.WriteHeader(http.StatusOK)
