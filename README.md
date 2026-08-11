@@ -1,6 +1,6 @@
 # MemberClass Backend - Golang
 
-MemberClass application backend developed in Go, following Clean Architecture principles and Domain-Driven Design (DDD).
+MemberClass application backend developed in Go, following Vertical Slice Architecture: one folder per feature, each owning its HTTP handling, its business rules and its SQL.
 
 ## 📋 Table of Contents
 
@@ -17,77 +17,70 @@ MemberClass application backend developed in Go, following Clean Architecture pr
 
 ## 🏗️ Architecture
 
-This project follows **Clean Architecture** with the following layers:
+This project follows **Vertical Slice Architecture**: one folder per feature,
+where an endpoint reads top-to-bottom in a single file (`parse → rules → SQL`).
+There is no domain/application/infrastructure split and no DI framework.
 
-### Layers
+### Layout
 
-1. **Domain Layer**
-   - Contains pure business logic
-   - Independent of external frameworks and libraries
-   - Defines entities, interfaces (ports), and use cases
+- `internal/features/` — one folder per feature, grouped by audience:
+  `api/` (tenant-facing), `admin/` (internal), `workers/` (background).
+  Each slice owns its handlers, its rules and its SQL.
+- `internal/platform/` — code that talks to the outside world: config, logger,
+  Redis, Postgres, Spaces, rate limiting, and the Bunny / iLovePDF / Resend
+  clients. Each package declares its contract next to its implementation.
+- `internal/shared/` — what several slices need: the request's tenant, the
+  session payload, middlewares, HTTP helpers, typed errors, pagination.
+- `internal/app/` — the composition root. `app.go` wires everything by hand;
+  `router.go` mounts the slices.
 
-2. **Application Layer**
-   - Orchestrates use cases
-   - Contains HTTP handlers, middlewares, and route configuration
-   - Depends only on the domain layer
+### Principles
 
-3. **Infrastructure Layer**
-   - Concrete implementations of interfaces defined in the domain
-   - Repositories, cache adapters, external services
-   - Depends on domain and application layers
-
-### Architectural Principles
-
-- **Dependency Inversion**: Inner layers don't depend on outer layers
-- **Interface Segregation**: Specific and well-defined interfaces
-- **Single Responsibility**: Each component has a single responsibility
-- **Dependency Injection**: Using Uber FX for dependency injection
-- **Test-Driven Development**: Comprehensive test coverage
+- **A slice owns its SQL.** No repository layer, no port interface between a
+  slice and its queries.
+- **Duplicate before abstracting.** Shared code moves to `internal/shared/`
+  only once the duplication actually hurts.
+- **Config is resolved once.** `os.Getenv` lives in `internal/platform/config`
+  and nowhere else; a deployment missing a required variable fails to start.
+- **Tests use go-sqlmock and local fakes.** Nothing is generated, so
+  `go test ./...` works on a fresh clone.
 
 ## 📁 Project Structure
 
 ```
 memberclass-backend-golang/
 ├── cmd/
-│   └── api/                    # Application entry point
-│       └── main.go
+│   ├── api/                    # The service
+│   └── analytics/              # CLI for rollups and backfills
 │
 ├── internal/
-│   ├── application/            # Application Layer
-│   │   ├── handlers/
-│   │   │   └── http/           # HTTP Handlers (Controllers)
-│   │   ├── middlewares/        # HTTP Middlewares
-│   │   └── router/             # Route configuration
+│   ├── app/                    # Composition root (wiring + router)
 │   │
-│   ├── domain/                 # Domain Layer (Core Business)
-│   │   ├── constants/          # Domain constants
-│   │   ├── dto/                 # Data Transfer Objects
-│   │   │   ├── request/        # Request DTOs
-│   │   │   └── response/       # Response DTOs
-│   │   ├── entities/           # Business entities
-│   │   ├── memberclasserrors/  # Custom errors
-│   │   ├── ports/              # Interfaces (Contracts)
-│   │   ├── usecases/           # Use cases (Business Logic)
-│   │   └── utils/              # Domain utilities
+│   ├── features/
+│   │   ├── api/                # Tenant-facing endpoints
+│   │   │   ├── activity_summary/  ai/  auth/  comment/  docs/
+│   │   │   ├── social/  sso/  student/  user/  user_activities/
+│   │   │   └── video/  vitrine/
+│   │   ├── admin/              # Internal endpoints
+│   │   │   ├── lesson_pdf/     # PDF → page images
+│   │   │   └── member_import/  # Bulk member import
+│   │   └── workers/            # Background pipelines
+│   │       ├── analytics/      # Rollup jobs + cron scheduler
+│   │       ├── notifications/  # FCM push dispatch
+│   │       └── transcription/  # Video → Whisper → pgvector
 │   │
-│   ├── infrastructure/         # Infrastructure Layer
-│   │   └── adapters/           # Concrete implementations
-│   │       ├── cache/          # Cache (Redis)
-│   │       ├── database/       # Database configuration
-│   │       ├── external_services/  # External services
-│   │       │   ├── bunny/      # Bunny CDN integration
-│   │       │   └── ilovepdf/   # iLovePDF integration
-│   │       ├── logger/         # Logging system
-│   │       ├── rate_limiter/   # Rate limiting
-│   │       ├── repository/     # Data repositories
-│   │       └── storage/        # Storage (S3)
+│   ├── platform/               # Talks to the outside world
+│   │   ├── bunny/  cache/  config/  database/  ilovepdf/
+│   │   └── logger/  ratelimit/  resend/  storage/
 │   │
-│   └── mocks/                  # Test mocks
+│   └── shared/                 # Cross-slice rules and types
+│       ├── constants/  httpx/  memberclasserrors/  middleware/
+│       └── pagination/  session/  tenant/  utils/
 │
+├── scripts/smoke.sh            # Endpoint smoke test for a deployment
 ├── docker-compose.yml          # Docker configuration
 ├── Dockerfile                  # Docker image
 ├── Makefile                    # Automation commands
-├── .mockery.yaml              # Mockery configuration
 ├── swagger.yaml                # OpenAPI documentation
 ├── memberclass-api.postman_collection.json  # Postman collection
 └── README.md                   # This file
@@ -99,7 +92,6 @@ memberclass-backend-golang/
 
 - **Go 1.25.1** - Main language
 - **Chi Router v5** - HTTP routing
-- **Uber FX** - Dependency injection
 
 ### Database and Cache
 
@@ -431,13 +423,17 @@ go tool cover -html=coverage.out
 ### Run tests for a specific package
 
 ```bash
-go test ./internal/domain/usecases/...
+go test ./internal/features/api/vitrine/...
 ```
 
-### Generate mocks
+### Smoke test a deployment
+
+`scripts/smoke.sh` hits every route and reports the status of each. It proves
+routes are mounted and enforcing their credentials; it does not compare
+response bodies, so payload shapes remain a manual check.
 
 ```bash
-go run github.com/vektra/mockery/v2@latest
+BASE_URL=https://api.example.com MC_API_KEY=... INTERNAL_API_KEY=... ./scripts/smoke.sh
 ```
 
 ## 📚 API Documentation
