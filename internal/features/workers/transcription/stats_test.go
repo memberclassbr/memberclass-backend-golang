@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 func TestGetTranscriptionStats_Requires401WithoutKey(t *testing.T) {

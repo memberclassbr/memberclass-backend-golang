@@ -1,18 +1,8 @@
-.PHONY: help install-tools generate-mocks test clean build run
+.PHONY: help test test-coverage clean build run docker-build docker-run smoke ci
 
 shelp: ## Shows this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
-
-install-tools: ## Installs necessary tools (mockery)
-	@echo "Installing Mockery..."
-	go install github.com/vektra/mockery/v2@latest
-	@echo "Mockery installed successfully!"
-
-generate-mocks: ## Generates all interface mocks
-	@echo "Generating mocks..."
-	~/go/bin/mockery
-	@echo "Mocks generated successfully!"
 
 test: ## Runs all tests
 	@echo "Running tests..."
@@ -45,8 +35,10 @@ docker-run: ## Runs the application in Docker
 	@echo "Running application in Docker..."
 	docker-compose up
 
-dev-setup: install-tools generate-mocks ## Sets up development environment
-	@echo "Development environment configured!"
+smoke: ## Hits every endpoint against a running deployment (see scripts/smoke.sh)
+	@./scripts/smoke.sh
 
-ci: generate-mocks test ## Runs CI pipeline (generate mocks + tests)
+ci: ## Runs the CI pipeline (build + tests)
+	go build ./...
+	go test ./...
 	@echo "CI pipeline executed successfully!"

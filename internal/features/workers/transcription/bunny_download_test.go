@@ -36,9 +36,9 @@ func TestGuidFromEmbedURL_RejectsNonBunnyHost(t *testing.T) {
 
 func TestGuidFromEmbedURL_RejectsMalformedPath(t *testing.T) {
 	cases := []string{
-		"https://iframe.mediadelivery.net/embed/383534",            // missing guid
-		"https://iframe.mediadelivery.net/play/383534/abc",         // wrong prefix
-		"https://iframe.mediadelivery.net/",                        // empty
+		"https://iframe.mediadelivery.net/embed/383534",    // missing guid
+		"https://iframe.mediadelivery.net/play/383534/abc", // wrong prefix
+		"https://iframe.mediadelivery.net/",                // empty
 	}
 	for _, c := range cases {
 		if _, _, err := guidFromEmbedURL(c); err == nil {

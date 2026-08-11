@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/application/middlewares/auth"
+	"github.com/memberclass-backend-golang/internal/shared/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,13 +35,13 @@ func newFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, func()) {
 }
 
 func withUserSession(r *http.Request, userID string) *http.Request {
-	u := &auth.AuthUser{
+	u := &middleware.AuthUser{
 		UserID: userID,
 		Email:  "admin@example.com",
 		Role:   "owner",
 		Exp:    time.Now().Add(time.Hour).Unix(),
 	}
-	return r.WithContext(auth.ContextWithAuthUser(r.Context(), u))
+	return r.WithContext(middleware.ContextWithAuthUser(r.Context(), u))
 }
 
 func doImport(f *Feature, body importRequest, userID string) *httptest.ResponseRecorder {

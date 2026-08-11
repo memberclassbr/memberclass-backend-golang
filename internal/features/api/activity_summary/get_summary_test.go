@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/constants"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,7 +137,7 @@ func TestGetSummary_CacheHit(t *testing.T) {
 	lastAccess := "2024-01-15T10:30:00.000Z"
 	cached := activitySummaryResponse{
 		Users:      []userActivitySummary{{Email: "a@b.com", UltimoAcesso: &lastAccess}},
-		Pagination: dto.PaginationMeta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
+		Pagination: pagination.Meta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
 	}
 	raw, _ := json.Marshal(cached)
 	cache.store[buildCacheKey(tenantID, req, time.Time{}, time.Time{})] = string(raw)
@@ -323,7 +322,7 @@ func TestGetActivitySummary_Success(t *testing.T) {
 
 func withTenant(r *http.Request) *http.Request {
 	t := &tenant.Tenant{ID: "tenant-123"}
-	ctx := context.WithValue(r.Context(), constants.TenantContextKey, t)
+	ctx := context.WithValue(r.Context(), tenant.ContextKey, t)
 	return r.WithContext(ctx)
 }
 

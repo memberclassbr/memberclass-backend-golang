@@ -25,14 +25,14 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/resend"
 )
 
 // Feature holds the shared dependencies for every action in this slice.
 type Feature struct {
 	db     *sql.DB
-	log    ports.Logger
+	log    logger.Logger
 	resend resend.Service
 
 	// inflight tracks background import goroutines so shutdown can drain
@@ -44,7 +44,7 @@ type Feature struct {
 }
 
 // New builds the slice. Wire it in cmd/api/main.go via fx.Provide.
-func New(db *sql.DB, log ports.Logger, resendSvc resend.Service) *Feature {
+func New(db *sql.DB, log logger.Logger, resendSvc resend.Service) *Feature {
 	return &Feature{db: db, log: log, resend: resendSvc}
 }
 

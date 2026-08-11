@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/domain/utils"
+	"github.com/memberclass-backend-golang/internal/shared/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 

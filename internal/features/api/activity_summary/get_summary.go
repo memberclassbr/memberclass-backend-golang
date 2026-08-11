@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	"github.com/memberclass-backend-golang/internal/domain/constants"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 )
 
 // ---------- DTOs ----------
@@ -34,7 +34,7 @@ type userActivitySummary struct {
 
 type activitySummaryResponse struct {
 	Users      []userActivitySummary `json:"users"`
-	Pagination dto.PaginationMeta    `json:"pagination"`
+	Pagination pagination.Meta       `json:"pagination"`
 }
 
 // ---------- 1. HTTP handler ----------
@@ -48,7 +48,7 @@ func (f *Feature) GetActivitySummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant := constants.GetTenantFromContext(r.Context())
+	tenant := tenant.FromContext(r.Context())
 	if tenant == nil {
 		writeCustomError(w, http.StatusUnauthorized, "API key invalid", "INVALID_API_KEY")
 		return
@@ -143,12 +143,12 @@ func resolveDateRange(req getActivitySummaryRequest) (time.Time, time.Time) {
 	return *req.StartDate, *req.EndDate
 }
 
-func buildPaginationMeta(page, limit int, total int64) dto.PaginationMeta {
+func buildPaginationMeta(page, limit int, total int64) pagination.Meta {
 	totalPages := int(total) / limit
 	if int(total)%limit > 0 {
 		totalPages++
 	}
-	return dto.PaginationMeta{
+	return pagination.Meta{
 		Page:        page,
 		Limit:       limit,
 		TotalCount:  total,

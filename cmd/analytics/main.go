@@ -10,9 +10,10 @@ import (
 
 	"github.com/joho/godotenv"
 
-	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
+	analyticsjobs "github.com/memberclass-backend-golang/internal/features/workers/analytics"
+	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/platform/database"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 func nowMinus24() time.Time { return time.Now().UTC().Add(-24 * time.Hour) }
@@ -34,7 +35,12 @@ func main() {
 
 	logr := logger.NewLogger()
 
-	db, err := database.NewDB()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
+
+	db, err := database.Open(cfg, logr)
 	if err != nil {
 		log.Fatalf("db: %v", err)
 	}
@@ -55,11 +61,11 @@ func main() {
 		}
 	case "monthly":
 		if *tenantId != "" {
-			if err := analyticsjobs.NewMonthlyRollupJob(db, logr).RunForMonthForTenant(ctx, prevMonthStart(), *tenantId); err != nil {
+			if err := analyticsjobs.NewMonthlyRollupJob(db, logr, cfg.Analytics.DeleteEnabled).RunForMonthForTenant(ctx, prevMonthStart(), *tenantId); err != nil {
 				log.Fatalf("monthly: %v", err)
 			}
 		} else {
-			if err := analyticsjobs.NewMonthlyRollupJob(db, logr).Execute(ctx); err != nil {
+			if err := analyticsjobs.NewMonthlyRollupJob(db, logr, cfg.Analytics.DeleteEnabled).Execute(ctx); err != nil {
 				log.Fatalf("monthly: %v", err)
 			}
 		}

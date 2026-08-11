@@ -11,7 +11,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 func setEnvKey(t *testing.T, val string) { t.Helper(); t.Setenv("INTERNAL_AI_API_KEY", val) }

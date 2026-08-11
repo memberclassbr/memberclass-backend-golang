@@ -10,18 +10,19 @@ import (
 	"database/sql"
 	"net/http"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/cache"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // Feature holds the shared dependencies for every action in this slice.
 type Feature struct {
 	db    *sql.DB
-	cache ports.Cache
-	log   ports.Logger
+	cache cache.Cache
+	log   logger.Logger
 }
 
 // New builds the slice. Wire it in cmd/api/main.go via fx.Provide.
-func New(db *sql.DB, cache ports.Cache, log ports.Logger) *Feature {
+func New(db *sql.DB, cache cache.Cache, log logger.Logger) *Feature {
 	return &Feature{db: db, cache: cache, log: log}
 }
 

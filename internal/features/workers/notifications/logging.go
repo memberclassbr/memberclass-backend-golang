@@ -1,18 +1,18 @@
 package notifications
 
-import "github.com/memberclass-backend-golang/internal/domain/ports"
+import "github.com/memberclass-backend-golang/internal/platform/logger"
 
-// dispatchLog wraps ports.Logger and prepends a fixed set of fields on
+// dispatchLog wraps logger.Logger and prepends a fixed set of fields on
 // every line, so every log emitted during a single dispatch carries the
 // same correlation keys (notification_id, tenant_id, type, fanout,
 // audience_type). Filtering Datadog/Railway logs by `notification_id:<id>`
 // returns the entire lifecycle of one push, including the failure cause.
 type dispatchLog struct {
-	log  ports.Logger
+	log  logger.Logger
 	base []any
 }
 
-func newDispatchLog(log ports.Logger, n Notification) *dispatchLog {
+func newDispatchLog(log logger.Logger, n Notification) *dispatchLog {
 	return &dispatchLog{
 		log: log,
 		base: []any{
