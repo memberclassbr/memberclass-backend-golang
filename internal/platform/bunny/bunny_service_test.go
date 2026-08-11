@@ -6,18 +6,17 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/mocks"
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 func TestBunnyService_CreateCollection(t *testing.T) {
 	tests := []struct {
 		name           string
-		request        dto.CreateCollectionRequest
-		access         dto.BunnyParametersAccess
+		request        CreateCollectionRequest
+		access         ParametersAccess
 		serverResponse string
 		serverStatus   int
 		expectedError  bool
@@ -25,11 +24,11 @@ func TestBunnyService_CreateCollection(t *testing.T) {
 	}{
 		{
 			name: "should create collection successfully",
-			request: dto.CreateCollectionRequest{
+			request: CreateCollectionRequest{
 				Name: "Test Collection",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverResponse: `{"guid": "test-guid", "name": "Test Collection"}`,
@@ -39,33 +38,33 @@ func TestBunnyService_CreateCollection(t *testing.T) {
 		},
 		{
 			name: "should return error when libraryID is empty",
-			request: dto.CreateCollectionRequest{
+			request: CreateCollectionRequest{
 				Name: "Test Collection",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "",
+			access: ParametersAccess{
+				LibraryID:     "",
 				LibraryApiKey: "test-key",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return error when libraryApiKey is empty",
-			request: dto.CreateCollectionRequest{
+			request: CreateCollectionRequest{
 				Name: "Test Collection",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return error when server returns error",
-			request: dto.CreateCollectionRequest{
+			request: CreateCollectionRequest{
 				Name: "Test Collection",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverResponse: `{"error": "Bad Request"}`,
@@ -76,13 +75,11 @@ func TestBunnyService_CreateCollection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
-			
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/test-library/collections", r.URL.Path)
 				assert.Equal(t, "test-key", r.Header.Get("AccessKey"))
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-				
+
 				w.WriteHeader(tt.serverStatus)
 				w.Write([]byte(tt.serverResponse))
 			}))
@@ -91,13 +88,8 @@ func TestBunnyService_CreateCollection(t *testing.T) {
 			service := &BunnyService{
 				client:  &http.Client{},
 				baseURL: server.URL + "/",
-				log:     mockLogger,
+				log:     testLogger{},
 			}
-
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Info(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Error(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 			result, err := service.CreateCollection(context.Background(), tt.request, tt.access)
 
@@ -116,8 +108,8 @@ func TestBunnyService_CreateCollection(t *testing.T) {
 func TestBunnyService_CreateVideo(t *testing.T) {
 	tests := []struct {
 		name           string
-		request        dto.CreateVideoRequest
-		access         dto.BunnyParametersAccess
+		request        CreateVideoRequest
+		access         ParametersAccess
 		serverResponse string
 		serverStatus   int
 		expectedError  bool
@@ -125,12 +117,12 @@ func TestBunnyService_CreateVideo(t *testing.T) {
 	}{
 		{
 			name: "should create video successfully",
-			request: dto.CreateVideoRequest{
+			request: CreateVideoRequest{
 				Title:        "Test Video",
 				CollectionID: "test-collection",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverResponse: `{"guid": "test-guid", "title": "Test Video"}`,
@@ -140,36 +132,36 @@ func TestBunnyService_CreateVideo(t *testing.T) {
 		},
 		{
 			name: "should return error when title is empty",
-			request: dto.CreateVideoRequest{
+			request: CreateVideoRequest{
 				Title:        "",
 				CollectionID: "test-collection",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return error when collectionID is empty",
-			request: dto.CreateVideoRequest{
+			request: CreateVideoRequest{
 				Title:        "Test Video",
 				CollectionID: "",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return error when server returns error",
-			request: dto.CreateVideoRequest{
+			request: CreateVideoRequest{
 				Title:        "Test Video",
 				CollectionID: "test-collection",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverResponse: `{"error": "Bad Request"}`,
@@ -180,13 +172,11 @@ func TestBunnyService_CreateVideo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
-			
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/test-library/videos", r.URL.Path)
 				assert.Equal(t, "test-key", r.Header.Get("AccessKey"))
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-				
+
 				w.WriteHeader(tt.serverStatus)
 				w.Write([]byte(tt.serverResponse))
 			}))
@@ -195,13 +185,8 @@ func TestBunnyService_CreateVideo(t *testing.T) {
 			service := &BunnyService{
 				client:  &http.Client{},
 				baseURL: server.URL + "/",
-				log:     mockLogger,
+				log:     testLogger{},
 			}
-
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Info(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Error(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 			result, err := service.CreateVideo(context.Background(), tt.request, tt.access)
 
@@ -220,20 +205,20 @@ func TestBunnyService_CreateVideo(t *testing.T) {
 func TestBunnyService_UploadVideo(t *testing.T) {
 	tests := []struct {
 		name          string
-		request       dto.UploadVideoRequest
-		access        dto.BunnyParametersAccess
+		request       UploadVideoRequest
+		access        ParametersAccess
 		serverStatus  int
 		expectedError bool
 	}{
 		{
 			name: "should upload video successfully",
-			request: dto.UploadVideoRequest{
+			request: UploadVideoRequest{
 				GUID:        "test-guid",
 				File:        []byte("fake video content"),
 				ContentType: "video/mp4",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverStatus:  http.StatusOK,
@@ -241,39 +226,39 @@ func TestBunnyService_UploadVideo(t *testing.T) {
 		},
 		{
 			name: "should return error when libraryID is empty",
-			request: dto.UploadVideoRequest{
+			request: UploadVideoRequest{
 				GUID:        "test-guid",
 				File:        []byte("fake video content"),
 				ContentType: "video/mp4",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "",
+			access: ParametersAccess{
+				LibraryID:     "",
 				LibraryApiKey: "test-key",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return error when libraryApiKey is empty",
-			request: dto.UploadVideoRequest{
+			request: UploadVideoRequest{
 				GUID:        "test-guid",
 				File:        []byte("fake video content"),
 				ContentType: "video/mp4",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return error when server returns error",
-			request: dto.UploadVideoRequest{
+			request: UploadVideoRequest{
 				GUID:        "test-guid",
 				File:        []byte("fake video content"),
 				ContentType: "video/mp4",
 			},
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverStatus:  http.StatusBadRequest,
@@ -283,14 +268,12 @@ func TestBunnyService_UploadVideo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
-			
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				expectedPath := "/test-library/videos/" + tt.request.GUID
 				assert.Equal(t, expectedPath, r.URL.Path)
 				assert.Equal(t, "test-key", r.Header.Get("AccessKey"))
 				assert.Equal(t, tt.request.ContentType, r.Header.Get("Content-Type"))
-				
+
 				w.WriteHeader(tt.serverStatus)
 			}))
 			defer server.Close()
@@ -298,13 +281,8 @@ func TestBunnyService_UploadVideo(t *testing.T) {
 			service := &BunnyService{
 				client:  &http.Client{},
 				baseURL: server.URL + "/",
-				log:     mockLogger,
+				log:     testLogger{},
 			}
-
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Info(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Error(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 			err := service.UploadVideo(context.Background(), tt.request, tt.access)
 
@@ -320,7 +298,7 @@ func TestBunnyService_UploadVideo(t *testing.T) {
 func TestBunnyService_GetCollections(t *testing.T) {
 	tests := []struct {
 		name           string
-		access         dto.BunnyParametersAccess
+		access         ParametersAccess
 		serverResponse string
 		serverStatus   int
 		expectedError  bool
@@ -328,8 +306,8 @@ func TestBunnyService_GetCollections(t *testing.T) {
 	}{
 		{
 			name: "should get collections successfully",
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverResponse: `{"items": [{"guid": "collection1"}, {"guid": "collection2"}]}`,
@@ -339,24 +317,24 @@ func TestBunnyService_GetCollections(t *testing.T) {
 		},
 		{
 			name: "should return error when libraryID is empty",
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "",
+			access: ParametersAccess{
+				LibraryID:     "",
 				LibraryApiKey: "test-key",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return error when libraryApiKey is empty",
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "",
 			},
 			expectedError: true,
 		},
 		{
 			name: "should return collections even when server returns error status",
-			access: dto.BunnyParametersAccess{
-				LibraryID:    "test-library",
+			access: ParametersAccess{
+				LibraryID:     "test-library",
 				LibraryApiKey: "test-key",
 			},
 			serverResponse: `{"totalItems": 0, "currentPage": 0, "itemsPerPage": 0, "items": []}`,
@@ -368,14 +346,12 @@ func TestBunnyService_GetCollections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockLogger := mocks.NewMockLogger(t)
-			
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				expectedPath := "/test-library/collections"
 				assert.True(t, strings.HasPrefix(r.URL.Path, expectedPath))
 				assert.Equal(t, "test-key", r.Header.Get("AccessKey"))
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-				
+
 				w.WriteHeader(tt.serverStatus)
 				w.Write([]byte(tt.serverResponse))
 			}))
@@ -384,13 +360,8 @@ func TestBunnyService_GetCollections(t *testing.T) {
 			service := &BunnyService{
 				client:  &http.Client{},
 				baseURL: server.URL + "/",
-				log:     mockLogger,
+				log:     testLogger{},
 			}
-
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Debug(mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-			mockLogger.EXPECT().Error(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 
 			result, err := service.GetCollections(context.Background(), tt.access)
 
@@ -406,14 +377,23 @@ func TestBunnyService_GetCollections(t *testing.T) {
 	}
 }
 
+// testLogger keeps these HTTP-level tests free of logging assertions.
+type testLogger struct{}
+
+func (testLogger) Debug(string, ...any) {}
+func (testLogger) Info(string, ...any)  {}
+func (testLogger) Warn(string, ...any)  {}
+func (testLogger) Error(string, ...any) {}
+
+// testConfig gives the client a base URL the tests override per case.
+func testConfig() *config.Config {
+	return &config.Config{Bunny: config.Bunny{BaseURL: "http://example.invalid/", Timeout: 30 * time.Second}}
+}
+
 func TestNewBunnyService(t *testing.T) {
 	t.Run("should create new bunny service instance", func(t *testing.T) {
-		mockLogger := mocks.NewMockLogger(t)
-		
-		mockLogger.EXPECT().Info(mock.Anything, mock.Anything, mock.Anything).Return()
-		
-		service := NewBunnyService(mockLogger)
-		
+		service := NewBunnyService(testConfig(), testLogger{})
+
 		assert.NotNil(t, service)
 	})
 }

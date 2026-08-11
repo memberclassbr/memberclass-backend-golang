@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
@@ -21,6 +20,7 @@ import (
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
+	videofeat "github.com/memberclass-backend-golang/internal/features/api/video"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/stretchr/testify/assert"
@@ -38,7 +38,7 @@ func createTestRouter(t *testing.T) *Router {
 	log := discardLogger{}
 	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "test-secret"}}
 
-	mockVideoHandler := &video.VideoHandler{}
+	mockVideo := videofeat.New(nil, nil, log)
 	mockLessonHandler := &lesson.LessonHandler{}
 	mockComment := commentfeat.New(nil, nil)
 	mockUserActivities := user_activities.New(nil, nil, nil)
@@ -59,7 +59,7 @@ func createTestRouter(t *testing.T) *Router {
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
 	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return NewRouter(mockVideo, mockLessonHandler, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
@@ -67,7 +67,7 @@ func TestNewRouter(t *testing.T) {
 
 	assert.NotNil(t, router)
 	assert.NotNil(t, router.Router)
-	assert.NotNil(t, router.videoHandler)
+	assert.NotNil(t, router.video)
 	assert.NotNil(t, router.lessonHandler)
 	assert.NotNil(t, router.rateLimitMiddleware)
 	assert.NotNil(t, router.authMiddleware)

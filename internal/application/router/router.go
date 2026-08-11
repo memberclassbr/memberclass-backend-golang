@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/cors"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
@@ -21,13 +20,14 @@ import (
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
+	videofeat "github.com/memberclass-backend-golang/internal/features/api/video"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/workers/transcription"
 )
 
 type Router struct {
 	chi.Router
-	videoHandler              *video.VideoHandler
+	video                     *videofeat.Feature
 	lessonHandler             *lesson.LessonHandler
 	comment                   *commentfeat.Feature
 	userActivities            *user_activities.Feature
@@ -51,7 +51,7 @@ type Router struct {
 }
 
 func NewRouter(
-	videoHandler *video.VideoHandler,
+	videoFeat *videofeat.Feature,
 	lessonHandler *lesson.LessonHandler,
 	commentFeat *commentfeat.Feature,
 	userActivities *user_activities.Feature,
@@ -96,7 +96,7 @@ func NewRouter(
 
 	return &Router{
 		Router:                    router,
-		videoHandler:              videoHandler,
+		video:                     videoFeat,
 		lessonHandler:             lessonHandler,
 		comment:                   commentFeat,
 		userActivities:            userActivities,
@@ -159,10 +159,10 @@ func (r *Router) SetupRoutes() {
 		})
 
 		router.Route("/videos", func(router chi.Router) {
-			router.With(
-				r.rateLimitMiddleware.CheckUploadLimit,
-				r.rateLimitMiddleware.IncrementAfterUpload,
-			).Post("/upload", r.videoHandler.UploadVideo)
+			r.video.Register(router, videofeat.MiddlewareSet{
+				CheckUploadLimit:     r.rateLimitMiddleware.CheckUploadLimit,
+				IncrementAfterUpload: r.rateLimitMiddleware.IncrementAfterUpload,
+			})
 		})
 
 		router.Route("/comments", func(router chi.Router) {

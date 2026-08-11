@@ -7,22 +7,19 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/bunny"
+	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 type BunnyService struct {
 	client  *http.Client
 	baseURL string
-	log     ports.Logger
+	log     logger.Logger
 }
 
-func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionRequest dto.CreateCollectionRequest, bunnyParametersAccess dto.BunnyParametersAccess) (*dto.CreateCollectionResponse, error) {
+func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionRequest CreateCollectionRequest, bunnyParametersAccess ParametersAccess) (*CreateCollectionResponse, error) {
 	if bunnyParametersAccess.LibraryID == "" || bunnyParametersAccess.LibraryApiKey == "" {
 		return nil, errors.New("libraryID and libraryApiKey is required")
 	}
@@ -69,7 +66,7 @@ func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionReq
 		return nil, errors.New(resp.Status)
 	}
 
-	var collection dto.CreateCollectionResponse
+	var collection CreateCollectionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&collection); err != nil {
 		b.log.Error("Failed to decode response", "error", err, "url", url)
 		return nil, err
@@ -80,7 +77,7 @@ func (b *BunnyService) CreateCollection(ctx context.Context, createCollectionReq
 
 }
 
-func (b *BunnyService) CreateVideo(ctx context.Context, video dto.CreateVideoRequest, bunnyParametersAccess dto.BunnyParametersAccess) (*dto.CreateVideoResponse, error) {
+func (b *BunnyService) CreateVideo(ctx context.Context, video CreateVideoRequest, bunnyParametersAccess ParametersAccess) (*CreateVideoResponse, error) {
 	if video.Title == "" || video.CollectionID == "" {
 		return nil, errors.New("title and collectionID are required")
 	}
@@ -127,7 +124,7 @@ func (b *BunnyService) CreateVideo(ctx context.Context, video dto.CreateVideoReq
 		return nil, errors.New(resp.Status)
 	}
 
-	var result dto.CreateVideoResponse
+	var result CreateVideoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		b.log.Error("Failed to decode response", "error", err, "url", url)
 		return nil, err
@@ -137,7 +134,7 @@ func (b *BunnyService) CreateVideo(ctx context.Context, video dto.CreateVideoReq
 	return &result, nil
 }
 
-func (b *BunnyService) UploadVideo(ctx context.Context, uploadVideoRequest dto.UploadVideoRequest, bunnyParametersAccess dto.BunnyParametersAccess) error {
+func (b *BunnyService) UploadVideo(ctx context.Context, uploadVideoRequest UploadVideoRequest, bunnyParametersAccess ParametersAccess) error {
 	if bunnyParametersAccess.LibraryID == "" || bunnyParametersAccess.LibraryApiKey == "" {
 		return errors.New("libraryID and libraryApiKey is required")
 	}
@@ -183,7 +180,7 @@ func (b *BunnyService) UploadVideo(ctx context.Context, uploadVideoRequest dto.U
 	return nil
 }
 
-func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess dto.BunnyParametersAccess) (*dto.BunnyCollectionsResponse, error) {
+func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess ParametersAccess) (*CollectionsResponse, error) {
 
 	if bunnyParametersAccess.LibraryID == "" || bunnyParametersAccess.LibraryApiKey == "" {
 		return nil, errors.New("libraryID and libraryApiKey is required")
@@ -221,7 +218,7 @@ func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess
 
 	b.log.Debug("HTTP response received", "statusCode", resp.StatusCode, "url", url)
 
-	var collectionsResponse dto.BunnyCollectionsResponse
+	var collectionsResponse CollectionsResponse
 	err = json.NewDecoder(resp.Body).Decode(&collectionsResponse)
 	if err != nil {
 		b.log.Error("Failed to decode response", "error", err, "url", url)
@@ -233,25 +230,16 @@ func (b *BunnyService) GetCollections(ctx context.Context, bunnyParametersAccess
 
 }
 
-func NewBunnyService(log ports.Logger) bunny.BunnyService {
-	timeoutStr := os.Getenv("BUNNY_TIMEOUT_SECONDS")
-	timeout := 30 * time.Second
-
-	if timeoutStr != "" {
-		if parsedTimeout, err := time.ParseDuration(timeoutStr + "s"); err == nil {
-			timeout = parsedTimeout
-		} else {
-			log.Warn("Invalid BUNNY_TIMEOUT_SECONDS, using default", "value", timeoutStr, "default", "30s")
-		}
-	}
-
-	log.Info("BunnyService initialized", "timeout", timeout.String())
+// NewBunnyService builds the client from the validated config. The timeout and
+// base URL used to be parsed from the environment on every construction, with
+// an unparsable timeout silently falling back to 30s; config resolves both once
+// at startup.
+func NewBunnyService(cfg *config.Config, log logger.Logger) Service {
+	log.Info("BunnyService initialized", "timeout", cfg.Bunny.Timeout.String())
 
 	return &BunnyService{
-		client: &http.Client{
-			Timeout: timeout,
-		},
-		baseURL: os.Getenv("BUNNY_BASE_URL"),
+		client:  &http.Client{Timeout: cfg.Bunny.Timeout},
+		baseURL: cfg.Bunny.BaseURL,
 		log:     log,
 	}
 }

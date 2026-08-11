@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
+	"github.com/memberclass-backend-golang/internal/platform/bunny"
 )
 
 // Tunables. Package-level so tests can read them; move into Feature if any
@@ -70,7 +70,7 @@ type Feature struct {
 	transcriptionDB *sql.DB // Railway pgvector (videos/transcripts/chunks/jobs/token_usage)
 	memberclassDB   *sql.DB // memberclass CockroachDB (Lesson/Tenant + transcriptionCompleted flag)
 	log             ports.Logger
-	bunny           bunnyport.BunnyService
+	bunny           bunny.Service
 
 	openaiAPIKey       string
 	openaiBaseURL      string
@@ -121,7 +121,7 @@ func New(
 	transcriptionDB *sql.DB,
 	memberclassDB *sql.DB,
 	log ports.Logger,
-	bunny bunnyport.BunnyService,
+	bunny bunny.Service,
 ) *Feature {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		log.Warn("transcription: ffmpeg not found in PATH — pipeline will refuse to run jobs", "error", err.Error())

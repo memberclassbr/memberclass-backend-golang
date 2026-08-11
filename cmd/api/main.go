@@ -13,15 +13,12 @@ import (
 	"github.com/joho/godotenv"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
 	"github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
-	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
-	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
@@ -33,15 +30,16 @@ import (
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
+	videofeat "github.com/memberclass-backend-golang/internal/features/api/video"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
+	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/database"
@@ -85,13 +83,12 @@ func main() {
 			resend.New,
 
 			lessons.NewPdfProcessorUseCase,
-			bunny2.NewTenantGetTenantBunnyCredentialsUseCase,
-			bunny2.NewUploadVideoBunnyCdnUseCase,
 			activity_summary.New,
 			studentfeat.New,
 			commentfeat.New,
 			aifeat.New,
 			authfeat.New,
+			videofeat.New,
 			ssofeat.New,
 			socialfeat.New,
 			userfeat.New,
@@ -103,7 +100,7 @@ func main() {
 			// chunk → embed → Railway pgvector). It reads the tenant database
 			// for lesson metadata and writes vectors to its own. No cron — the
 			// internal admin UI POSTs the explicit list of lessonIds.
-			func(txDB database.TranscriptionDB, db *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
+			func(txDB database.TranscriptionDB, db *sql.DB, log ports.Logger, bunnySvc bunny.Service) *transcriptionworker.Feature {
 				return transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 			},
 
@@ -115,7 +112,6 @@ func main() {
 			middleware.NewBearerMiddleware,
 
 			lesson2.NewLessonHandler,
-			video.NewVideoHandler,
 			internalhttp.NewSwaggerHandler,
 
 			router.NewRouter,

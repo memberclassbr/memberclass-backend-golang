@@ -13,10 +13,6 @@ packages:
       Cache:
       Storage:
       Job:
-  github.com/memberclass-backend-golang/internal/domain/ports/bunny:
-    interfaces:
-      BunnyService:
-      UploadVideoBunnyCdnUseCase:
   github.com/memberclass-backend-golang/internal/domain/ports/lesson:
     interfaces:
       LessonRepository:
@@ -27,7 +23,6 @@ packages:
   github.com/memberclass-backend-golang/internal/domain/ports/tenant:
     interfaces:
       TenantRepository:
-      TenantGetTenantBunnyCredentialsUseCase:
   github.com/memberclass-backend-golang/internal/domain/ports/user:
     interfaces:
       UserRepository:
