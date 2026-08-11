@@ -7,15 +7,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
-	"github.com/redis/go-redis/v9"
 )
 
 type RedisCache struct {
 	client *redis.Client
 	log    logger.Logger
 }
+
+// connectAttempts and connectBackoff cover the window where a platform's
+// private network is not resolvable yet. On Railway the internal DNS zone
+// (*.railway.internal, AAAA-only) comes up a beat after the container does, so
+// the first Ping can fail with "no such host" on a perfectly valid URL.
+const (
+	connectAttempts = 6
+	connectBackoff  = 2 * time.Second
+)
 
 // NewRedisCache connects to Redis. It returns an error rather than panicking:
 // an unreachable cache is a startup failure the composition root reports, not
@@ -36,8 +47,32 @@ func NewRedisCache(cfg *config.Config, log logger.Logger) (Cache, error) {
 
 	client := redis.NewClient(opts)
 
-	if _, err := client.Ping(context.Background()).Result(); err != nil {
-		return nil, fmt.Errorf("connect to Redis: %w", err)
+	// Every rate-limiter decision goes through this client, so a Redis that
+	// slows down shows up as latency on endpoints that have nothing to do with
+	// caching. Instrumenting it is what makes that attributable.
+	if err := redisotel.InstrumentTracing(client); err != nil {
+		log.Warn("Redis tracing unavailable: " + err.Error())
+	}
+	if err := redisotel.InstrumentMetrics(client); err != nil {
+		log.Warn("Redis metrics unavailable: " + err.Error())
+	}
+
+	var pingErr error
+	for attempt := 1; attempt <= connectAttempts; attempt++ {
+		if _, pingErr = client.Ping(context.Background()).Result(); pingErr == nil {
+			break
+		}
+		if attempt < connectAttempts {
+			log.Warn(fmt.Sprintf(
+				"Redis not reachable at %s (attempt %d/%d): %s — retrying in %s",
+				opts.Addr, attempt, connectAttempts, pingErr, connectBackoff,
+			))
+			time.Sleep(connectBackoff)
+		}
+	}
+	if pingErr != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("connect to Redis at %s after %d attempts: %w", opts.Addr, connectAttempts, pingErr)
 	}
 
 	log.Info("Redis connection established successfully")
