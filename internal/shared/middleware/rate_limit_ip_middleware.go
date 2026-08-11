@@ -1,4 +1,4 @@
-package rate_limit
+package middleware
 
 import (
 	"encoding/json"
@@ -6,16 +6,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
 )
 
 type RateLimitIPMiddleware struct {
-	rateLimiter rate_limit.RateLimiterIP
-	logger      ports.Logger
+	rateLimiter ratelimit.IPLimiter
+	logger      logger.Logger
 }
 
-func NewRateLimitIPMiddleware(rateLimiter rate_limit.RateLimiterIP, logger ports.Logger) *RateLimitIPMiddleware {
+func NewRateLimitIPMiddleware(rateLimiter ratelimit.IPLimiter, logger logger.Logger) *RateLimitIPMiddleware {
 	return &RateLimitIPMiddleware{
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -79,7 +79,7 @@ func (m *RateLimitIPMiddleware) getClientIP(r *http.Request) string {
 	return ""
 }
 
-func (m *RateLimitIPMiddleware) setRateLimitHeaders(w http.ResponseWriter, info rate_limit.RateLimitInfo) {
+func (m *RateLimitIPMiddleware) setRateLimitHeaders(w http.ResponseWriter, info ratelimit.Info) {
 	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(info.Limit))
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(info.Remaining))
 	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(info.Reset.Unix(), 10))
@@ -88,7 +88,7 @@ func (m *RateLimitIPMiddleware) setRateLimitHeaders(w http.ResponseWriter, info 
 	}
 }
 
-func (m *RateLimitIPMiddleware) sendRateLimitError(w http.ResponseWriter, info rate_limit.RateLimitInfo) {
+func (m *RateLimitIPMiddleware) sendRateLimitError(w http.ResponseWriter, info ratelimit.Info) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(info.Limit))
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(info.Remaining))

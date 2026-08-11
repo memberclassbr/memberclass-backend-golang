@@ -1,26 +1,34 @@
-package rate_limit
+package middleware
 
 import (
 	"context"
 	"fmt"
 	"net/http"
 
-	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
+	"github.com/memberclass-backend-golang/internal/shared/httpx"
 )
 
 type RateLimitMiddleware struct {
-	rateLimiter rate_limit.RateLimiterUpload
-	logger      ports.Logger
+	rateLimiter ratelimit.UploadLimiter
+	logger      logger.Logger
 }
 
-func NewRateLimitMiddleware(rateLimiter rate_limit.RateLimiterUpload, logger ports.Logger) *RateLimitMiddleware {
+func NewRateLimitMiddleware(rateLimiter ratelimit.UploadLimiter, logger logger.Logger) *RateLimitMiddleware {
 	return &RateLimitMiddleware{
 		rateLimiter: rateLimiter,
 		logger:      logger,
 	}
+}
+
+// rateLimitError is the body attached to a 429 from the upload limiter, so the
+// client can show how much of the quota is left and when it resets.
+type rateLimitError struct {
+	CurrentSize   int64 `json:"current_size"`
+	MaxSize       int64 `json:"max_size"`
+	RemainingSize int64 `json:"remaining_size"`
+	ResetTime     int64 `json:"reset_time"`
 }
 
 func (m *RateLimitMiddleware) CheckUploadLimit(next http.Handler) http.Handler {
@@ -30,21 +38,21 @@ func (m *RateLimitMiddleware) CheckUploadLimit(next http.Handler) http.Handler {
 		userID := r.Header.Get("user_id")
 		if userID == "" {
 			m.logger.Error("user_id header is required")
-			internalhttp.WriteError(w, "user_id header is required", http.StatusBadRequest)
+			httpx.WriteError(w, "user_id header is required", http.StatusBadRequest)
 			return
 		}
 
 		fileSize := r.ContentLength
 		if fileSize <= 0 {
 			m.logger.Error("Invalid file size")
-			internalhttp.WriteError(w, "Invalid file size", http.StatusBadRequest)
+			httpx.WriteError(w, "Invalid file size", http.StatusBadRequest)
 			return
 		}
 
 		response, err := m.rateLimiter.CheckUploadLimit(ctx, userID, fileSize)
 		if err != nil {
 			m.logger.Error("Error checking upload limit: " + err.Error())
-			internalhttp.WriteError(w, "Error checking upload limit", http.StatusInternalServerError)
+			httpx.WriteError(w, "Error checking upload limit", http.StatusInternalServerError)
 			return
 		}
 
@@ -52,14 +60,14 @@ func (m *RateLimitMiddleware) CheckUploadLimit(next http.Handler) http.Handler {
 			m.logger.Warn(fmt.Sprintf("Upload limit exceeded for user %s. Current: %d bytes, Requested: %d bytes, Limit: %d bytes",
 				userID, response.CurrentSize, fileSize, response.MaxSize))
 
-			rateLimitData := dto.RateLimitErrorDTO{
+			rateLimitData := rateLimitError{
 				CurrentSize:   response.CurrentSize,
 				MaxSize:       response.MaxSize,
 				RemainingSize: response.RemainingSize,
 				ResetTime:     response.ResetTime,
 			}
 
-			internalhttp.WriteErrorWithData(w, "Upload limit exceeded", rateLimitData, http.StatusTooManyRequests)
+			httpx.WriteErrorWithData(w, "Upload limit exceeded", rateLimitData, http.StatusTooManyRequests)
 			return
 		}
 

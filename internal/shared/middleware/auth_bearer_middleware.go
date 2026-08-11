@@ -18,7 +18,7 @@
 // No tenant is carried on the token — per-tenant authorization is the
 // responsibility of each slice (query `UsersOnTenants` for the target
 // tenantId and enforce the required role).
-package auth
+package middleware
 
 import (
 	"context"
@@ -28,11 +28,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // AuthUser is the payload every RequireAuth-protected handler gets from the
@@ -67,23 +67,18 @@ func ContextWithAuthUser(ctx context.Context, user *AuthUser) context.Context {
 
 // BearerMiddleware verifies JWT HS256 Authorization headers.
 type BearerMiddleware struct {
-	logger ports.Logger
+	logger logger.Logger
 	secret []byte
 	now    func() time.Time // overridable for tests
 }
 
-// NewBearerMiddleware builds the middleware. Reads NEXTAUTH_SECRET from env;
-// MUST match the Next.js frontend's secret byte-for-byte.
-func NewBearerMiddleware(logger ports.Logger) *BearerMiddleware {
-	secret := os.Getenv("NEXTAUTH_SECRET")
-	if secret == "" {
-		// Keep the app bootable so routes that don't require bearer auth
-		// still serve; every request to RequireAuth will simply reject.
-		logger.Warn("NEXTAUTH_SECRET is empty — bearer auth will reject all requests")
-	}
+// NewBearerMiddleware builds the middleware from the validated config. The
+// secret MUST match the Next.js frontend's byte-for-byte; config refuses to
+// start without it, so it is never empty here.
+func NewBearerMiddleware(cfg *config.Config, log logger.Logger) *BearerMiddleware {
 	return &BearerMiddleware{
-		logger: logger,
-		secret: []byte(secret),
+		logger: log,
+		secret: []byte(cfg.Auth.NextAuthSecret),
 		now:    time.Now,
 	}
 }

@@ -1,21 +1,21 @@
-package rate_limit
+package middleware
 
 import (
 	"encoding/json"
 	"net/http"
 	"strconv"
 
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
 	"github.com/memberclass-backend-golang/internal/shared/constants"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 )
 
 type RateLimitTenantMiddleware struct {
-	rateLimiter rate_limit.RateLimiterTenant
-	logger      ports.Logger
+	rateLimiter ratelimit.TenantLimiter
+	logger      logger.Logger
 }
 
-func NewRateLimitTenantMiddleware(rateLimiter rate_limit.RateLimiterTenant, logger ports.Logger) *RateLimitTenantMiddleware {
+func NewRateLimitTenantMiddleware(rateLimiter ratelimit.TenantLimiter, logger logger.Logger) *RateLimitTenantMiddleware {
 	return &RateLimitTenantMiddleware{
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -63,7 +63,7 @@ func (m *RateLimitTenantMiddleware) LimitByTenant(next http.Handler) http.Handle
 	})
 }
 
-func (m *RateLimitTenantMiddleware) setRateLimitHeaders(w http.ResponseWriter, info rate_limit.RateLimitInfo) {
+func (m *RateLimitTenantMiddleware) setRateLimitHeaders(w http.ResponseWriter, info ratelimit.Info) {
 	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(info.Limit))
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(info.Remaining))
 	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(info.Reset.Unix(), 10))
@@ -72,7 +72,7 @@ func (m *RateLimitTenantMiddleware) setRateLimitHeaders(w http.ResponseWriter, i
 	}
 }
 
-func (m *RateLimitTenantMiddleware) sendRateLimitError(w http.ResponseWriter, info rate_limit.RateLimitInfo) {
+func (m *RateLimitTenantMiddleware) sendRateLimitError(w http.ResponseWriter, info ratelimit.Info) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(info.Limit))
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(info.Remaining))

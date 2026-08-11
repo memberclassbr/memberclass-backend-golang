@@ -5,8 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/memberclass-backend-golang/internal/shared/constants"
@@ -17,18 +15,18 @@ type RateLimiterUpload struct {
 	log    logger.Logger
 }
 
-func NewRateLimiterUpload(client cache.Cache, log logger.Logger) rate_limit.RateLimiterUpload {
+func NewRateLimiterUpload(client cache.Cache, log logger.Logger) UploadLimiter {
 	return &RateLimiterUpload{
 		client: client,
 		log:    log,
 	}
 }
 
-func (r *RateLimiterUpload) CheckUploadLimit(ctx context.Context, key string, fileSize int64) (dto.RateLimitResponseDTO, error) {
+func (r *RateLimiterUpload) CheckUploadLimit(ctx context.Context, key string, fileSize int64) (UploadResult, error) {
 	currentSize, err := r.GetCurrentUploadSize(ctx, key)
 	if err != nil {
 		r.log.Error("Error getting current upload size for key " + key + ": " + err.Error())
-		return dto.RateLimitResponseDTO{}, err
+		return UploadResult{}, err
 	}
 
 	wouldExceed := currentSize+fileSize > constants.MaxUploadSizePerDay
@@ -38,7 +36,7 @@ func (r *RateLimiterUpload) CheckUploadLimit(ctx context.Context, key string, fi
 		remainingSize = 0
 	}
 
-	return dto.RateLimitResponseDTO{
+	return UploadResult{
 		Allowed:       !wouldExceed,
 		CurrentSize:   currentSize,
 		MaxSize:       constants.MaxUploadSizePerDay,

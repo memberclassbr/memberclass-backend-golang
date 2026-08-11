@@ -7,9 +7,9 @@ import (
 	"os"
 
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/sso"
-	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	ssoports "github.com/memberclass-backend-golang/internal/domain/ports/sso"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 )
 
 type SSOHandler struct {

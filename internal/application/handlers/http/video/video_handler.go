@@ -5,12 +5,12 @@ import (
 	"io"
 	"net/http"
 
-	http2 "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	"github.com/memberclass-backend-golang/internal/domain/ports/bunny"
 	"github.com/memberclass-backend-golang/internal/domain/ports/tenant"
+	"github.com/memberclass-backend-golang/internal/shared/httpx"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 )
 
 type VideoHandler struct {
@@ -34,21 +34,21 @@ func (h *VideoHandler) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseMultipartForm(0)
 	if err != nil {
 		h.log.Error("Failed to parse multipart form", "error", err)
-		http2.WriteError(w, "Failed to parse form", http.StatusBadRequest)
+		httpx.WriteError(w, "Failed to parse form", http.StatusBadRequest)
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		h.log.Error("File not found in request", "error", err)
-		http2.WriteError(w, "File is required", http.StatusBadRequest)
+		httpx.WriteError(w, "File is required", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
 	tenantID := r.FormValue("tenantId")
 	if tenantID == "" {
-		http2.WriteError(w, "tenantId is required", http.StatusBadRequest)
+		httpx.WriteError(w, "tenantId is required", http.StatusBadRequest)
 		return
 	}
 
@@ -62,7 +62,7 @@ func (h *VideoHandler) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	_, err = io.Copy(&buf, file)
 	if err != nil {
 		h.log.Error("Failed to read file", "error", err)
-		http2.WriteError(w, "Failed to read file", http.StatusInternalServerError)
+		httpx.WriteError(w, "Failed to read file", http.StatusInternalServerError)
 		return
 	}
 	fileBytes := buf.Bytes()
@@ -78,9 +78,9 @@ func (h *VideoHandler) UploadVideo(w http.ResponseWriter, r *http.Request) {
 		h.log.Error("Failed to get tenant credentials", "error", err, "tenantID", tenantID)
 
 		if memberClassErr, ok := err.(*memberclasserrors.MemberClassError); ok {
-			http2.WriteError(w, memberClassErr.Message, memberClassErr.Code)
+			httpx.WriteError(w, memberClassErr.Message, memberClassErr.Code)
 		} else {
-			http2.WriteError(w, "Tenant not found", http.StatusNotFound)
+			httpx.WriteError(w, "Tenant not found", http.StatusNotFound)
 		}
 		return
 	}
@@ -95,12 +95,12 @@ func (h *VideoHandler) UploadVideo(w http.ResponseWriter, r *http.Request) {
 		h.log.Error("Upload failed", "error", err, "tenantID", tenantID)
 
 		if memberClassErr, ok := err.(*memberclasserrors.MemberClassError); ok {
-			http2.WriteError(w, memberClassErr.Message, memberClassErr.Code)
+			httpx.WriteError(w, memberClassErr.Message, memberClassErr.Code)
 		} else {
-			http2.WriteError(w, "Upload failed", http.StatusInternalServerError)
+			httpx.WriteError(w, "Upload failed", http.StatusInternalServerError)
 		}
 		return
 	}
 
-	http2.WriteSuccess(w, result, http.StatusOK)
+	httpx.WriteSuccess(w, result, http.StatusOK)
 }

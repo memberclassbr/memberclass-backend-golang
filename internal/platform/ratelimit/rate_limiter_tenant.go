@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/memberclass-backend-golang/internal/shared/constants"
@@ -16,14 +15,14 @@ type RateLimiterTenantImpl struct {
 	log   logger.Logger
 }
 
-func NewRateLimiterTenant(cache cache.Cache, log logger.Logger) rate_limit.RateLimiterTenant {
+func NewRateLimiterTenant(cache cache.Cache, log logger.Logger) TenantLimiter {
 	return &RateLimiterTenantImpl{
 		cache: cache,
 		log:   log,
 	}
 }
 
-func (r *RateLimiterTenantImpl) CheckLimit(ctx context.Context, tenantID string, endpoint string) (bool, rate_limit.RateLimitInfo, error) {
+func (r *RateLimiterTenantImpl) CheckLimit(ctx context.Context, tenantID string, endpoint string) (bool, Info, error) {
 	key := constants.APIRateLimitTenantKeyPrefix + tenantID + ":" + endpoint
 	return r.checkLimit(ctx, key, constants.APIRateLimitTenantLimit, constants.APIRateLimitWindow)
 }
@@ -33,11 +32,11 @@ func (r *RateLimiterTenantImpl) Increment(ctx context.Context, tenantID string, 
 	return r.increment(ctx, key, constants.APIRateLimitTenantLimit, constants.APIRateLimitWindow)
 }
 
-func (r *RateLimiterTenantImpl) checkLimit(ctx context.Context, key string, limit int, window time.Duration) (bool, rate_limit.RateLimitInfo, error) {
+func (r *RateLimiterTenantImpl) checkLimit(ctx context.Context, key string, limit int, window time.Duration) (bool, Info, error) {
 	current, err := r.cache.Get(ctx, key)
 	if err != nil {
 		if err.Error() == "redis: nil" {
-			return true, rate_limit.RateLimitInfo{
+			return true, Info{
 				Limit:      limit,
 				Remaining:  limit,
 				Reset:      time.Now().Add(window),
@@ -45,13 +44,13 @@ func (r *RateLimiterTenantImpl) checkLimit(ctx context.Context, key string, limi
 			}, nil
 		}
 		r.log.Error("Error getting rate limit for key " + key + ": " + err.Error())
-		return false, rate_limit.RateLimitInfo{}, err
+		return false, Info{}, err
 	}
 
 	count, err := strconv.Atoi(current)
 	if err != nil {
 		r.log.Error("Error parsing rate limit count for key " + key + ": " + err.Error())
-		return false, rate_limit.RateLimitInfo{}, err
+		return false, Info{}, err
 	}
 
 	ttl, err := r.cache.TTL(ctx, key)
@@ -72,7 +71,7 @@ func (r *RateLimiterTenantImpl) checkLimit(ctx context.Context, key string, limi
 		retryAfter = int(ttl.Seconds())
 	}
 
-	return allowed, rate_limit.RateLimitInfo{
+	return allowed, Info{
 		Limit:      limit,
 		Remaining:  remaining,
 		Reset:      resetTime,

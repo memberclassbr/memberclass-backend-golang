@@ -11,8 +11,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
-	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
-	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
+	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
+
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
@@ -42,12 +42,12 @@ type Router struct {
 	ssoHandler                *sso.SSOHandler
 	ai                        *aifeat.Feature
 	vitrine                   *vitrinefeat.Feature
-	rateLimitMiddleware       *rate_limit.RateLimitMiddleware
-	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware
-	rateLimitIPMiddleware     *rate_limit.RateLimitIPMiddleware
-	authMiddleware            *auth2.AuthMiddleware
-	authExternalMiddleware    *auth2.AuthExternalMiddleware
-	bearerMiddleware          *auth2.BearerMiddleware
+	rateLimitMiddleware       *mw.RateLimitMiddleware
+	rateLimitTenantMiddleware *mw.RateLimitTenantMiddleware
+	rateLimitIPMiddleware     *mw.RateLimitIPMiddleware
+	authMiddleware            *mw.AuthMiddleware
+	authExternalMiddleware    *mw.AuthExternalMiddleware
+	bearerMiddleware          *mw.BearerMiddleware
 }
 
 func NewRouter(
@@ -66,12 +66,12 @@ func NewRouter(
 	ssoHandler *sso.SSOHandler,
 	aiFeat *aifeat.Feature,
 	vitrineFeat *vitrinefeat.Feature,
-	rateLimitMiddleware *rate_limit.RateLimitMiddleware,
-	rateLimitTenantMiddleware *rate_limit.RateLimitTenantMiddleware,
-	rateLimitIPMiddleware *rate_limit.RateLimitIPMiddleware,
-	authMiddleware *auth2.AuthMiddleware,
-	authExternalMiddleware *auth2.AuthExternalMiddleware,
-	bearerMiddleware *auth2.BearerMiddleware,
+	rateLimitMiddleware *mw.RateLimitMiddleware,
+	rateLimitTenantMiddleware *mw.RateLimitTenantMiddleware,
+	rateLimitIPMiddleware *mw.RateLimitIPMiddleware,
+	authMiddleware *mw.AuthMiddleware,
+	authExternalMiddleware *mw.AuthExternalMiddleware,
+	bearerMiddleware *mw.BearerMiddleware,
 ) *Router {
 	router := chi.NewRouter()
 

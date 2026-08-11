@@ -9,7 +9,6 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-
 type ScheduledJob struct {
 	Job      ports.Job
 	Schedule string
@@ -88,4 +87,3 @@ func (s *Scheduler) Stop() {
 	<-ctx.Done()
 	s.logger.Info("Scheduler stopped")
 }
-

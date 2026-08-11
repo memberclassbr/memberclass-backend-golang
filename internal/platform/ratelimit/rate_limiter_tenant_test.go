@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports/rate_limit"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +32,7 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 		ttl             time.Duration
 		ttlError        error
 		expectedAllowed bool
-		expectedInfo    rate_limit.RateLimitInfo
+		expectedInfo    Info
 		expectedError   bool
 	}{
 		{
@@ -45,7 +44,7 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 			ttl:             30 * time.Second,
 			ttlError:        nil,
 			expectedAllowed: true,
-			expectedInfo: rate_limit.RateLimitInfo{
+			expectedInfo: Info{
 				Limit:     constants.APIRateLimitTenantLimit,
 				Remaining: constants.APIRateLimitTenantLimit - constants.APIRateLimitTenantLimit/2,
 			},
@@ -60,7 +59,7 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 			ttl:             30 * time.Second,
 			ttlError:        nil,
 			expectedAllowed: false,
-			expectedInfo: rate_limit.RateLimitInfo{
+			expectedInfo: Info{
 				Limit:      constants.APIRateLimitTenantLimit,
 				Remaining:  0,
 				RetryAfter: 30,
@@ -76,7 +75,7 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 			ttl:             0,
 			ttlError:        nil,
 			expectedAllowed: true,
-			expectedInfo: rate_limit.RateLimitInfo{
+			expectedInfo: Info{
 				Limit:      constants.APIRateLimitTenantLimit,
 				Remaining:  constants.APIRateLimitTenantLimit,
 				RetryAfter: 0,
@@ -92,7 +91,7 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 			ttl:             0,
 			ttlError:        nil,
 			expectedAllowed: false,
-			expectedInfo:    rate_limit.RateLimitInfo{},
+			expectedInfo:    Info{},
 			expectedError:   true,
 		},
 		{
@@ -104,7 +103,7 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 			ttl:             0,
 			ttlError:        nil,
 			expectedAllowed: false,
-			expectedInfo:    rate_limit.RateLimitInfo{},
+			expectedInfo:    Info{},
 			expectedError:   true,
 		},
 		{
@@ -116,7 +115,7 @@ func TestRateLimiterTenant_CheckLimit(t *testing.T) {
 			ttl:             constants.APIRateLimitWindow,
 			ttlError:        errors.New("ttl error"),
 			expectedAllowed: true,
-			expectedInfo: rate_limit.RateLimitInfo{
+			expectedInfo: Info{
 				Limit:     constants.APIRateLimitTenantLimit,
 				Remaining: constants.APIRateLimitTenantLimit - constants.APIRateLimitTenantLimit/2,
 			},

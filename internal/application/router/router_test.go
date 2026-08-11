@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	httpHandlers "github.com/memberclass-backend-golang/internal/application/handlers/http"
+	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
-	auth2 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
-	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
+	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
+
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
@@ -22,11 +22,17 @@ import (
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
-	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
+
+// discardLogger keeps route-wiring tests free of logging assertions.
+type discardLogger struct{}
+
+func (discardLogger) Debug(string, ...any) {}
+func (discardLogger) Info(string, ...any)  {}
+func (discardLogger) Warn(string, ...any)  {}
+func (discardLogger) Error(string, ...any) {}
 
 func createTestRouter(t *testing.T) *Router {
 	mockVideoHandler := &video.VideoHandler{}
@@ -38,29 +44,20 @@ func createTestRouter(t *testing.T) *Router {
 	mockActivitySummary := activity_summary.New(nil, nil, nil)
 	mockMemberImport := member_import.New(nil, nil, nil)
 	mockStudent := studentfeat.New(nil, nil, nil)
-	mockSwaggerHandler := httpHandlers.NewSwaggerHandler()
+	mockSwaggerHandler := internalhttp.NewSwaggerHandler()
 	mockAuthHandler := &auth.AuthHandler{}
 	mockSSOHandler := &sso.SSOHandler{}
 	mockAI := aifeat.New(nil, &config.Config{}, nil)
 	mockVitrine := vitrinefeat.New(nil, nil)
-	mockLogger := &mocks.MockLogger{}
-	mockRateLimiter := &mocks.MockRateLimiterUpload{}
-	mockRateLimiterTenant := &mocks.MockRateLimiterTenant{}
-	mockRateLimiterIP := &mocks.MockRateLimiterIP{}
-	mockSessionValidator := &mocks.MockSessionValidatorUseCase{}
-	mockApiTokenUseCase := &mocks.MockApiTokenUseCase{}
+	log := discardLogger{}
+	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "test-secret"}}
 
-	mockLogger.On("Error", mock.Anything).Return().Maybe()
-	mockLogger.On("Warn", mock.Anything).Return().Maybe()
-	mockLogger.On("Info", mock.Anything).Return().Maybe()
-	mockLogger.On("Debug", mock.Anything).Return().Maybe()
-
-	rateLimitMiddleware := rate_limit.NewRateLimitMiddleware(mockRateLimiter, mockLogger)
-	rateLimitTenantMiddleware := rate_limit.NewRateLimitTenantMiddleware(mockRateLimiterTenant, mockLogger)
-	rateLimitIPMiddleware := rate_limit.NewRateLimitIPMiddleware(mockRateLimiterIP, mockLogger)
-	authMiddleware := auth2.NewAuthMiddleware(mockLogger, mockSessionValidator)
-	authExternalMiddleware := auth2.NewAuthExternalMiddleware(mockApiTokenUseCase)
-	bearerMiddleware := auth2.NewBearerMiddleware(mockLogger)
+	rateLimitMiddleware := mw.NewRateLimitMiddleware(nil, log)
+	rateLimitTenantMiddleware := mw.NewRateLimitTenantMiddleware(nil, log)
+	rateLimitIPMiddleware := mw.NewRateLimitIPMiddleware(nil, log)
+	authMiddleware := mw.NewAuthMiddleware(nil, cfg, log)
+	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
+	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
 
 	return NewRouter(mockVideoHandler, mockLessonHandler, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }

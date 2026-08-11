@@ -18,8 +18,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
-	auth3 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
-	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
+	"github.com/memberclass-backend-golang/internal/shared/middleware"
+
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
@@ -29,7 +29,6 @@ import (
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
 	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
-	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
@@ -91,7 +90,6 @@ func main() {
 			bunny.NewBunnyService,
 			resend.New,
 
-			user3.NewValidateSessionUseCase,
 			lessons.NewPdfProcessorUseCase,
 			bunny2.NewTenantGetTenantBunnyCredentialsUseCase,
 			bunny2.NewUploadVideoBunnyCdnUseCase,
@@ -118,12 +116,12 @@ func main() {
 				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
 			},
 
-			rate_limit.NewRateLimitMiddleware,
-			rate_limit.NewRateLimitTenantMiddleware,
-			rate_limit.NewRateLimitIPMiddleware,
-			auth3.NewAuthMiddleware,
-			auth3.NewAuthExternalMiddleware,
-			auth3.NewBearerMiddleware,
+			middleware.NewRateLimitMiddleware,
+			middleware.NewRateLimitTenantMiddleware,
+			middleware.NewRateLimitIPMiddleware,
+			middleware.NewAuthMiddleware,
+			middleware.NewAuthExternalMiddleware,
+			middleware.NewBearerMiddleware,
 
 			lesson2.NewLessonHandler,
 			video.NewVideoHandler,

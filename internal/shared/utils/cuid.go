@@ -111,4 +111,3 @@ func generateRandomString(length int) string {
 	}
 	return string(bytes)
 }
-

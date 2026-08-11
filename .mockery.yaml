@@ -28,11 +28,6 @@ packages:
     interfaces:
       PdfProcessorUseCase:
       PdfProcessService:
-  github.com/memberclass-backend-golang/internal/domain/ports/rate_limit:
-    interfaces:
-      RateLimiterUpload:
-      RateLimiterTenant:
-      RateLimiterIP:
   github.com/memberclass-backend-golang/internal/domain/ports/sso:
     interfaces:
       SSORepository:

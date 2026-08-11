@@ -277,11 +277,11 @@ func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger
 		for rows.Next() {
 			read++
 			var (
-				id, evType                                  string
-				whereEvent, withEvent                       string
-				value                                       sql.NullInt64
-				tenantIdN, userIdN                          sql.NullString
-				createdAt                                   time.Time
+				id, evType            string
+				whereEvent, withEvent string
+				value                 sql.NullInt64
+				tenantIdN, userIdN    sql.NullString
+				createdAt             time.Time
 			)
 			if err := rows.Scan(&id, &evType, &whereEvent, &withEvent, &value, &tenantIdN, &userIdN, &createdAt); err != nil {
 				rows.Close()

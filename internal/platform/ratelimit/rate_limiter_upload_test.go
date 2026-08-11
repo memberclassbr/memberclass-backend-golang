@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/dto"
 	"github.com/memberclass-backend-golang/internal/mocks"
 	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +20,7 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 		fileSize       int64
 		currentSize    int64
 		getError       error
-		expectedResult dto.RateLimitResponseDTO
+		expectedResult UploadResult
 		expectedError  bool
 	}{
 		{
@@ -30,7 +29,7 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 			fileSize:    1024 * 1024,
 			currentSize: 5 * 1024 * 1024 * 1024,
 			getError:    nil,
-			expectedResult: dto.RateLimitResponseDTO{
+			expectedResult: UploadResult{
 				Allowed:       true,
 				CurrentSize:   5 * 1024 * 1024 * 1024,
 				MaxSize:       constants.MaxUploadSizePerDay,
@@ -45,7 +44,7 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 			fileSize:    6 * 1024 * 1024 * 1024,
 			currentSize: 5 * 1024 * 1024 * 1024,
 			getError:    nil,
-			expectedResult: dto.RateLimitResponseDTO{
+			expectedResult: UploadResult{
 				Allowed:       false,
 				CurrentSize:   5 * 1024 * 1024 * 1024,
 				MaxSize:       constants.MaxUploadSizePerDay,
@@ -60,7 +59,7 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 			fileSize:    1024 * 1024,
 			currentSize: 0,
 			getError:    nil,
-			expectedResult: dto.RateLimitResponseDTO{
+			expectedResult: UploadResult{
 				Allowed:       true,
 				CurrentSize:   0,
 				MaxSize:       constants.MaxUploadSizePerDay,
@@ -75,7 +74,7 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 			fileSize:       1024 * 1024,
 			currentSize:    0,
 			getError:       errors.New("redis error"),
-			expectedResult: dto.RateLimitResponseDTO{},
+			expectedResult: UploadResult{},
 			expectedError:  true,
 		},
 	}
@@ -98,7 +97,7 @@ func TestRateLimiterUpload_CheckUploadLimit(t *testing.T) {
 
 			if tt.expectedError {
 				assert.Error(t, err)
-				assert.Equal(t, dto.RateLimitResponseDTO{}, result)
+				assert.Equal(t, UploadResult{}, result)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedResult.Allowed, result.Allowed)

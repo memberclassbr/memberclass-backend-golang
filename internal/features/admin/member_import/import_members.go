@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/application/middlewares/auth"
+	"github.com/memberclass-backend-golang/internal/shared/middleware"
 	"github.com/memberclass-backend-golang/internal/shared/utils"
 )
 
@@ -84,7 +84,7 @@ func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authUser := auth.GetAuthUser(r.Context())
+	authUser := middleware.GetAuthUser(r.Context())
 	if authUser == nil || authUser.UserID == "" {
 		writeError(w, http.StatusUnauthorized, "session not found")
 		return

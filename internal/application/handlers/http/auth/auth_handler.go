@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/memberclass-backend-golang/internal/shared/constants"
 	"github.com/memberclass-backend-golang/internal/domain/dto/request/auth"
-	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	auth2 "github.com/memberclass-backend-golang/internal/domain/ports/auth"
+	"github.com/memberclass-backend-golang/internal/shared/constants"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 )
 
 type AuthHandler struct {
