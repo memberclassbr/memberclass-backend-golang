@@ -6,7 +6,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/riandyrn/otelchi"
+	otelchimetric "github.com/riandyrn/otelchi/metric"
+
 	"github.com/memberclass-backend-golang/internal/features/api/docs"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
@@ -15,6 +20,7 @@ import (
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
 	authfeat "github.com/memberclass-backend-golang/internal/features/api/auth"
 	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
+	healthfeat "github.com/memberclass-backend-golang/internal/features/api/health"
 	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
 	ssofeat "github.com/memberclass-backend-golang/internal/features/api/sso"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
@@ -42,6 +48,7 @@ type Router struct {
 	sso                       *ssofeat.Feature
 	ai                        *aifeat.Feature
 	vitrine                   *vitrinefeat.Feature
+	health                    *healthfeat.Feature
 	rateLimitMiddleware       *mw.RateLimitMiddleware
 	rateLimitTenantMiddleware *mw.RateLimitTenantMiddleware
 	rateLimitIPMiddleware     *mw.RateLimitIPMiddleware
@@ -51,6 +58,7 @@ type Router struct {
 }
 
 func newRouter(
+	log logger.Logger,
 	videoFeat *videofeat.Feature,
 	lessonPDFFeat *lessonpdf.Feature,
 	commentFeat *commentfeat.Feature,
@@ -66,6 +74,7 @@ func newRouter(
 	ssoFeat *ssofeat.Feature,
 	aiFeat *aifeat.Feature,
 	vitrineFeat *vitrinefeat.Feature,
+	healthFeat *healthfeat.Feature,
 	rateLimitMiddleware *mw.RateLimitMiddleware,
 	rateLimitTenantMiddleware *mw.RateLimitTenantMiddleware,
 	rateLimitIPMiddleware *mw.RateLimitIPMiddleware,
@@ -75,10 +84,35 @@ func newRouter(
 ) *Router {
 	router := chi.NewRouter()
 
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
+	// Order matters and used to be wrong. RequestID and RealIP put values in
+	// the context that everything downstream reads, so they go first — with the
+	// logger ahead of them, as it was, every line was written without a request
+	// id and with the platform proxy's address instead of the caller's.
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
+	router.Use(middleware.Recoverer)
+
+	// OTel sits above auth on purpose: a 401 is operational signal, and a
+	// middleware that short-circuits before this one would make those requests
+	// invisible. WithChiRoutes hands the middleware the router so it can label
+	// spans with the route pattern (/api/v1/vitrine/{vitrineId}) instead of the
+	// raw path — one time series per endpoint rather than one per id. The
+	// routes are registered later, in SetupRoutes; the middleware resolves the
+	// pattern per request, so it sees them.
+	router.Use(otelchi.Middleware(telemetry.ServiceName, otelchi.WithChiRoutes(router)))
+
+	// The Server* names replace NewRequestDurationMillis / NewRequestInFlight /
+	// NewResponseSizeBytes, which otelchi deprecated in favour of the semconv
+	// instrument names. Request duration carries the status code as a label, so
+	// request counts per status come out of it without a separate counter.
+	metricCfg := otelchimetric.NewBaseConfig(telemetry.ServiceName)
+	router.Use(
+		otelchimetric.NewServerRequestDuration(metricCfg),
+		otelchimetric.NewServerActiveRequests(metricCfg),
+		otelchimetric.NewServerResponseBodySize(metricCfg),
+	)
+
+	router.Use(mw.RequestLogger(log))
 
 	// CORS: echo back the request Origin so the response works for any
 	// tenant subdomain / custom domain (multi-tenant). AllowCredentials=true
@@ -111,6 +145,7 @@ func newRouter(
 		sso:                       ssoFeat,
 		ai:                        aiFeat,
 		vitrine:                   vitrineFeat,
+		health:                    healthFeat,
 		rateLimitMiddleware:       rateLimitMiddleware,
 		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
 		rateLimitIPMiddleware:     rateLimitIPMiddleware,
@@ -121,6 +156,10 @@ func newRouter(
 }
 
 func (r *Router) SetupRoutes() {
+	// Mounted at the root, unguarded, so the platform's healthcheck can reach
+	// it without a credential. See the health package comment.
+	r.health.Register(r.Router, healthfeat.MiddlewareSet{})
+
 	r.Get("/docs", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/docs/", http.StatusMovedPermanently)
 	})

@@ -20,6 +20,7 @@ import (
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
 	authfeat "github.com/memberclass-backend-golang/internal/features/api/auth"
 	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
+	healthfeat "github.com/memberclass-backend-golang/internal/features/api/health"
 	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
 	ssofeat "github.com/memberclass-backend-golang/internal/features/api/sso"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
@@ -68,9 +69,11 @@ type App struct {
 
 // New opens every connection and builds every slice. The caller owns the
 // returned App and must call Run, which handles shutdown.
-func New(cfg *config.Config) (*App, error) {
-	log := logger.NewLogger()
-
+//
+// The logger is passed in rather than built here: main needs one before this
+// point, to report a telemetry setup that failed, and building a second would
+// reinstall the global slog handler behind the first one's back.
+func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	// One line per feature this deployment is running without. Missing
 	// optional variables are legitimate, but they must be visible: a silent
 	// warning is how a customer ends up with transcription switched off for a
@@ -135,6 +138,7 @@ func New(cfg *config.Config) (*App, error) {
 	transcription := transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 
 	r := newRouter(
+		log,
 		videofeat.New(db, bunnySvc, log),
 		lessonpdf.New(db, pdfSvc, spaces, cfg, log),
 		commentfeat.New(db, log),
@@ -150,6 +154,7 @@ func New(cfg *config.Config) (*App, error) {
 		ssofeat.New(db, cfg, log),
 		aifeat.New(db, cfg, log),
 		vitrinefeat.New(db, log),
+		healthfeat.New(db, redis, log),
 		rateLimitUpload,
 		rateLimitTenant,
 		rateLimitIP,

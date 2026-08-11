@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/features/api/docs"
+	healthfeat "github.com/memberclass-backend-golang/internal/features/api/health"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	lessonpdf "github.com/memberclass-backend-golang/internal/features/admin/lesson_pdf"
@@ -59,7 +60,7 @@ func createTestRouter(t *testing.T) *Router {
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
 	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
 
-	return newRouter(mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return newRouter(log, mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, healthfeat.New(nil, nil, log), rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {

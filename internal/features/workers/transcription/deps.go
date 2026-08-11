@@ -39,6 +39,8 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
+
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 )
 
 // Tunables. Package-level so tests can read them; move into Feature if any
@@ -165,7 +167,7 @@ func New(
 		openaiBaseURL:       defaultOpenAIBase,
 		bunnyBaseURL:        defaultBunnyBaseURL,
 		bunnyAccountAPIKey:  os.Getenv("BUNNY_API_KEY"),
-		httpClient:          &http.Client{Timeout: 5 * time.Minute},
+		httpClient:          telemetry.Client(5 * time.Minute),
 		pandaAPIKey:         pandaKey,
 		pandaBaseURL:        defaultPandaBaseURL,
 		pandaAllowedTenants: pandaTenants,

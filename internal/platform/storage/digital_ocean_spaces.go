@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -13,8 +14,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 )
 
 type DigitalOceanSpaces struct {
@@ -38,8 +41,15 @@ func NewDigitalOceanSpaces(appCfg *config.Config, logger logger.Logger) (Storage
 	region := extractRegionFromURL(spacesURL)
 	endpoint := spacesURL
 	publicURL := fmt.Sprintf("https://%s.%s.digitaloceanspaces.com", bucket, region)
+	// The SDK gets an instrumented HTTP client rather than its own, so uploads
+	// to Spaces appear as client spans on the request that triggered them.
+	// No Timeout on purpose: the SDK bounds its own operations, and a blanket
+	// deadline here would cut large video uploads short.
+	spacesHTTP := &http.Client{Transport: telemetry.Transport(nil)}
+
 	cfg, err := awsconfig.LoadDefaultConfig(context.TODO(),
 		awsconfig.WithRegion(region),
+		awsconfig.WithHTTPClient(spacesHTTP),
 		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
 		awsconfig.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
 			func(service, region string, options ...interface{}) (aws.Endpoint, error) {

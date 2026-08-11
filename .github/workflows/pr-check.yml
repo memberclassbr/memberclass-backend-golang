@@ -108,7 +108,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           go test -v -coverprofile=coverage.out -covermode=atomic \
-            -coverpkg=./internal/features/...,./internal/platform/...,./internal/shared/...,./internal/app/...,./internal/application/router/... \
+            -coverpkg=./internal/features/...,./internal/platform/...,./internal/shared/...,./internal/app/... \
             ./...
           go tool cover -func=coverage.out > coverage.txt
 
