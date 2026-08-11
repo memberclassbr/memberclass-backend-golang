@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // Backfill runs the one-shot historical migration:
@@ -18,7 +18,7 @@ import (
 // from/to are YYYY-MM strings inclusive of from-month and exclusive of to-month+1.
 // When tenantId is non-empty, the run is scoped to that single tenant and never
 // deletes raw data (history is kept until the operator validates the dashboard).
-func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, toMonth, tenantId string, skipUserEvent bool) error {
+func Backfill(ctx context.Context, db *sql.DB, logger logger.Logger, fromMonth, toMonth, tenantId string, skipUserEvent bool) error {
 	from, err := parseMonth(fromMonth)
 	if err != nil {
 		return fmt.Errorf("parse from: %w", err)
@@ -71,8 +71,9 @@ func Backfill(ctx context.Context, db *sql.DB, logger ports.Logger, fromMonth, t
 		}
 	}
 
-	// Step 5: monthly rollup per closed month.
-	monthly := NewMonthlyRollupJob(db, logger)
+	// Step 5: monthly rollup per closed month. Backfill never deletes the raw
+	// rows it aggregates — that switch is for the scheduled job only.
+	monthly := NewMonthlyRollupJob(db, logger, false)
 	now := time.Now().UTC()
 	for m := from; m.Before(to); m = m.AddDate(0, 1, 0) {
 		end := m.AddDate(0, 1, 0)
@@ -101,7 +102,7 @@ func parseMonth(s string) (time.Time, error) {
 // lock-tracking memory budget (~1MB). 5k row updates run comfortably under that.
 const readBackfillBatchSize = 5_000
 
-func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
+func backfillLegacyRead(ctx context.Context, db *sql.DB, logger logger.Logger, tenantId string) error {
 	// Step 1: readAt = createdAt for completed reads where readAt IS NULL.
 	// Tenant scope is applied via the lesson chain because Read.tenantId may still be NULL.
 	if err := batchUpdate(ctx, logger, "Read.readAt", func() (sql.Result, error) {
@@ -185,7 +186,7 @@ func backfillLegacyRead(ctx context.Context, db *sql.DB, logger ports.Logger, te
 
 // batchUpdate loops the given UPDATE until RowsAffected = 0 to keep each transaction
 // small. Logs cumulative progress every batch.
-func batchUpdate(ctx context.Context, logger ports.Logger, label string, run func() (sql.Result, error)) error {
+func batchUpdate(ctx context.Context, logger logger.Logger, label string, run func() (sql.Result, error)) error {
 	var total int64
 	for {
 		res, err := run()
@@ -206,7 +207,7 @@ func batchUpdate(ctx context.Context, logger ports.Logger, label string, run fun
 	return nil
 }
 
-func printDistinctTypes(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
+func printDistinctTypes(ctx context.Context, db *sql.DB, logger logger.Logger, tenantId string) error {
 	var (
 		rows *sql.Rows
 		err  error
@@ -239,7 +240,7 @@ func printDistinctTypes(ctx context.Context, db *sql.DB, logger ports.Logger, te
 
 // migrateUserEventsRange copies UserEvent rows in [from, to) into typed event tables.
 // Unmapped types are skipped and counted. Uses 50k-row chunks.
-func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger ports.Logger, from, to time.Time, tenantId string) error {
+func migrateUserEventsRange(ctx context.Context, db *sql.DB, logger logger.Logger, from, to time.Time, tenantId string) error {
 	const chunk = 50_000
 	var offset int
 	mapped := 0

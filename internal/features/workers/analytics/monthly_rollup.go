@@ -5,11 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // MonthlyRollupJob aggregates a closed month per (tenant, user) into
@@ -17,11 +16,15 @@ import (
 // raw events for that month. Cron: 0 0 9 1 * * UTC (day 1, 09:00).
 type MonthlyRollupJob struct {
 	db     *sql.DB
-	logger ports.Logger
+	logger logger.Logger
+	// deleteEnabled allows the rollup to delete the raw rows it has
+	// aggregated. Off unless ANALYTICS_DELETE_ENABLED is explicitly "true":
+	// the deletion is not recoverable.
+	deleteEnabled bool
 }
 
-func NewMonthlyRollupJob(db *sql.DB, logger ports.Logger) *MonthlyRollupJob {
-	return &MonthlyRollupJob{db: db, logger: logger}
+func NewMonthlyRollupJob(db *sql.DB, logger logger.Logger, deleteEnabled bool) *MonthlyRollupJob {
+	return &MonthlyRollupJob{db: db, logger: logger, deleteEnabled: deleteEnabled}
 }
 
 func (j *MonthlyRollupJob) Name() string { return "analytics.monthly_rollup" }
@@ -54,7 +57,7 @@ func (j *MonthlyRollupJob) RunForMonth(ctx context.Context, month time.Time) err
 		}
 	}
 
-	if os.Getenv("ANALYTICS_DELETE_ENABLED") == "true" {
+	if j.deleteEnabled {
 		// Never delete raw events when any tenant rollup failed — the rollup is the
 		// only surviving copy, so an incomplete rollup + delete = permanent data loss.
 		if anyFailed {

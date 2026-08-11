@@ -1,28 +1,35 @@
-package jobs
+package analytics
 
 import (
 	"context"
 	"sync"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/robfig/cron/v3"
 )
 
+// Job is anything the scheduler can run on a cron expression. It lives here
+// because the analytics rollups are the only cron work in the service.
+type Job interface {
+	Execute(ctx context.Context) error
+	Name() string
+}
+
 type ScheduledJob struct {
-	Job      ports.Job
+	Job      Job
 	Schedule string
 }
 
 type Scheduler struct {
-	logger  ports.Logger
+	logger  logger.Logger
 	cron    *cron.Cron
 	jobs    []ScheduledJob
 	mu      sync.Mutex
 	running bool
 }
 
-func NewScheduler(logger ports.Logger) *Scheduler {
+func NewScheduler(logger logger.Logger) *Scheduler {
 	return &Scheduler{
 		logger: logger,
 		cron:   cron.New(cron.WithSeconds()),
@@ -30,7 +37,7 @@ func NewScheduler(logger ports.Logger) *Scheduler {
 	}
 }
 
-func (s *Scheduler) AddJob(job ports.Job, schedule string) error {
+func (s *Scheduler) AddJob(job Job, schedule string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

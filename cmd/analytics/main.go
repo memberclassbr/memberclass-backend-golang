@@ -10,7 +10,7 @@ import (
 
 	"github.com/joho/godotenv"
 
-	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
+	analyticsjobs "github.com/memberclass-backend-golang/internal/features/workers/analytics"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/database"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
@@ -61,11 +61,11 @@ func main() {
 		}
 	case "monthly":
 		if *tenantId != "" {
-			if err := analyticsjobs.NewMonthlyRollupJob(db, logr).RunForMonthForTenant(ctx, prevMonthStart(), *tenantId); err != nil {
+			if err := analyticsjobs.NewMonthlyRollupJob(db, logr, cfg.Analytics.DeleteEnabled).RunForMonthForTenant(ctx, prevMonthStart(), *tenantId); err != nil {
 				log.Fatalf("monthly: %v", err)
 			}
 		} else {
-			if err := analyticsjobs.NewMonthlyRollupJob(db, logr).Execute(ctx); err != nil {
+			if err := analyticsjobs.NewMonthlyRollupJob(db, logr, cfg.Analytics.DeleteEnabled).Execute(ctx); err != nil {
 				log.Fatalf("monthly: %v", err)
 			}
 		}

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // BackfillExtras populates CommentEvent and CommunityPostEvent from their primary
@@ -17,7 +17,7 @@ import (
 // When tenantId is non-empty the run is scoped to that single tenant.
 // Cursor pagination by primary-entity id keeps each transaction below the
 // CockroachDB lock-tracking budget.
-func BackfillExtras(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
+func BackfillExtras(ctx context.Context, db *sql.DB, logger logger.Logger, tenantId string) error {
 	logger.Info("analytics backfill-extras start", "tenantId", tenantId)
 
 	if err := backfillCommentFromComment(ctx, db, logger, tenantId); err != nil {
@@ -33,7 +33,7 @@ func BackfillExtras(ctx context.Context, db *sql.DB, logger ports.Logger, tenant
 
 const extrasChunkSize = 5_000
 
-func backfillCommentFromComment(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
+func backfillCommentFromComment(ctx context.Context, db *sql.DB, logger logger.Logger, tenantId string) error {
 	cursor := ""
 	total := int64(0)
 	for {
@@ -85,7 +85,7 @@ func backfillCommentFromComment(ctx context.Context, db *sql.DB, logger ports.Lo
 	return nil
 }
 
-func backfillPostFromPost(ctx context.Context, db *sql.DB, logger ports.Logger, tenantId string) error {
+func backfillPostFromPost(ctx context.Context, db *sql.DB, logger logger.Logger, tenantId string) error {
 	cursor := ""
 	total := int64(0)
 	for {

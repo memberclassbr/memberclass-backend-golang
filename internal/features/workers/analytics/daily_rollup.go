@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // DailyRollupJob aggregates the previous tenant-local day(s) of raw events into
@@ -14,10 +14,10 @@ import (
 // previous-day boundaries across America/{Sao_Paulo, New_York, Los_Angeles}.
 type DailyRollupJob struct {
 	db     *sql.DB
-	logger ports.Logger
+	logger logger.Logger
 }
 
-func NewDailyRollupJob(db *sql.DB, logger ports.Logger) *DailyRollupJob {
+func NewDailyRollupJob(db *sql.DB, logger logger.Logger) *DailyRollupJob {
 	return &DailyRollupJob{db: db, logger: logger}
 }
 

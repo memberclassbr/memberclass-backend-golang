@@ -12,8 +12,7 @@ import (
 
 	"github.com/joho/godotenv"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/jobs"
-	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
+	analyticsjobs "github.com/memberclass-backend-golang/internal/features/workers/analytics"
 	"github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	"github.com/memberclass-backend-golang/internal/application/router"
@@ -111,7 +110,7 @@ func main() {
 			internalhttp.NewSwaggerHandler,
 
 			router.NewRouter,
-			jobs.NewScheduler,
+			analyticsjobs.NewScheduler,
 		),
 		fx.Invoke(startApplication),
 	)
@@ -126,7 +125,7 @@ func startApplication(
 	cache ports.Cache,
 	migrationService *database.MigrationService,
 	router *router.Router,
-	scheduler *jobs.Scheduler,
+	scheduler *analyticsjobs.Scheduler,
 	transcriptionFeat *transcriptionworker.Feature,
 	memberImport *member_import.Feature,
 	notifWorker *notificationsworker.Feature,
@@ -145,7 +144,7 @@ func startApplication(
 	if err := scheduler.AddJob(analyticsjobs.NewDailyRollupJob(db, log), "0 0 8 * * *"); err != nil {
 		log.Error("failed to register analytics.daily_rollup", "err", err.Error())
 	}
-	if err := scheduler.AddJob(analyticsjobs.NewMonthlyRollupJob(db, log), "0 0 9 1 * *"); err != nil {
+	if err := scheduler.AddJob(analyticsjobs.NewMonthlyRollupJob(db, log, cfg.Analytics.DeleteEnabled), "0 0 9 1 * *"); err != nil {
 		log.Error("failed to register analytics.monthly_rollup", "err", err.Error())
 	}
 
