@@ -12,9 +12,7 @@ import (
 
 	"github.com/joho/godotenv"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
-	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	"github.com/memberclass-backend-golang/internal/application/jobs"
 	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
@@ -23,17 +21,15 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/router"
 	"github.com/memberclass-backend-golang/internal/domain/ports"
 	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
-	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
-	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
-	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
 	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
 	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
-	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
+	authfeat "github.com/memberclass-backend-golang/internal/features/api/auth"
 	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
 	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
+	ssofeat "github.com/memberclass-backend-golang/internal/features/api/sso"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
@@ -44,7 +40,6 @@ import (
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
-	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
 	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
@@ -81,7 +76,6 @@ func main() {
 			tenant.NewTenantRepository,
 			user.NewUserRepository,
 			lesson.NewLessonRepository,
-			sso_repository.NewSSORepository,
 
 			ratelimit.NewRateLimiterUpload,
 			ratelimit.NewRateLimiterTenant,
@@ -93,11 +87,12 @@ func main() {
 			lessons.NewPdfProcessorUseCase,
 			bunny2.NewTenantGetTenantBunnyCredentialsUseCase,
 			bunny2.NewUploadVideoBunnyCdnUseCase,
-			auth.NewApiTokenTenantUseCase,
 			activity_summary.New,
 			studentfeat.New,
 			commentfeat.New,
 			aifeat.New,
+			authfeat.New,
+			ssofeat.New,
 			socialfeat.New,
 			userfeat.New,
 			vitrinefeat.New,
@@ -111,10 +106,6 @@ func main() {
 			func(txDB database.TranscriptionDB, db *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
 				return transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 			},
-			auth.NewAuthUseCase,
-			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
-				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
-			},
 
 			middleware.NewRateLimitMiddleware,
 			middleware.NewRateLimitTenantMiddleware,
@@ -126,8 +117,6 @@ func main() {
 			lesson2.NewLessonHandler,
 			video.NewVideoHandler,
 			internalhttp.NewSwaggerHandler,
-			auth2.NewAuthHandler,
-			sso2.NewSSOHandler,
 
 			router.NewRouter,
 			jobs.NewScheduler,

@@ -7,17 +7,17 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
+	authfeat "github.com/memberclass-backend-golang/internal/features/api/auth"
 	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
 	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
+	ssofeat "github.com/memberclass-backend-golang/internal/features/api/sso"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
@@ -38,8 +38,8 @@ type Router struct {
 	transcription             *transcription.Feature
 	student                   *studentfeat.Feature
 	swaggerHandler            *internalhttp.SwaggerHandler
-	authHandler               *auth.AuthHandler
-	ssoHandler                *sso.SSOHandler
+	auth                      *authfeat.Feature
+	sso                       *ssofeat.Feature
 	ai                        *aifeat.Feature
 	vitrine                   *vitrinefeat.Feature
 	rateLimitMiddleware       *mw.RateLimitMiddleware
@@ -62,8 +62,8 @@ func NewRouter(
 	transcriptionFeat *transcription.Feature,
 	studentFeat *studentfeat.Feature,
 	swaggerHandler *internalhttp.SwaggerHandler,
-	authHandler *auth.AuthHandler,
-	ssoHandler *sso.SSOHandler,
+	authFeat *authfeat.Feature,
+	ssoFeat *ssofeat.Feature,
 	aiFeat *aifeat.Feature,
 	vitrineFeat *vitrinefeat.Feature,
 	rateLimitMiddleware *mw.RateLimitMiddleware,
@@ -107,8 +107,8 @@ func NewRouter(
 		transcription:             transcriptionFeat,
 		student:                   studentFeat,
 		swaggerHandler:            swaggerHandler,
-		authHandler:               authHandler,
-		ssoHandler:                ssoHandler,
+		auth:                      authFeat,
+		sso:                       ssoFeat,
 		ai:                        aiFeat,
 		vitrine:                   vitrineFeat,
 		rateLimitMiddleware:       rateLimitMiddleware,
@@ -132,19 +132,17 @@ func (r *Router) SetupRoutes() {
 	r.Route("/api/v1", func(router chi.Router) {
 
 		router.Route("/auth", func(router chi.Router) {
-			router.With(
-				r.authExternalMiddleware.Authenticate,
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Post("/", r.authHandler.GenerateMagicLink)
+			r.auth.Register(router, authfeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 		})
 
 		router.Route("/sso", func(router chi.Router) {
-			router.With(
-				r.rateLimitTenantMiddleware.LimitByTenant,
-			).Post("/generate-token", r.ssoHandler.GenerateSSOToken)
-
-			router.With(
-				r.authExternalMiddleware.Authenticate).Post("/validate-token", r.ssoHandler.ValidateSSOToken)
+			r.sso.Register(router, ssofeat.MiddlewareSet{
+				AuthExternal:    r.authExternalMiddleware.Authenticate,
+				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			})
 		})
 
 		router.Route("/ai", func(router chi.Router) {

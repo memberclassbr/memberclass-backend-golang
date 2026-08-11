@@ -7,17 +7,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
 
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	aifeat "github.com/memberclass-backend-golang/internal/features/api/ai"
+	authfeat "github.com/memberclass-backend-golang/internal/features/api/auth"
 	commentfeat "github.com/memberclass-backend-golang/internal/features/api/comment"
 	socialfeat "github.com/memberclass-backend-golang/internal/features/api/social"
+	ssofeat "github.com/memberclass-backend-golang/internal/features/api/sso"
 	studentfeat "github.com/memberclass-backend-golang/internal/features/api/student"
 	userfeat "github.com/memberclass-backend-golang/internal/features/api/user"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
@@ -35,6 +35,9 @@ func (discardLogger) Warn(string, ...any)  {}
 func (discardLogger) Error(string, ...any) {}
 
 func createTestRouter(t *testing.T) *Router {
+	log := discardLogger{}
+	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "test-secret"}}
+
 	mockVideoHandler := &video.VideoHandler{}
 	mockLessonHandler := &lesson.LessonHandler{}
 	mockComment := commentfeat.New(nil, nil)
@@ -45,13 +48,10 @@ func createTestRouter(t *testing.T) *Router {
 	mockMemberImport := member_import.New(nil, nil, nil)
 	mockStudent := studentfeat.New(nil, nil, nil)
 	mockSwaggerHandler := internalhttp.NewSwaggerHandler()
-	mockAuthHandler := &auth.AuthHandler{}
-	mockSSOHandler := &sso.SSOHandler{}
+	mockAuth := authfeat.New(nil, nil, cfg, log)
+	mockSSO := ssofeat.New(nil, cfg, log)
 	mockAI := aifeat.New(nil, &config.Config{}, nil)
 	mockVitrine := vitrinefeat.New(nil, nil)
-	log := discardLogger{}
-	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "test-secret"}}
-
 	rateLimitMiddleware := mw.NewRateLimitMiddleware(nil, log)
 	rateLimitTenantMiddleware := mw.NewRateLimitTenantMiddleware(nil, log)
 	rateLimitIPMiddleware := mw.NewRateLimitIPMiddleware(nil, log)
@@ -59,7 +59,7 @@ func createTestRouter(t *testing.T) *Router {
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
 	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
 
-	return NewRouter(mockVideoHandler, mockLessonHandler, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuthHandler, mockSSOHandler, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return NewRouter(mockVideoHandler, mockLessonHandler, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
