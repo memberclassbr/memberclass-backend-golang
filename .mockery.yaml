@@ -12,10 +12,3 @@ packages:
       Logger:
       Cache:
       Storage:
-  github.com/memberclass-backend-golang/internal/domain/ports/tenant:
-    interfaces:
-      TenantRepository:
-  github.com/memberclass-backend-golang/internal/domain/ports/user:
-    interfaces:
-      UserRepository:
-      SessionValidatorUseCase:
