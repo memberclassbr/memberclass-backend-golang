@@ -18,6 +18,8 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
+
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 )
 
 const (
@@ -60,7 +62,7 @@ type client struct {
 // the client fails on the first send instead.
 func New(cfg *config.Config, log logger.Logger) Service {
 	return &client{
-		http:    &http.Client{Timeout: defaultTimeout},
+		http:    telemetry.Client(defaultTimeout),
 		apiKey:  cfg.Resend.APIKey,
 		baseURL: cfg.Resend.BaseURL,
 		log:     log,

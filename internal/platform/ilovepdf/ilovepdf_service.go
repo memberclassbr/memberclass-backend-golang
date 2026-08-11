@@ -18,6 +18,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
+
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 )
 
 type IlovePdfService struct {
@@ -157,7 +159,7 @@ func (i *IlovePdfService) tryAuthenticate(apiKey string) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := telemetry.Client(30 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to authenticate: %w", err)
@@ -244,7 +246,7 @@ func (i *IlovePdfService) CreateTask(token string) (*TaskResponse, error) {
 
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := telemetry.Client(30 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %w", err)
@@ -266,8 +268,12 @@ func (i *IlovePdfService) CreateTask(token string) (*TaskResponse, error) {
 
 // AddFile - Upload PDF file to iLovePDF server
 func (i *IlovePdfService) AddFile(token, taskID, pdfURL, server string) (string, error) {
-	// 1. Download PDF from URL
-	pdfResponse, err := http.Get(pdfURL)
+	// 1. Download PDF from URL.
+	// Timeout stays 0, as it was with http.Get: source PDFs can be large and a
+	// blanket deadline here would fail the ones this exists to handle. The span
+	// has no parent because AddFile takes no context — it shows up as its own
+	// trace rather than under the lesson being processed.
+	pdfResponse, err := telemetry.Client(0).Get(pdfURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download PDF: %w", err)
 	}
@@ -315,7 +321,7 @@ func (i *IlovePdfService) AddFile(token, taskID, pdfURL, server string) (string,
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	// 5. Execute request
-	client := &http.Client{Timeout: 60 * time.Second} // Longer timeout for uploads
+	client := telemetry.Client(60 * time.Second) // Longer timeout for uploads
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload file: %w", err)
@@ -365,7 +371,7 @@ func (i *IlovePdfService) ProcessTask(token, taskID, serverFilename, server stri
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 120 * time.Second} // Longer timeout for processing
+	client := telemetry.Client(120 * time.Second) // Longer timeout for processing
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to process task: %w", err)
@@ -400,7 +406,7 @@ func (i *IlovePdfService) DownloadTask(token, taskID, server string) ([]byte, er
 
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := telemetry.Client(60 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download task: %w", err)

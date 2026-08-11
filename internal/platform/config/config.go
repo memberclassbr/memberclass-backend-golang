@@ -40,6 +40,7 @@ type Config struct {
 	Transcription Transcription
 	Notifications Notifications
 	Analytics     Analytics
+	Telemetry     Telemetry
 
 	warnings []string
 }
@@ -167,6 +168,31 @@ type Analytics struct {
 	DeleteEnabled bool
 }
 
+// Telemetry configures the OpenTelemetry exporters. It is optional in the
+// strict sense: with any of the three variables unset the providers are never
+// installed and the service runs uninstrumented, which is what a laptop
+// without a collector needs.
+//
+// Endpoint is a host[:port] with no scheme. The collector runs outside this
+// deployment, so the connection is TLS and Token travels inside it — a
+// plaintext exporter would put the credential on the wire in the clear.
+//
+// Project names the customer this deployment serves. It becomes the resource's
+// service.namespace rather than its service.name: every deployment reports the
+// same service name so the fleet can be read as one service, and the namespace
+// is what tells two customers apart.
+type Telemetry struct {
+	Enabled  bool
+	Endpoint string
+	Token    string
+	Project  string
+
+	// Version and InstanceID are best-effort. Railway injects them into every
+	// container; anywhere else they are empty and simply left off the resource.
+	Version    string
+	InstanceID string
+}
+
 // firebaseKeyEnvVars are the service-account variables the notifications
 // worker may look up, one per Firebase project.
 var firebaseKeyEnvVars = []string{
@@ -235,6 +261,7 @@ func Load() (*Config, error) {
 	cfg.loadResend()
 	cfg.loadTranscription()
 	cfg.loadNotifications()
+	cfg.loadTelemetry()
 
 	return cfg, nil
 }
@@ -325,6 +352,25 @@ func (c *Config) loadNotifications() {
 		return
 	}
 	c.Notifications.Enabled = true
+}
+
+func (c *Config) loadTelemetry() {
+	c.Telemetry.Endpoint = strings.TrimSpace(os.Getenv("OTEL_ENDPOINT_HOST"))
+	c.Telemetry.Token = strings.TrimSpace(os.Getenv("OTEL_TOKEN"))
+	c.Telemetry.Project = strings.TrimSpace(os.Getenv("OTEL_PROJECT"))
+	c.Telemetry.Version = strings.TrimSpace(os.Getenv("RAILWAY_GIT_COMMIT_SHA"))
+	c.Telemetry.InstanceID = strings.TrimSpace(os.Getenv("RAILWAY_REPLICA_ID"))
+
+	switch {
+	case c.Telemetry.Endpoint == "":
+		c.disable("telemetry", "OTEL_ENDPOINT_HOST not set")
+	case c.Telemetry.Token == "":
+		c.disable("telemetry", "OTEL_TOKEN not set")
+	case c.Telemetry.Project == "":
+		c.disable("telemetry", "OTEL_PROJECT not set")
+	default:
+		c.Telemetry.Enabled = true
+	}
 }
 
 // lookup returns the first non-empty value among key and its fallbacks. The

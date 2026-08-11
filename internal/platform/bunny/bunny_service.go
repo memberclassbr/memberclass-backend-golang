@@ -11,6 +11,8 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
+
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 )
 
 type BunnyService struct {
@@ -238,7 +240,7 @@ func NewBunnyService(cfg *config.Config, log logger.Logger) Service {
 	log.Info("BunnyService initialized", "timeout", cfg.Bunny.Timeout.String())
 
 	return &BunnyService{
-		client:  &http.Client{Timeout: cfg.Bunny.Timeout},
+		client:  telemetry.Client(cfg.Bunny.Timeout),
 		baseURL: cfg.Bunny.BaseURL,
 		log:     log,
 	}

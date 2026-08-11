@@ -58,7 +58,12 @@ section() { printf '\n%s== %s%s\n' "$dim" "$1" "$reset"; }
 
 printf 'Smoke test against %s\n' "$BASE_URL"
 
-# ---------- docs ----------
+# ---------- health & docs ----------
+
+section "health"
+# 503 here means the process is up but a dependency is not. Run this first:
+# every check below it will fail in a way that looks like a routing problem.
+check 200 "GET  /health"            "$BASE_URL/health"
 
 section "docs"
 check 200 "GET  /docs/"             "$BASE_URL/docs/"

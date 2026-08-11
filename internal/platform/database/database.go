@@ -20,7 +20,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	_ "github.com/lib/pq"
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
@@ -42,7 +45,7 @@ type TranscriptionDB struct {
 // Open connects to the tenant database. A failure here is fatal: every feature
 // needs it.
 func Open(cfg *config.Config, log logger.Logger) (*sql.DB, error) {
-	db, err := open(cfg.DB.Driver, cfg.DB.DSN)
+	db, err := open(cfg.DB.Driver, cfg.DB.DSN, "tenant")
 	if err != nil {
 		return nil, fmt.Errorf("tenant database: %w", err)
 	}
@@ -59,7 +62,7 @@ func OpenTranscription(cfg *config.Config, log logger.Logger) TranscriptionDB {
 		return TranscriptionDB{}
 	}
 
-	db, err := open(cfg.DB.Driver, cfg.Transcription.DSN)
+	db, err := open(cfg.DB.Driver, cfg.Transcription.DSN, "transcription")
 	if err != nil {
 		log.Warn("transcription database unavailable, slice will stay inert: " + err.Error())
 		return TranscriptionDB{}
@@ -69,8 +72,21 @@ func OpenTranscription(cfg *config.Config, log logger.Logger) TranscriptionDB {
 	return TranscriptionDB{DB: db}
 }
 
-func open(driver, dsn string) (*sql.DB, error) {
-	db, err := sql.Open(driver, dsn)
+// open connects and instruments in one step. otelsql wraps the driver so every
+// query carries a span, and RegisterDBStatsMetrics publishes the pool gauges —
+// the pair that separates "the query is slow" from "the query waited for a
+// connection", which look the same from the outside.
+//
+// role distinguishes the two pools in the resulting telemetry. Without it both
+// databases report under one name and a slow pgvector query is indistinguishable
+// from a slow tenant query.
+func open(driver, dsn, role string) (*sql.DB, error) {
+	attrs := otelsql.WithAttributes(
+		attribute.String("db.system.name", "postgresql"),
+		attribute.String("db.role", role),
+	)
+
+	db, err := otelsql.Open(driver, dsn, attrs)
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
@@ -81,6 +97,12 @@ func open(driver, dsn string) (*sql.DB, error) {
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping: %w", err)
+	}
+
+	// Pool metrics are a nice-to-have; a failure to register them is not a
+	// reason to refuse a working database connection.
+	if _, err := otelsql.RegisterDBStatsMetrics(db, attrs); err != nil {
+		return db, nil
 	}
 
 	return db, nil

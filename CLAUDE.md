@@ -153,6 +153,49 @@ database closes:
 - **transcription** — polls its own jobs table; video → Whisper → chunk → embed → pgvector.
 - **member_import** — startup reset for orphaned imports, plus a 24h retention job.
 
+## Observability
+
+OpenTelemetry, traces and metrics over OTLP/HTTP to a collector that runs
+outside the deployment. [internal/platform/telemetry](internal/platform/telemetry)
+owns the providers; `telemetry.Init` is called from `main` before `app.New`, and
+both `main` functions are shaped as `os.Exit(run())` so the deferred flush
+survives an error path — `os.Exit` and `log.Fatalf` skip defers.
+
+Missing OTEL variables are not an error. The providers are simply never
+installed and the service runs uninstrumented, which is what a laptop without a
+collector needs.
+
+What is instrumented:
+
+- **HTTP** — `otelchi` on the root router, with `WithChiRoutes` so spans carry
+  the route pattern (`/api/v1/vitrine/{vitrineId}`) rather than the raw path.
+  The OTel middlewares sit above every auth middleware, so a 401 is still
+  measured.
+- **SQL** — `otelsql` wraps both pools in `internal/platform/database`; each
+  carries a `db.role` attribute (`tenant` / `transcription`) so the two are
+  distinguishable. Pool gauges come from `RegisterDBStatsMetrics`.
+- **Redis** — `redisotel` tracing and metrics on the go-redis client.
+- **Outgoing HTTP** — `telemetry.Client` / `telemetry.Transport` for Bunny,
+  iLovePDF, Resend, Spaces and OpenAI. Use them instead of a bare
+  `&http.Client{}`, or the call becomes invisible.
+- **cmd/analytics** — one root span per command.
+
+Background workers are **not** instrumented yet. Their queries still produce
+spans through `otelsql`, but with no parent: the notifications poller (10s) and
+the transcription poller (30s) each emit a root trace per poll. The sampler is
+`AlwaysSample` by design — sampling policy lives in the collector, so changing
+the rate does not mean redeploying every customer — and the collector is what
+drops that poller noise.
+
+`middleware.RequestLogger` in [internal/shared/middleware](internal/shared/middleware)
+replaced chi's `middleware.Logger`. It stamps `trace_id` and `span_id`, so a
+span and its log line can be found from each other.
+
+`GET /health` ([internal/features/api/health](internal/features/api/health))
+pings the tenant database and Redis and answers 200 or 503. It carries no
+credential, so the body never names which dependency failed — that goes to the
+log. Point the platform's healthcheck at it.
+
 ## Conventions
 
 - Errors: `internal/shared/memberclasserrors` holds typed
