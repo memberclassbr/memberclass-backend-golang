@@ -37,8 +37,10 @@ type MiddlewareSet struct {
 	// follows it is a helper the handler calls, because the tenant arrives as
 	// a multipart field rather than in the URL.
 	BearerAuth func(http.Handler) http.Handler
-	// CheckUploadLimit rejects the request when the tenant is over its byte
+	// CheckUploadLimit rejects the request when the caller is over their byte
 	// quota; IncrementAfterUpload charges the quota once the upload succeeds.
+	// The quota is keyed on the go-token's `sub`, so both must sit below
+	// BearerAuth.
 	CheckUploadLimit     func(http.Handler) http.Handler
 	IncrementAfterUpload func(http.Handler) http.Handler
 }
