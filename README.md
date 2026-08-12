@@ -199,6 +199,7 @@ ILOVEPDF_API_KEYS=
 INTERNAL_AI_API_KEY=
 NEXTAUTH_SECRET=
 GO_API_JWT_SECRET=
+GO_API_JWT_LEGACY_FALLBACK=true
 PUBLIC_DOMAIN_URL=memberclass.com.br
 
 # Memberclass Transcription (Railway pgvector + OpenAI)
@@ -268,7 +269,8 @@ The application uses the following environment variables:
 
 - `INTERNAL_AI_API_KEY` - Internal API key for AI endpoints validation
 - `NEXTAUTH_SECRET` - Decrypts the NextAuth session cookie on `/api/comments`. Must match the frontend byte-for-byte
-- `GO_API_JWT_SECRET` - Verifies the go-token Bearer JWTs on `/imports/*`, `/sso/*` and `/videos/*`. Must match the frontend byte-for-byte, and be **at least 32 bytes** — boot fails otherwise. Not the same value as `NEXTAUTH_SECRET`: sharing one meant leaking the go-token key also leaked the session key
+- `GO_API_JWT_SECRET` - Verifies the go-token Bearer JWTs on `/imports/*`, `/sso/*` and `/videos/*`. **Optional**, because the frontend's copy is: it signs with `NEXTAUTH_SECRET` when its own is unset, so both keys are accepted while this is set. At least 32 bytes when set — boot fails otherwise
+- `GO_API_JWT_LEGACY_FALLBACK` - `false` stops accepting `NEXTAUTH_SECRET` on go-tokens. Set it once the frontend signs with `GO_API_JWT_SECRET`; until then the go-token key is still the session key, and the boot log says so (default `true`)
 - `PUBLIC_DOMAIN_URL` - Customer-facing frontend root domain (bare host). Builds the `From` address of transactional email and the magic-link host for tenants without a `customDomain`. Falls back to `NEXT_PUBLIC_DOMAIN_URL`. Replaced `PUBLIC_ROOT_DOMAIN`, which is no longer read
 
 **Memberclass Transcription (Railway pgvector + OpenAI):**

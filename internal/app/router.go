@@ -114,17 +114,40 @@ func newRouter(
 
 	router.Use(mw.RequestLogger(log))
 
-	// CORS: echo back the request Origin so the response works for any
-	// tenant subdomain / custom domain (multi-tenant). AllowCredentials=true
-	// requires a non-wildcard Allow-Origin, so we reflect the caller's Origin
-	// instead of sending "*". ExposedHeaders lets the frontend read pagination
-	// metadata.
+	// CORS is a literal "*", and the two things it does NOT do are the point.
+	//
+	// It does not reflect the caller's Origin, and it does not set
+	// Allow-Credentials. Those two together — which is what this used to send —
+	// are the combination browsers treat as "every site on the internet may
+	// make an authenticated cross-origin request here and read the reply". Any
+	// page could have driven `/api/comments` with the visitor's
+	// next-auth.session-token cookie attached and read the response back.
+	//
+	// A literal "*" is what makes that impossible rather than merely
+	// unattractive: a browser refuses to send credentials to a wildcard origin
+	// at all, so the cookie never leaves. The wildcard is not a relaxation
+	// here, it is the enforcement.
+	//
+	// It stays a wildcard rather than an allowlist because tenants bring their
+	// own custom domains and the set is not enumerable from this deployment.
+	// Little is given away by that: every other credential this service takes
+	// travels in a header the browser will not attach on its own — Bearer,
+	// x-api-key, x-internal-api-key — so a cross-origin request from an
+	// attacker's page arrives unauthenticated, which is a request from nobody.
+	//
+	// `GET /api/comments` is the one exception and the reason this mattered: it
+	// authenticates with the next-auth.session-token cookie, which browsers do
+	// attach on their own. The consequence cuts both ways — that route can no
+	// longer be called cross-origin from a browser by anyone, attacker or
+	// frontend. A same-origin or server-side caller is unaffected; a browser
+	// caller on another origin needs the route moved onto a header credential
+	// rather than the CORS policy widened back.
 	router.Use(cors.Handler(cors.Options{
-		AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
 		AllowedHeaders:   []string{"*"},
 		ExposedHeaders:   []string{"Content-Length", "X-Total-Count"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 

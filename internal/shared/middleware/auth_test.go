@@ -416,21 +416,88 @@ func TestBearer_RevocationLookupFailureFailsOpen(t *testing.T) {
 	assert.Equal(t, "u1", got.UserID)
 }
 
-// ---------- The two secrets are not the same secret ----------
+// ---------- Migrating off NEXTAUTH_SECRET ----------
 
-// GO_API_JWT_SECRET replaced NEXTAUTH_SECRET here so that leaking one does not
-// leak the other. A token signed with the session secret must not verify.
-func TestBearer_DoesNotAcceptTheNextAuthSecret(t *testing.T) {
-	const sessionSecret = "nextauth-secret-at-least-32-bytes!!"
+// sessionSecret stands in for NEXTAUTH_SECRET, which also derives the session
+// cookie's key. Getting a go-token off it is the whole point of the migration.
+const sessionSecret = "nextauth-session-secret-32-bytes-ok"
+
+// State 1 — GO_API_JWT_SECRET unset. The frontend falls back to signing with
+// NEXTAUTH_SECRET when its own is unset, so a backend that refused this would
+// reject every token from a frontend that has not had the env added yet.
+func TestBearer_FallsBackToTheSessionSecret(t *testing.T) {
 	cfg := &config.Config{Auth: config.Auth{
-		NextAuthSecret: sessionSecret,
-		GoAPIJWTSecret: bearerSecret,
+		NextAuthSecret:       sessionSecret,
+		AllowLegacyJWTSecret: true,
 	}}
 	m := NewBearerMiddleware(cfg, nil, fakeLogger{})
 
-	w, _ := serveBearer(m, "Bearer "+signJWT(t, sessionSecret, validClaims()))
+	w, got := serveBearer(m, "Bearer "+signJWT(t, sessionSecret, validClaims()))
 
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, got)
+	assert.Equal(t, "u1", got.UserID)
+}
+
+// State 2 — both set. Neither side has to deploy first: whichever key the
+// frontend is signing with today keeps working while the env catches up.
+func TestBearer_AcceptsEitherSecretDuringTheMigration(t *testing.T) {
+	cfg := &config.Config{Auth: config.Auth{
+		NextAuthSecret:       sessionSecret,
+		GoAPIJWTSecret:       bearerSecret,
+		AllowLegacyJWTSecret: true,
+	}}
+	m := NewBearerMiddleware(cfg, nil, fakeLogger{})
+
+	for name, secret := range map[string]string{
+		"the dedicated secret": bearerSecret,
+		"the session secret":   sessionSecret,
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, _ := serveBearer(m, "Bearer "+signJWT(t, secret, validClaims()))
+			assert.Equal(t, http.StatusOK, w.Code)
+		})
+	}
+}
+
+// State 3 — the fallback is closed. This is the state that actually buys
+// something: until a deployment reaches it, a leaked go-token key is still the
+// key the session cookie derives from.
+func TestBearer_StopsAcceptingTheSessionSecretOnceTheFallbackIsOff(t *testing.T) {
+	cfg := &config.Config{Auth: config.Auth{
+		NextAuthSecret:       sessionSecret,
+		GoAPIJWTSecret:       bearerSecret,
+		AllowLegacyJWTSecret: false,
+	}}
+	m := NewBearerMiddleware(cfg, nil, fakeLogger{})
+
+	t.Run("the session secret is refused", func(t *testing.T) {
+		w, _ := serveBearer(m, "Bearer "+signJWT(t, sessionSecret, validClaims()))
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+	t.Run("the dedicated secret still verifies", func(t *testing.T) {
+		w, _ := serveBearer(m, "Bearer "+signJWT(t, bearerSecret, validClaims()))
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+}
+
+// A third key verifies in no state at all — the fallback widens what is
+// accepted by exactly one known secret, not by anything that happens to be
+// configured.
+func TestBearer_RejectsAnUnrelatedSecretInEveryState(t *testing.T) {
+	const attacker = "attacker-controlled-secret-32-byte"
+
+	for name, auth := range map[string]config.Auth{
+		"fallback only":  {NextAuthSecret: sessionSecret, AllowLegacyJWTSecret: true},
+		"both":           {NextAuthSecret: sessionSecret, GoAPIJWTSecret: bearerSecret, AllowLegacyJWTSecret: true},
+		"dedicated only": {NextAuthSecret: sessionSecret, GoAPIJWTSecret: bearerSecret},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := NewBearerMiddleware(&config.Config{Auth: auth}, nil, fakeLogger{})
+			w, _ := serveBearer(m, "Bearer "+signJWT(t, attacker, validClaims()))
+			assert.Equal(t, http.StatusUnauthorized, w.Code)
+		})
+	}
 }
 
 // GetAuthUser must return nil for a request that never went through the

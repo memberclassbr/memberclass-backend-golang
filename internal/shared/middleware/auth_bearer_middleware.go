@@ -118,23 +118,40 @@ func ContextWithAuthUser(ctx context.Context, user *AuthUser) context.Context {
 // BearerMiddleware verifies JWT HS256 Authorization headers.
 type BearerMiddleware struct {
 	logger logger.Logger
-	secret []byte
-	cache  cache.Cache
-	now    func() time.Time // overridable for tests
+	// secrets are the keys a token may be signed with, most preferred first.
+	// There is more than one only during the migration off NEXTAUTH_SECRET —
+	// see config.Auth.AllowLegacyJWTSecret.
+	secrets [][]byte
+	cache   cache.Cache
+	now     func() time.Time // overridable for tests
 }
 
-// NewBearerMiddleware builds the middleware from the validated config. The
-// secret MUST match the Next.js frontend's byte-for-byte; config refuses to
-// start without it and enforces a length floor, so it is never empty or short
-// here.
+// NewBearerMiddleware builds the middleware from the validated config.
+//
+// Whichever secrets it ends up with MUST match the Next.js frontend's
+// byte-for-byte. The frontend signs with its own GO_API_JWT_SECRET when that is
+// set and falls back to NEXTAUTH_SECRET when it is not, so accepting both is
+// what lets the two sides move independently; config warns at boot until a
+// deployment has closed that window.
 //
 // `c` backs the revocation denylist and may be nil, which disables that check.
 func NewBearerMiddleware(cfg *config.Config, c cache.Cache, log logger.Logger) *BearerMiddleware {
+	var secrets [][]byte
+	if cfg.Auth.GoAPIJWTSecret != "" {
+		secrets = append(secrets, []byte(cfg.Auth.GoAPIJWTSecret))
+	}
+	// The legacy key is dropped outright once the fallback is turned off, and
+	// is the only key at all while the dedicated one is unset.
+	if cfg.Auth.NextAuthSecret != "" &&
+		(cfg.Auth.AllowLegacyJWTSecret || cfg.Auth.GoAPIJWTSecret == "") {
+		secrets = append(secrets, []byte(cfg.Auth.NextAuthSecret))
+	}
+
 	return &BearerMiddleware{
-		logger: log,
-		secret: []byte(cfg.Auth.GoAPIJWTSecret),
-		cache:  c,
-		now:    time.Now,
+		logger:  log,
+		secrets: secrets,
+		cache:   c,
+		now:     time.Now,
 	}
 }
 
@@ -206,11 +223,7 @@ func (m *BearerMiddleware) revoked(ctx context.Context, user *AuthUser) bool {
 // absent is the shape a forged or a stale token takes, and defaulting any of
 // them — no audience, no tenant, no expiry — widens what the token grants.
 func (m *BearerMiddleware) verify(raw string) (*AuthUser, error) {
-	if len(m.secret) == 0 {
-		return nil, errors.New("server is not configured with GO_API_JWT_SECRET")
-	}
-
-	payload, err := verifyHS256(raw, m.secret)
+	payload, err := m.verifySignature(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -244,6 +257,28 @@ func (m *BearerMiddleware) verify(raw string) (*AuthUser, error) {
 	}
 
 	return &user, nil
+}
+
+// verifySignature accepts the token if it verifies against any configured
+// secret, and returns its raw payload.
+//
+// Trying more than one leaks nothing: every comparison is hmac.Equal, and the
+// answer for a token that matches none is the same whichever key was tried
+// first. The list has one entry outside the migration window.
+func (m *BearerMiddleware) verifySignature(raw string) ([]byte, error) {
+	if len(m.secrets) == 0 {
+		return nil, errors.New("server is configured with no go-token signing secret")
+	}
+
+	var lastErr error
+	for _, secret := range m.secrets {
+		payload, err := verifyHS256(raw, secret)
+		if err == nil {
+			return payload, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 // verifyHS256 parses a compact JWT ("header.payload.signature"), checks

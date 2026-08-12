@@ -99,12 +99,28 @@ type Auth struct {
 	// GoAPIJWTSecret verifies the go-token Bearer JWTs the frontend mints for
 	// the routes at the root. Must match GO_API_JWT_SECRET on that side.
 	//
-	// It is deliberately not NextAuthSecret, which this used to reuse. That
-	// secret also derives the session cookie's key, so one leak was two: a
-	// captured go-token could be brute-forced offline into the ability to
-	// forge sessions. Load enforces a length floor on this one for the same
-	// reason — see minJWTSecretBytes.
+	// Optional, and that is the whole point: the frontend treats its own
+	// GO_API_JWT_SECRET as optional too and falls back to NEXTAUTH_SECRET when
+	// unset, so a backend that accepted only this one would reject every token
+	// the moment it deployed ahead of the frontend's env change.
+	//
+	// Load enforces a length floor when it is set — see minJWTSecretBytes.
 	GoAPIJWTSecret string
+
+	// AllowLegacyJWTSecret keeps NEXTAUTH_SECRET in the set of keys a go-token
+	// may be signed with. It is what makes the migration staged rather than a
+	// flag day, and it runs in three states:
+	//
+	//  1. GO_API_JWT_SECRET unset — verified with NEXTAUTH_SECRET, as before.
+	//  2. GO_API_JWT_SECRET set — both accepted. Neither side has to move
+	//     first; set the same value on the frontend whenever it suits.
+	//  3. GO_API_JWT_LEGACY_FALLBACK=false — only the dedicated secret.
+	//
+	// State 3 is the one that actually buys something, and until a deployment
+	// reaches it nothing has been gained: NEXTAUTH_SECRET also derives the
+	// session cookie's key, so a leaked go-token key is still a forged
+	// session. States 1 and 2 both warn at boot for that reason.
+	AllowLegacyJWTSecret bool
 }
 
 // minJWTSecretBytes is the floor for GO_API_JWT_SECRET.
@@ -113,6 +129,10 @@ type Auth struct {
 // in the crypto path enforces a key length. A short secret is brute-forceable
 // offline from a single captured token, and that token carries tenant-scoped
 // admin access — 32 bytes is what go-jose would have required for HS256.
+//
+// It is not enforced on NEXTAUTH_SECRET: that value is already deployed at
+// whatever length it has, and refusing to boot over it would be an outage
+// rather than a fix.
 const minJWTSecretBytes = 32
 
 // Public holds the customer-facing hostnames used to build links and email
@@ -258,7 +278,10 @@ func Load() (*Config, error) {
 		Auth: Auth{
 			InternalAPIKey: required("INTERNAL_AI_API_KEY"),
 			NextAuthSecret: required("NEXTAUTH_SECRET"),
-			GoAPIJWTSecret: required("GO_API_JWT_SECRET"),
+			GoAPIJWTSecret: lookup("GO_API_JWT_SECRET"),
+			// Defaults to on: a deployment that has not been told the frontend
+			// has migrated must keep accepting what the frontend signs today.
+			AllowLegacyJWTSecret: optional("GO_API_JWT_LEGACY_FALLBACK", "true") != "false",
 		},
 		Public: Public{
 			DomainURL: required("PUBLIC_DOMAIN_URL", "NEXT_PUBLIC_DOMAIN_URL"),
@@ -278,11 +301,23 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
 	}
 
-	if n := len(cfg.Auth.GoAPIJWTSecret); n < minJWTSecretBytes {
+	if n := len(cfg.Auth.GoAPIJWTSecret); n > 0 && n < minJWTSecretBytes {
 		return nil, fmt.Errorf(
 			"GO_API_JWT_SECRET must be at least %d bytes, got %d — a shorter HMAC key is brute-forceable offline from one captured token",
 			minJWTSecretBytes, n,
 		)
+	}
+	// Both of these say the same thing — a leaked go-token key is still the
+	// session key — and both stop once a deployment reaches state 3.
+	switch {
+	case cfg.Auth.GoAPIJWTSecret == "":
+		cfg.warnings = append(cfg.warnings,
+			"go-token JWTs are verified with NEXTAUTH_SECRET: set GO_API_JWT_SECRET "+
+				"(>= 32 bytes, the same value on the frontend) so a leaked API key is not also the session key")
+	case cfg.Auth.AllowLegacyJWTSecret:
+		cfg.warnings = append(cfg.warnings,
+			"go-token JWTs still accept NEXTAUTH_SECRET as a fallback: once the frontend signs with "+
+				"GO_API_JWT_SECRET, set GO_API_JWT_LEGACY_FALLBACK=false to close the window")
 	}
 
 	cfg.loadIlovePDF()

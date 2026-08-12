@@ -209,3 +209,47 @@ func TestRouter_MiddlewareOrder(t *testing.T) {
 
 	assert.NotEqual(t, 0, w.Code)
 }
+
+// ---------- CORS ----------
+
+// The policy used to reflect the caller's Origin AND send
+// Access-Control-Allow-Credentials: true. That pair is what lets any page on
+// the internet drive this API with the visitor's next-auth.session-token cookie
+// attached and read the reply. A literal "*" is what forbids it — a browser
+// will not send credentials to a wildcard origin — so these two assertions are
+// the guard, not a style preference.
+func TestRouter_CORSIsAWildcardWithoutCredentials(t *testing.T) {
+	router := createTestRouter(t)
+	router.SetupRoutes()
+
+	req := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+
+	w := httptest.NewRecorder()
+	router.Router.ServeHTTP(w, req)
+
+	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"),
+		"the Origin must not be echoed back")
+	assert.NotEqual(t, "https://evil.example", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"),
+		"credentials must never be allowed cross-origin")
+}
+
+// Same on an actual response, not just the preflight: the header the browser
+// enforces on is the one attached to the real request.
+func TestRouter_CORSOnASimpleRequest(t *testing.T) {
+	router := createTestRouter(t)
+	router.SetupRoutes()
+
+	// An unrouted path: CORS runs above the mux, so the headers are set either
+	// way, and a 404 keeps a handler with nil dependencies out of the test.
+	req := httptest.NewRequest(http.MethodGet, "/no-such-route", nil)
+	req.Header.Set("Origin", "https://evil.example")
+
+	w := httptest.NewRecorder()
+	router.Router.ServeHTTP(w, req)
+
+	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
+}

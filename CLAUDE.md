@@ -172,13 +172,26 @@ The middleware rejects, rather than defaults, on every claim it needs: no
 `aud`, no `tenantId`, no `exp`, wrong audience. A claim that is merely absent is
 the shape a forged or stale token takes.
 
-Two things follow from `aud`: it stops another service that verifies HS256 with
-the same secret from taking a go-token as its own, and it is why the secret is
-`GO_API_JWT_SECRET` and not `NEXTAUTH_SECRET`. The session cookie's key derives
-from the latter, so sharing one meant a leaked go-token key was also a forged
-session. `config.Load` requires the new variable and enforces a 32-byte floor —
-the Bearer verification is hand-rolled HMAC, so nothing in the crypto path would
-otherwise stop a short, offline-brute-forceable key.
+`aud` stops another service that verifies HS256 against the same secret from
+taking a go-token as its own.
+
+That secret is migrating off `NEXTAUTH_SECRET`, which the session cookie's key
+also derives from — sharing one means a leaked go-token key is also a forged
+session. The frontend treats its `GO_API_JWT_SECRET` as optional and falls back
+to `NEXTAUTH_SECRET`, so this side does too, in three states:
+
+| State | Config | Accepted |
+|---|---|---|
+| 1 | `GO_API_JWT_SECRET` unset | `NEXTAUTH_SECRET` |
+| 2 | it set | **both** |
+| 3 | `GO_API_JWT_LEGACY_FALLBACK=false` | only `GO_API_JWT_SECRET` |
+
+State 2 is what lets either side deploy first. **State 3 is the only one that
+buys anything**, and `config.Load` warns at boot until a deployment reaches it.
+The 32-byte floor applies to the new variable when set — the Bearer
+verification is hand-rolled HMAC, so nothing in the crypto path would otherwise
+stop a short, offline-brute-forceable key. It is not applied to
+`NEXTAUTH_SECRET`, which is already deployed at whatever length it has.
 
 `jti` backs a Redis denylist (`go-token:revoked:<jti>`) for a logout or an
 access revoked inside the token's window. The check fails **open** on a Redis
@@ -247,6 +260,32 @@ in a URL without anyone noticing.
 `"MagicToken"."method"` is the audit trail for how a link came to exist; each
 minting path uses its own value (`api_magic_link`, `admin_import`) rather than
 borrowing the frontend's.
+
+## CORS
+
+One policy on the root router: a literal `*`, no Origin reflection, no
+`Access-Control-Allow-Credentials`.
+
+The last two are the point. Reflecting the Origin *and* allowing credentials —
+which is what this sent until the go-token work — is the pair browsers read as
+"any site may make an authenticated cross-origin request here and read the
+reply". `GET /api/comments` authenticates with the `next-auth.session-token`
+cookie, so any page could have driven it with a visitor's session attached.
+
+A literal `*` forbids that rather than discouraging it: a browser will not send
+credentials to a wildcard origin at all. The wildcard is the enforcement, not a
+relaxation.
+
+It stays a wildcard rather than an allowlist because tenants bring their own
+custom domains and the set is not enumerable from a deployment. Every other
+credential travels in a header a browser will not attach on its own — `Bearer`,
+`x-api-key`, `x-internal-api-key` — so a cross-origin request from an attacker's
+page arrives unauthenticated.
+
+The cookie route is the exception, and it now cannot be called cross-origin from
+a browser by anyone. Same-origin and server-side callers are unaffected. If a
+browser on another origin ever needs it, move that route onto a header
+credential rather than widening this back.
 
 ## Rate limiting
 
