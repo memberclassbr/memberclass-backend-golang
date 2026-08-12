@@ -29,6 +29,28 @@ const sqlMigrationsTable = `
 	)
 `
 
+// sqlMigrationSessionSettings bounds what a migration may ask of shared memory,
+// for the transaction it is applied in.
+//
+// Postgres in a container gets Docker's default 64MB /dev/shm, and pgvector
+// sizes the dynamic shared memory segment for a parallel HNSW build from
+// maintenance_work_mem. On a managed instance that lands near 61MB, which does
+// not fit, and the index build dies at boot:
+//
+//	migration 002_embedding_1536.sql: pq: could not resize shared memory
+//	segment "/PostgreSQL.2625290996" to 64001056 bytes: No space left on device
+//
+// Zero maintenance workers keeps the build off dynamic shared memory entirely —
+// pgvector only reaches for a segment on the parallel path — and the lowered
+// maintenance_work_mem bounds the request on any path that still takes one.
+// Both cost build speed on a large index and buy a boot that completes, which
+// is the right trade for a migration: an index built slowly is an index, and a
+// deployment that will not start is nothing.
+const sqlMigrationSessionSettings = `
+	SET LOCAL max_parallel_maintenance_workers = 0;
+	SET LOCAL maintenance_work_mem = '32MB';
+`
+
 // MigrateTranscription applies any embedded migration the database has not
 // seen, in filename order. It is safe to call on every boot: applied files are
 // skipped, and each file runs inside its own transaction so a failure leaves
@@ -117,6 +139,12 @@ func applyMigration(ctx context.Context, db *sql.DB, name string) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// SET LOCAL, so this is scoped to the migration's own transaction and no
+	// connection goes back to the pool carrying it.
+	if _, err := tx.ExecContext(ctx, sqlMigrationSessionSettings); err != nil {
+		return fmt.Errorf("apply migration session settings: %w", err)
+	}
 
 	if _, err := tx.ExecContext(ctx, string(statements)); err != nil {
 		return err
