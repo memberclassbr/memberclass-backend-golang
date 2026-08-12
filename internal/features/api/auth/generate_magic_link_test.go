@@ -257,6 +257,139 @@ func TestGenerateMagicLink_LinkCarriesTokenAndEmail(t *testing.T) {
 	assert.Equal(t, "false", parsed.Query().Get("isReset"))
 }
 
+// ---------- 2b. Redirect path ----------
+
+func TestGenerateMagicLink_CarriesRedirectPath(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	expectMint(mock, "a@example.com", "t1", "escola.com.br", nil)
+
+	w := httptest.NewRecorder()
+	f.GenerateMagicLink(w, postRequest("t1", `{"email":"a@example.com","redirectPath":"/curso/123/aula/456"}`))
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp authResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "/curso/123/aula/456", mustQueryParam(t, resp.Link, "redirect"))
+	// The rest of the link is unchanged.
+	assert.NotEmpty(t, mustQueryParam(t, resp.Link, "token"))
+	assert.Equal(t, "a@example.com", mustQueryParam(t, resp.Link, "email"))
+}
+
+// Omitting the field keeps the link exactly as it was before this parameter
+// existed — no empty `redirect=` for the frontend to special-case.
+func TestGenerateMagicLink_OmitsRedirectWhenAbsent(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	expectMint(mock, "a@example.com", "t1", "escola.com.br", nil)
+
+	w := httptest.NewRecorder()
+	f.GenerateMagicLink(w, postRequest("t1", `{"email":"a@example.com"}`))
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp authResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.NotContains(t, resp.Link, "redirect=")
+}
+
+// A query string or a fragment on the destination survives the round trip:
+// they are part of the path the frontend has to restore.
+func TestGenerateMagicLink_RedirectKeepsQueryAndFragment(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	expectMint(mock, "a@example.com", "t1", "escola.com.br", nil)
+
+	w := httptest.NewRecorder()
+	f.GenerateMagicLink(w, postRequest("t1", `{"email":"a@example.com","redirectPath":"/busca?q=vendas&page=2#topo"}`))
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp authResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "/busca?q=vendas&page=2#topo", mustQueryParam(t, resp.Link, "redirect"))
+}
+
+// The open-redirect guard. Each of these is a value a browser would resolve to
+// an origin other than the tenant's, which would turn the magic link into a
+// way to land a freshly authenticated member on an attacker's page.
+func TestGenerateMagicLink_RejectsOffSiteRedirects(t *testing.T) {
+	hostile := map[string]string{
+		"absolute URL":      "https://evil.com/steal",
+		"protocol relative": "//evil.com/steal",
+		"backslash host":    `/\evil.com/steal`,
+		"javascript scheme": "javascript:alert(1)",
+		"data scheme":       "data:text/html,<script>alert(1)</script>",
+		"no leading slash":  "evil.com/steal",
+		"header break":      "/curso\r\nLocation: https://evil.com",
+	}
+
+	for name, path := range hostile {
+		t.Run(name, func(t *testing.T) {
+			f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+			defer done()
+
+			body, err := json.Marshal(authRequest{Email: "a@example.com", RedirectPath: path})
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			f.GenerateMagicLink(w, postRequest("t1", string(body)))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Equal(t, "INVALID_REQUEST", bodyOf(t, w)["errorCode"])
+			// Rejected before any token was minted or stored.
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestGenerateMagicLink_RejectsOverlongRedirect(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	body, err := json.Marshal(authRequest{
+		Email:        "a@example.com",
+		RedirectPath: "/" + strings.Repeat("a", maxRedirectPathLen),
+	})
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	f.GenerateMagicLink(w, postRequest("t1", string(body)))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Two requests inside the cache window that differ only in destination share
+// the token already minted. Minting a second one would invalidate the first,
+// since "User"."magicToken" holds a single value per member.
+func TestGenerateMagicLink_RedirectVariesWithoutReminting(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	expectMint(mock, "a@example.com", "t1", "escola.com.br", nil)
+
+	first, err := f.generateMagicLink(context.Background(), "a@example.com", "/curso/1", "t1")
+	require.NoError(t, err)
+
+	// No further statements are queued: a second destination must be served
+	// from the cache.
+	second, err := f.generateMagicLink(context.Background(), "a@example.com", "/curso/2", "t1")
+	require.NoError(t, err)
+
+	assert.Equal(t, "/curso/1", mustQueryParam(t, first.Link, "redirect"))
+	assert.Equal(t, "/curso/2", mustQueryParam(t, second.Link, "redirect"))
+	assert.Equal(t,
+		mustQueryParam(t, first.Link, "token"),
+		mustQueryParam(t, second.Link, "token"),
+		"both links must carry the same token")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 // ---------- 3. Token storage ----------
 
 // Only the bcrypt hash of the token reaches the database; a dump must not
@@ -312,7 +445,7 @@ func TestGenerateMagicLink_ServesCachedLinkWithoutMinting(t *testing.T) {
 
 	c.getOverride = func(string) (string, error) { return "https://escola.com.br/login?token=old", nil }
 
-	resp, err := f.generateMagicLink(context.Background(), "a@example.com", "t1")
+	resp, err := f.generateMagicLink(context.Background(), "a@example.com", "", "t1")
 	require.NoError(t, err)
 	assert.Equal(t, "https://escola.com.br/login?token=old", resp.Link)
 	// No statements were queued: a cache hit must not touch the database.
@@ -327,7 +460,7 @@ func TestGenerateMagicLink_CacheKeyIsTenantScoped(t *testing.T) {
 
 	expectMint(mock, "a@example.com", "t1", "escola.com.br", nil)
 
-	_, err := f.generateMagicLink(context.Background(), "a@example.com", "t1")
+	_, err := f.generateMagicLink(context.Background(), "a@example.com", "", "t1")
 	require.NoError(t, err)
 
 	c.mu.Lock()

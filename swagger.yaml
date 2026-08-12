@@ -1786,6 +1786,14 @@ paths:
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
         O nome antigo `x-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
+
+        **Destino pós-login:** envie `redirectPath` para que o link volte com
+        `&redirect=<caminho urlencoded>`. Depois de validar o token e criar a
+        sessão, o frontend navega para esse caminho em vez da home.
+
+        Dois pedidos dentro da janela de cache (5 min) que só diferem no
+        `redirectPath` recebem o **mesmo** token — o campo é aplicado depois do
+        cache justamente para não invalidar o link anterior.
       parameters:
         - in: header
           name: x-api-key
@@ -1807,6 +1815,20 @@ paths:
                   format: email
                   description: Email do usuário
                   example: "usuario@exemplo.com"
+                redirectPath:
+                  type: string
+                  maxLength: 512
+                  description: |
+                    Opcional. Para onde o frontend deve levar o membro depois do
+                    login. Aceita **somente** caminho relativo do próprio site,
+                    começando com `/`; query string e fragmento são preservados.
+
+                    Rejeitado com 400 `INVALID_REQUEST`: URL absoluta
+                    (`https://...`), protocol-relative (`//host`), barra
+                    invertida (`/\host`), qualquer esquema (`javascript:`,
+                    `data:`) e caracteres de controle. Essa checagem é o que
+                    impede o magic link de virar um open redirect.
+                  example: "/curso/123/aula/456"
       responses:
         '200':
           description: Magic link gerado com sucesso
@@ -1820,8 +1842,10 @@ paths:
                     example: true
                   link:
                     type: string
-                    description: URL do magic link para login
-                    example: "https://app.memberclass.com.br/auth/login?token=abc123"
+                    description: |
+                      URL do magic link para login. Carrega `redirect` apenas
+                      quando `redirectPath` foi enviado.
+                    example: "https://escola.com.br/login?token=abc123&email=usuario%40exemplo.com&isReset=false&redirect=%2Fcurso%2F123%2Faula%2F456"
         '400':
           description: Requisição inválida
           content:

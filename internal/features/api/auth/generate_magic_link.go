@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -35,6 +36,9 @@ const linkFormat = "%s://%s/login?token=%s&email=%s&isReset=false"
 
 type authRequest struct {
 	Email string `json:"email"`
+	// RedirectPath is where the frontend should land the member after it
+	// exchanges the token for a session. Optional; a same-site path only.
+	RedirectPath string `json:"redirectPath"`
 }
 
 type authResponse struct {
@@ -63,7 +67,7 @@ func (f *Feature) GenerateMagicLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := f.generateMagicLink(r.Context(), req.Email, tenant.ID)
+	resp, err := f.generateMagicLink(r.Context(), req.Email, req.RedirectPath, tenant.ID)
 	if err != nil {
 		f.writeUseCaseError(w, err)
 		return
@@ -76,9 +80,14 @@ const msgEmailRequired = "Email é obrigatório e deve ser uma string"
 
 // ---------- 2. Business rule ----------
 
-func (f *Feature) generateMagicLink(ctx context.Context, email, tenantID string) (*authResponse, error) {
+func (f *Feature) generateMagicLink(ctx context.Context, email, redirectPath, tenantID string) (*authResponse, error) {
 	if email == "" {
 		return nil, &memberclasserrors.MemberClassError{Code: 400, Message: msgEmailRequired}
+	}
+
+	redirect, err := sanitizeRedirectPath(redirectPath)
+	if err != nil {
+		return nil, err
 	}
 
 	// Repeated requests inside the cache window return the link already minted,
@@ -86,7 +95,7 @@ func (f *Feature) generateMagicLink(ctx context.Context, email, tenantID string)
 	// first one before it arrives.
 	cacheKey := fmt.Sprintf("auth_cache:%s:%s", tenantID, email)
 	if cached, err := f.cache.Get(ctx, cacheKey); err == nil && cached != "" {
-		return &authResponse{OK: true, Link: cached}, nil
+		return &authResponse{OK: true, Link: withRedirect(cached, redirect)}, nil
 	}
 
 	userID, err := f.memberID(ctx, email, tenantID)
@@ -114,11 +123,68 @@ func (f *Feature) generateMagicLink(ctx context.Context, email, tenantID string)
 		return nil, err
 	}
 
+	// The link is cached without the redirect, so two requests that differ only
+	// in destination share one token — see withRedirect.
 	if err := f.cache.Set(ctx, cacheKey, link, linkCacheTTL); err != nil {
 		f.log.Error("Error caching auth response: " + err.Error())
 	}
 
-	return &authResponse{OK: true, Link: link}, nil
+	return &authResponse{OK: true, Link: withRedirect(link, redirect)}, nil
+}
+
+// maxRedirectPathLen bounds the destination so a caller cannot push an
+// arbitrarily large value into the link.
+const maxRedirectPathLen = 512
+
+const msgInvalidRedirect = `redirectPath deve ser um caminho relativo começando com "/"`
+
+// sanitizeRedirectPath accepts only a same-site relative path, and returns the
+// empty string when none was asked for.
+//
+// Everything a browser could resolve to another origin is rejected. This value
+// ends up in a link the frontend navigates to right after it establishes a
+// session, so an unchecked value turns the magic link into an open redirect —
+// a phishing page on the attacker's host, reached from the tenant's own login.
+func sanitizeRedirectPath(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+
+	invalid := &memberclasserrors.MemberClassError{Code: 400, Message: msgInvalidRedirect}
+
+	if len(raw) > maxRedirectPathLen {
+		return "", invalid
+	}
+	// A backslash is not a path separator here, but browsers normalise `/\host`
+	// into `//host`, so it has to go before the `//` test below means anything.
+	if strings.Contains(raw, `\`) {
+		return "", invalid
+	}
+	// A leading `//` is protocol-relative: `//evil.com` is another origin.
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+		return "", invalid
+	}
+	// Catches a scheme, an authority, and the ASCII control characters that
+	// could smuggle a header break into the link.
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "" || parsed.Host != "" || parsed.Opaque != "" {
+		return "", invalid
+	}
+
+	return raw, nil
+}
+
+// withRedirect appends the post-login destination to a login link.
+//
+// It is applied after the cache rather than before it because "User"."magicToken"
+// holds a single value per member: minting a second token for the same member
+// invalidates the first. Caching the link without the destination lets two
+// requests that differ only in where they land share one still-valid token.
+func withRedirect(link, redirectPath string) string {
+	if redirectPath == "" {
+		return link
+	}
+	return link + "&redirect=" + url.QueryEscape(redirectPath)
 }
 
 func generateToken() (string, error) {

@@ -157,10 +157,10 @@
         "auth"
        ]
       },
-      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nGera um magic link de login para o e-mail informado. Usa o domínio customizado do tenant quando ele existe, senão o domínio padrão.\n\n**Como testar**\n1. Setar `{{apiKey}}` e `{{email}}`.\n2. Enviar. Copiar o `link` da resposta e abrir no browser para validar o login ponta a ponta.\n\n**Esperado:** 200 `{ok:true, link:\"https://...\"}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nGera um magic link de login para o e-mail informado. Usa o domínio customizado do tenant quando ele existe, senão o domínio padrão.\n\n**`redirectPath` (opcional)** — para onde o frontend deve levar o membro depois de trocar o token por sessão. Volta no link como `&redirect=<urlencoded>`. Só aceita caminho relativo do próprio site, começando com `/` (`/curso/123/aula/456`, com query e fragmento se precisar). URL absoluta, `//host`, `/\\host` ou qualquer esquema ⇒ 400 `INVALID_REQUEST` — é o que impede o magic link de virar open redirect.\n\n**Como testar**\n1. Setar `{{apiKey}}` e `{{email}}`.\n2. Enviar. Copiar o `link` da resposta e abrir no browser para validar o login ponta a ponta.\n3. Repetir com `redirectPath` diferente dentro dos 5 min de cache: o `token` volta igual e só o `redirect` muda.\n\n**Esperado:** 200 `{ok:true, link:\"https://...\"}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
       "body": {
        "mode": "raw",
-       "raw": "{\n    \"email\": \"{{email}}\"\n}",
+       "raw": "{\n    \"email\": \"{{email}}\",\n    \"redirectPath\": \"/curso/123/aula/456\"\n}",
        "options": {
         "raw": {
          "language": "json"
