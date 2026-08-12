@@ -2,7 +2,11 @@ package member_import
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +14,8 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/lib/pq"
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/shared/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +37,8 @@ func newFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, func()) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	// resend service isn't hit by these tests (they stop before the worker).
-	return New(db, fakeLogger{}, nil), mock, func() { _ = db.Close() }
+	cfg := &config.Config{Public: config.Public{DomainURL: "memberclass.com.br"}}
+	return New(db, fakeLogger{}, nil, cfg), mock, func() { _ = db.Close() }
 }
 
 func withUserSession(r *http.Request, userID string) *http.Request {
@@ -215,24 +222,66 @@ func TestTenantDomain(t *testing.T) {
 	})
 }
 
-func TestPickProtocol(t *testing.T) {
-	assert.Equal(t, "http", pickProtocol("localhost:3000"))
-	assert.Equal(t, "https", pickProtocol("acme.memberclass.com.br"))
+// createMagicToken stores a sha256 digest in "MagicToken"."token" — the bcrypt
+// hash this slice uses for "User"."magicToken" would never match what the
+// frontend computes for the same token.
+func TestCreateMagicTokenStoresADigest(t *testing.T) {
+	f, mock, done := newFeature(t)
+	defer done()
+
+	var stored string
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
+		WithArgs(
+			sqlmock.AnyArg(), // id
+			capture(&stored),
+			sqlmock.AnyArg(), // shortCode
+			"u1", "t1",
+			sqlmock.AnyArg(), // expires
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	shortCode, err := f.createMagicToken(
+		context.Background(), "u1", "t1", "raw-token", "user@example.com", time.Now().Add(time.Hour),
+	)
+	require.NoError(t, err)
+
+	sum := sha256.Sum256([]byte("raw-token"))
+	assert.Equal(t, hex.EncodeToString(sum[:]), stored)
+	assert.Len(t, shortCode, 12)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestBuildMagicLink(t *testing.T) {
-	t.Run("uses shortCode when present", func(t *testing.T) {
-		got := buildMagicLink("https", "acme.com", "ABC123", "long-raw-token", "user@example.com")
-		assert.Contains(t, got, "https://acme.com/login?")
-		assert.Contains(t, got, "code=ABC123")
-		assert.NotContains(t, got, "token=")
-	})
-	t.Run("falls back to token+email without shortCode", func(t *testing.T) {
-		got := buildMagicLink("https", "acme.com", "", "tok", "user@example.com")
-		assert.Contains(t, got, "token=tok")
-		assert.Contains(t, got, "email=user%40example.com")
-	})
+// A collision on the unique "shortCode" index is regenerated. The row failing
+// outright would mark the import row as an error and send no email at all.
+func TestCreateMagicTokenRetriesOnCollision(t *testing.T) {
+	f, mock, done := newFeature(t)
+	defer done()
+
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
+		WillReturnError(&pq.Error{Code: "23505", Constraint: "MagicToken_shortCode_key"})
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	shortCode, err := f.createMagicToken(
+		context.Background(), "u1", "t1", "raw-token", "user@example.com", time.Now().Add(time.Hour),
+	)
+	require.NoError(t, err)
+	assert.Len(t, shortCode, 12)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
+
+// capture is a sqlmock argument matcher that accepts any string and records it.
+type capturingArg struct{ into *string }
+
+func (c capturingArg) Match(v driver.Value) bool {
+	s, ok := v.(string)
+	if ok {
+		*c.into = s
+	}
+	return ok
+}
+
+func capture(into *string) sqlmock.Argument { return capturingArg{into: into} }
 
 // nullStr is a tiny helper to build sql.NullString literals inline.
 func nullStr(s string) sql.NullString { return sql.NullString{Valid: true, String: s} }

@@ -103,10 +103,14 @@ type Auth struct {
 type Public struct {
 	// DomainURL is the frontend root domain, e.g. memberclass.com.br. Bare
 	// host: no scheme, no port, no path.
+	//
+	// It is the single source for both halves of a magic link — the `From`
+	// host of the email that carries it and the root under which a tenant's
+	// subdomain is built. There used to be a second variable,
+	// PUBLIC_ROOT_DOMAIN, holding this service's own host:port; every
+	// deployment set the two to the same value, and the one path that read it
+	// produced links pointing at the backend rather than at the frontend.
 	DomainURL string
-	// RootDomain is this service's own host:port, used by the magic-link
-	// endpoints served out of this binary.
-	RootDomain string
 	// FilesURL is the CDN prefix that resolves relative asset paths (tenant
 	// logos in email templates). Optional.
 	FilesURL string
@@ -239,9 +243,8 @@ func Load() (*Config, error) {
 			NextAuthSecret: required("NEXTAUTH_SECRET"),
 		},
 		Public: Public{
-			DomainURL:  required("PUBLIC_DOMAIN_URL", "NEXT_PUBLIC_DOMAIN_URL"),
-			RootDomain: required("PUBLIC_ROOT_DOMAIN"),
-			FilesURL:   lookup("PUBLIC_FILES_URL", "NEXT_PUBLIC_FILES_URL"),
+			DomainURL: required("PUBLIC_DOMAIN_URL", "NEXT_PUBLIC_DOMAIN_URL"),
+			FilesURL:  lookup("PUBLIC_FILES_URL", "NEXT_PUBLIC_FILES_URL"),
 		},
 		Bunny: Bunny{
 			APIKey:  os.Getenv("BUNNY_API_KEY"),

@@ -174,6 +174,47 @@ has no way to mint a Bearer.
 in one cutover — the old paths are gone, not dual-mounted — so the frontend has
 to deploy alongside this service.
 
+### Magic links
+
+Two places mint passwordless login links — `POST /api/v1/auth` and the
+first-access emails from `member_import`. They share
+[internal/shared/magiclink](internal/shared/magiclink), which is the Go half of
+a contract the Next.js frontend owns.
+
+A link is `https://<tenant domain>/api/auth/magic/<shortCode>`. The short code
+is the only thing in the URL: the member's address used to travel in the query
+string and no longer does, because a login URL ends up in mail archives, proxy
+logs and shared screenshots. The frontend resolves the code, stamps `usedAt` and
+finishes the sign-in — so a guessed code posted straight at `/login` does not
+authenticate, since only the magic route sets that column.
+
+The host is the tenant's `customDomain`, or its subdomain under
+`PUBLIC_DOMAIN_URL`. That variable is the only domain this service knows:
+`PUBLIC_ROOT_DOMAIN` used to sit beside it holding the backend's own host:port,
+every deployment set the two to the same value, and the one path that read it
+built member-facing links pointing at the backend. It is gone.
+
+A reset link is the same URL with `?next=reset`, which tells the frontend to
+leave `usedAt` alone; there the reset handler is what claims the row. Only the
+delivery email emits it. `?redirect=<path>` is a post-login destination and is
+accepted as a same-site relative path only — that check is the whole of the
+open-redirect defence.
+
+Both slices write two hashes for one token, and they are not interchangeable:
+
+| Column | Hash | Why |
+|---|---|---|
+| `"MagicToken"."token"` | sha256 hex | Compared against what the frontend computes; a salted hash never matches |
+| `"User"."magicToken"` | bcrypt | Legacy column, honoured by the old `/login?token=` route |
+
+Minting the `"MagicToken"` row is not optional. If the insert fails, the request
+fails — falling back to the old link shape would put the member's address back
+in a URL without anyone noticing.
+
+`"MagicToken"."method"` is the audit trail for how a link came to exist; each
+minting path uses its own value (`api_magic_link`, `admin_import`) rather than
+borrowing the frontend's.
+
 ## Rate limiting
 
 Three Redis-backed limiters in [internal/platform/ratelimit](internal/platform/ratelimit)

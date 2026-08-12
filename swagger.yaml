@@ -1784,15 +1784,21 @@ paths:
         Gera um link de login (magic link) para o usuário autenticado no tenant.
 
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
 
+        **Formato do link:** `https://<domínio do tenant>/api/auth/magic/<código>`.
+        O código é a única coisa que viaja na URL — nem o e-mail do membro nem o
+        token aparecem nela, porque um link de login acaba em arquivo de e-mail,
+        log de proxy e print de tela. O frontend resolve o código, marca o
+        token como usado e conclui a sessão.
+
         **Destino pós-login:** envie `redirectPath` para que o link volte com
-        `&redirect=<caminho urlencoded>`. Depois de validar o token e criar a
-        sessão, o frontend navega para esse caminho em vez da home.
+        `?redirect=<caminho urlencoded>`. Depois de criar a sessão, o frontend
+        navega para esse caminho em vez da home.
 
         Dois pedidos dentro da janela de cache (5 min) que só diferem no
-        `redirectPath` recebem o **mesmo** token — o campo é aplicado depois do
+        `redirectPath` recebem o **mesmo** código — o campo é aplicado depois do
         cache justamente para não invalidar o link anterior.
       parameters:
         - in: header
@@ -1843,9 +1849,10 @@ paths:
                   link:
                     type: string
                     description: |
-                      URL do magic link para login. Carrega `redirect` apenas
-                      quando `redirectPath` foi enviado.
-                    example: "https://escola.com.br/login?token=abc123&email=usuario%40exemplo.com&isReset=false&redirect=%2Fcurso%2F123%2Faula%2F456"
+                      URL do magic link para login, no domínio do próprio
+                      tenant. Carrega `redirect` apenas quando `redirectPath`
+                      foi enviado; sem ele, não tem query string nenhuma.
+                    example: "https://escola.com.br/api/auth/magic/K4TQ9BXMR7DZ?redirect=%2Fcurso%2F123%2Faula%2F456"
         '400':
           description: Requisição inválida
           content:

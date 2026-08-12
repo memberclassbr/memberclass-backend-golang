@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/memberclass-backend-golang/internal/platform/resend"
 	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
@@ -38,6 +39,11 @@ type Feature struct {
 	resend resend.Service
 	roles  *tenantrole.Checker
 
+	// publicDomain is the frontend's root domain. Two things are built from
+	// it: the `From` address of every email this slice sends, and the host of
+	// the magic link inside it for a tenant that has only a subdomain.
+	publicDomain string
+
 	// inflight tracks background import goroutines so shutdown can drain
 	// them before the DB is closed. Without this, an in-flight import
 	// racing with `dbMap.CloseAll()` would hit "use of closed network
@@ -47,8 +53,14 @@ type Feature struct {
 }
 
 // New builds the slice.
-func New(db *sql.DB, log logger.Logger, resendSvc resend.Service) *Feature {
-	return &Feature{db: db, log: log, resend: resendSvc, roles: tenantrole.New(db)}
+func New(db *sql.DB, log logger.Logger, resendSvc resend.Service, cfg *config.Config) *Feature {
+	return &Feature{
+		db:           db,
+		log:          log,
+		resend:       resendSvc,
+		roles:        tenantrole.New(db),
+		publicDomain: normalizeEmailDomain(cfg.Public.DomainURL),
+	}
 }
 
 // Wait blocks until every in-flight import goroutine has returned, or until

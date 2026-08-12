@@ -18,7 +18,6 @@ var requiredEnv = map[string]string{
 	"INTERNAL_AI_API_KEY": "internal-key",
 	"NEXTAUTH_SECRET":     "nextauth-secret",
 	"PUBLIC_DOMAIN_URL":   "customer.com.br",
-	"PUBLIC_ROOT_DOMAIN":  "localhost:8181",
 }
 
 // setEnv applies the required set plus any overrides. An empty override value

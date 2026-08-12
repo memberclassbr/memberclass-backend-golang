@@ -133,7 +133,7 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 
 	// ---------- slices ----------
 
-	memberImport := member_import.New(db, log, resendSvc)
+	memberImport := member_import.New(db, log, resendSvc, cfg)
 	notifications := notificationsworker.New(db, log)
 	transcription := transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 

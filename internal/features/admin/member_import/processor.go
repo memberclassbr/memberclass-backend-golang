@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -12,21 +11,21 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/memberclass-backend-golang/internal/shared/magiclink"
 	"github.com/memberclass-backend-golang/internal/shared/utils"
 	"golang.org/x/crypto/bcrypt"
 )
 
 const (
-	batchSize        = 100
-	magicTokenTTL    = 24 * time.Hour
-	bcryptCost       = 10
-	defaultPassLen   = 10
-	magicTokenRawLen = 32
-	// 12 chars × 32-char alphabet ≈ 60 bits of entropy. Keeps collision
-	// probability on the unique-indexed `shortCode` column negligible even
-	// at millions of active tokens, which matters because a collision would
-	// cascade to an email with a broken link (see I1 in review).
-	shortCodeLen = 12
+	batchSize      = 100
+	magicTokenTTL  = 24 * time.Hour
+	bcryptCost     = 10
+	defaultPassLen = 10
+	// shortCodeAttempts bounds the retry on a collision against the unique
+	// "shortCode" index. The code carries 60 bits, so a collision is already
+	// negligible at millions of active tokens; the retry exists because the
+	// alternative is an email whose link resolves to nothing.
+	shortCodeAttempts = 3
 )
 
 // rowState tracks per-row progress as we walk a batch. It's used to drive
@@ -80,7 +79,11 @@ func (f *Feature) runImport(importID string, req *importRequest, tenant *tenantR
 		return
 	}
 
-	tokenRaw := randomBase64(magicTokenRawLen)
+	tokenRaw, err := magiclink.NewRawToken()
+	if err != nil {
+		f.finalizeAsFailed(importID, fmt.Sprintf("generate token: %v", err))
+		return
+	}
 	tokenHash, err := bcrypt.GenerateFromPassword([]byte(tokenRaw), bcryptCost)
 	if err != nil {
 		f.finalizeAsFailed(importID, fmt.Sprintf("bcrypt hash token: %v", err))
@@ -315,12 +318,24 @@ func (f *Feature) processBatch(
 				}
 			}
 			// Create a per-user MagicToken row (matches the Next.js shape).
-			// The email's magic link uses the shortCode path — if this row
-			// fails to persist (unique collision, DB hiccup, …) the user
-			// would receive an email with a non-existent `code` param and
-			// be locked out. Mark the row as error instead so NO email is
-			// sent; the tenant admin retries the import for that user.
-			perUserRaw := randomBase64(magicTokenRawLen)
+			// The whole emailed link is that row's short code — if it fails
+			// to persist (unique collision, DB hiccup, …) the user would get
+			// an email pointing at nothing and be locked out. Mark the row as
+			// error instead so NO email is sent; the tenant admin retries the
+			// import for that user.
+			perUserRaw, tokErr := magiclink.NewRawToken()
+			if tokErr != nil {
+				f.log.Error("import.magic_token_generate_failed",
+					"import_id", importID,
+					"row_index", rowIdx,
+					"error", tokErr.Error(),
+				)
+				state.status = "error"
+				state.errorMessage = "magic token generation failed: " + tokErr.Error()
+				counters.errorRows++
+				states = append(states, state)
+				continue
+			}
 			shortCode, mtErr := f.createMagicToken(ctx, userID, req.TenantID, perUserRaw, email, magicTokenValidUntil)
 			if mtErr != nil {
 				f.log.Error("import.magic_token_create_failed",
@@ -599,23 +614,47 @@ func (f *Feature) insertMemberOnDeliveries(ctx context.Context, userID, tenantID
 	return nil
 }
 
+// createMagicToken mints the row the emailed link resolves to, and returns the
+// short code that goes in the URL.
+//
+// "token" holds a sha256 hex digest, not the bcrypt hash that "User"."magicToken"
+// carries: the frontend computes the same digest to compare, and a salted hash
+// would never match it.
 func (f *Feature) createMagicToken(ctx context.Context, userID, tenantID, tokenRaw, email string, expires time.Time) (string, error) {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(tokenRaw), bcryptCost)
-	if err != nil {
-		return "", fmt.Errorf("hash magic token: %w", err)
-	}
-	shortCode := randomShortCode(shortCodeLen)
-	id := utils.GenerateCUID()
-
 	const q = `
 		INSERT INTO "MagicToken" (id, token, "shortCode", "userId", "tenantId", method, expires, "createdAt")
 		VALUES ($1, $2, $3, $4, $5, 'admin_import', $6, NOW())
 	`
-	if _, err := f.db.ExecContext(ctx, q, id, string(hashed), shortCode, userID, tenantID, expires); err != nil {
-		return "", fmt.Errorf("insert MagicToken: %w", err)
+
+	for range shortCodeAttempts {
+		shortCode, err := magiclink.NewShortCode()
+		if err != nil {
+			return "", fmt.Errorf("generate short code: %w", err)
+		}
+
+		_, err = f.db.ExecContext(ctx, q,
+			utils.GenerateCUID(), magiclink.HashToken(tokenRaw), shortCode, userID, tenantID, expires,
+		)
+		switch {
+		case err == nil:
+			_ = email // reserved for future telemetry; schema currently has no column for it
+			return shortCode, nil
+		case isUniqueViolation(err):
+			f.log.Warn("import.short_code_collision", "user_id", userID)
+		default:
+			return "", fmt.Errorf("insert MagicToken: %w", err)
+		}
 	}
-	_ = email // reserved for future telemetry; schema currently has no column for it
-	return shortCode, nil
+
+	return "", fmt.Errorf("insert MagicToken: short code still colliding after %d attempts", shortCodeAttempts)
+}
+
+// isUniqueViolation reports whether err is Postgres' unique_violation. On the
+// insert above only "shortCode" can realistically raise it: the id is a CUID
+// and "token" is a digest of 32 random bytes.
+func isUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }
 
 // ---------- Per-row persistence + counter updates ----------
@@ -756,15 +795,6 @@ func (f *Feature) finalizeAsFailed(importID, message string) {
 
 // ---------- Random generators (slice-local so no shared utility expansion) ----------
 
-func randomBase64(bytes int) string {
-	b := make([]byte, bytes)
-	if _, err := rand.Read(b); err != nil {
-		// Extremely unlikely; fall back to time-based randomness.
-		return fmt.Sprintf("%x", time.Now().UnixNano())
-	}
-	return base64.URLEncoding.EncodeToString(b)
-}
-
 // randomString generates a uniform random string over `alphabet` using
 // crypto/rand.Int, which is unbiased regardless of alphabet length. The
 // simpler `rand.Read(b) + b[i]%len(alphabet)` pattern would skew probability
@@ -772,12 +802,6 @@ func randomBase64(bytes int) string {
 // these lengths but worth doing right because it's free.
 func randomString(n int) string {
 	const alphabet = "ABCDEFGHIJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
-	return uniformFromAlphabet(n, alphabet)
-}
-
-func randomShortCode(n int) string {
-	// 32-char alphabet — no confusable chars (I, O, 0, 1).
-	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	return uniformFromAlphabet(n, alphabet)
 }
 

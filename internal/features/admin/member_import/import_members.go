@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
@@ -250,8 +249,7 @@ func writeError(w http.ResponseWriter, code int, message string) {
 
 // tenantDomain picks the public domain for this tenant, matching the Next.js
 // logic: customDomain wins outright; otherwise build `<subdomain>.<rootDomain>`
-// where rootDomain is PUBLIC_DOMAIN_URL (the customer-facing frontend host,
-// NOT the backend's own PUBLIC_ROOT_DOMAIN).
+// where rootDomain is PUBLIC_DOMAIN_URL, the customer-facing frontend host.
 //
 // Defensive: normalizeEmailDomain strips any scheme/port/path from
 // `t.CustomDomain` so if a tenant admin saved it as "https://app.acme.com/"
@@ -270,16 +268,6 @@ func tenantDomain(t *tenantRow, rootDomain string) string {
 		return rootDomain
 	}
 	return sub + "." + rootDomain
-}
-
-// pickProtocol decides http vs https for the magic-link base URL based on
-// the domain shape. Only bare localhost (with or without port) maps to http
-// — we anchor on the full token to avoid `localhostfoo.com` sliding in.
-func pickProtocol(domain string) string {
-	if domain == "localhost" || strings.HasPrefix(domain, "localhost:") {
-		return "http"
-	}
-	return "https"
 }
 
 // parseAccession parses the Next.js `dd/MM/yyyy HH:mm:ss` format; falls back

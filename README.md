@@ -197,7 +197,7 @@ ILOVEPDF_API_KEYS=
 
 # Auth Configuration
 INTERNAL_AI_API_KEY=
-PUBLIC_ROOT_DOMAIN=localhost:8181
+PUBLIC_DOMAIN_URL=memberclass.com.br
 
 # Memberclass Transcription (Railway pgvector + OpenAI)
 # See docs/plans/2026-05-13-transcription-go-vsa.md for setup details.
@@ -265,7 +265,7 @@ The application uses the following environment variables:
 **Authentication:**
 
 - `INTERNAL_AI_API_KEY` - Internal API key for AI endpoints validation
-- `PUBLIC_ROOT_DOMAIN` - Public root domain for magic links generation (default: localhost:8181)
+- `PUBLIC_DOMAIN_URL` - Customer-facing frontend root domain (bare host). Builds the `From` address of transactional email and the magic-link host for tenants without a `customDomain`. Falls back to `NEXT_PUBLIC_DOMAIN_URL`. Replaced `PUBLIC_ROOT_DOMAIN`, which is no longer read
 
 **Memberclass Transcription (Railway pgvector + OpenAI):**
 

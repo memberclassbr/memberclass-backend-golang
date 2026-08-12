@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/lib/pq"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
@@ -64,13 +66,13 @@ func (fakeLogger) Info(string, ...any)  {}
 func (fakeLogger) Warn(string, ...any)  {}
 func (fakeLogger) Error(string, ...any) {}
 
-func newTestFeature(t *testing.T, rootDomain string) (*Feature, sqlmock.Sqlmock, *fakeCache, func()) {
+func newTestFeature(t *testing.T, publicDomain string) (*Feature, sqlmock.Sqlmock, *fakeCache, func()) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
 	c := newFakeCache()
-	cfg := &config.Config{Public: config.Public{RootDomain: rootDomain}}
+	cfg := &config.Config{Public: config.Public{DomainURL: publicDomain}}
 	return New(db, c, cfg, fakeLogger{}), mock, c, func() { _ = db.Close() }
 }
 
@@ -148,12 +150,17 @@ func TestGenerateMagicLink_UnknownMemberIsNotFound(t *testing.T) {
 
 // ---------- 2. Link building ----------
 
-// expectMint queues the three statements a successful mint runs.
+// expectMint queues the four statements a successful mint runs.
 func expectMint(mock sqlmock.Sqlmock, email, tenantID string, customDomain, subDomain any) {
 	mock.ExpectQuery(`FROM "User" u`).
 		WithArgs(email, tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u1"))
 	mock.ExpectExec(`UPDATE "User"`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	// The column list here is pinned for the same reason as the Tenant one
+	// below: Prisma's casing is not guessable, and "shortCode"/"userId"/
+	// "tenantId" are all camelCase while method and token are not.
+	mock.ExpectExec(`INSERT INTO "MagicToken" \(id, token, "shortCode", "userId", "tenantId", method, expires, "createdAt"\)`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	// The column list is pinned on purpose. Prisma names the Tenant columns
 	// "customDomain" (camelCase) and subdomain (not), and a quoted "subDomain"
@@ -164,6 +171,16 @@ func expectMint(mock sqlmock.Sqlmock, email, tenantID string, customDomain, subD
 		WithArgs(tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"customDomain", "subdomain"}).
 			AddRow(customDomain, subDomain))
+}
+
+// shortCodeOf pulls the short code out of a `/api/auth/magic/<code>` link.
+func shortCodeOf(t *testing.T, rawURL string) string {
+	t.Helper()
+	parsed, err := url.Parse(rawURL)
+	require.NoError(t, err)
+	prefix := "/api/auth/magic/"
+	require.True(t, strings.HasPrefix(parsed.Path, prefix), "unexpected path %q", parsed.Path)
+	return strings.TrimPrefix(parsed.Path, prefix)
 }
 
 func TestGenerateMagicLink_UsesCustomDomainWhenSet(t *testing.T) {
@@ -180,7 +197,7 @@ func TestGenerateMagicLink_UsesCustomDomainWhenSet(t *testing.T) {
 	var resp authResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.True(t, resp.OK)
-	assert.True(t, strings.HasPrefix(resp.Link, "https://escola.com.br/login?"), resp.Link)
+	assert.True(t, strings.HasPrefix(resp.Link, "https://escola.com.br/api/auth/magic/"), resp.Link)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -197,7 +214,7 @@ func TestGenerateMagicLink_FallsBackToSubdomain(t *testing.T) {
 
 	var resp authResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, strings.HasPrefix(resp.Link, "https://escola.memberclass.com.br/login?"), resp.Link)
+	assert.True(t, strings.HasPrefix(resp.Link, "https://escola.memberclass.com.br/api/auth/magic/"), resp.Link)
 }
 
 // A tenant with neither a custom domain nor a subdomain falls back to the
@@ -215,12 +232,12 @@ func TestGenerateMagicLink_DefaultsToAcessosSubdomain(t *testing.T) {
 
 	var resp authResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Contains(t, resp.Link, "https://acessos.memberclass.com.br/login?")
+	assert.Contains(t, resp.Link, "https://acessos.memberclass.com.br/api/auth/magic/")
 }
 
 // Local development is served over http; everything else over https.
 func TestGenerateMagicLink_UsesHTTPOnLocalhost(t *testing.T) {
-	f, mock, _, done := newTestFeature(t, "localhost:8181")
+	f, mock, _, done := newTestFeature(t, "localhost:3000")
 	defer done()
 
 	expectMint(mock, "a@example.com", "t1", nil, "dev")
@@ -232,11 +249,13 @@ func TestGenerateMagicLink_UsesHTTPOnLocalhost(t *testing.T) {
 
 	var resp authResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.True(t, strings.HasPrefix(resp.Link, "http://dev.localhost:8181/login?"), resp.Link)
+	assert.True(t, strings.HasPrefix(resp.Link, "http://dev.localhost:3000/api/auth/magic/"), resp.Link)
 }
 
-// The link carries the plaintext token and the email as query parameters.
-func TestGenerateMagicLink_LinkCarriesTokenAndEmail(t *testing.T) {
+// The point of the short-code format: the URL identifies the row and nothing
+// else. A login link ends up in mail archives, proxy logs and screenshots, so
+// neither the member's address nor the token itself may travel in it.
+func TestGenerateMagicLink_LinkExposesNeitherTokenNorEmail(t *testing.T) {
 	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
 	defer done()
 
@@ -250,11 +269,11 @@ func TestGenerateMagicLink_LinkCarriesTokenAndEmail(t *testing.T) {
 	var resp authResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	parsed, err := url.Parse(resp.Link)
-	require.NoError(t, err)
-	assert.NotEmpty(t, parsed.Query().Get("token"))
-	assert.Equal(t, "a@example.com", parsed.Query().Get("email"))
-	assert.Equal(t, "false", parsed.Query().Get("isReset"))
+	assert.NotContains(t, resp.Link, "a@example.com")
+	assert.NotContains(t, resp.Link, "a%40example.com")
+	assert.NotContains(t, resp.Link, "token=")
+	assert.NotContains(t, resp.Link, "isReset")
+	assert.Len(t, shortCodeOf(t, resp.Link), 12)
 }
 
 // ---------- 2b. Redirect path ----------
@@ -273,9 +292,8 @@ func TestGenerateMagicLink_CarriesRedirectPath(t *testing.T) {
 	var resp authResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, "/curso/123/aula/456", mustQueryParam(t, resp.Link, "redirect"))
-	// The rest of the link is unchanged.
-	assert.NotEmpty(t, mustQueryParam(t, resp.Link, "token"))
-	assert.Equal(t, "a@example.com", mustQueryParam(t, resp.Link, "email"))
+	// The destination is the only query parameter; the code stays in the path.
+	assert.NotEmpty(t, shortCodeOf(t, resp.Link))
 }
 
 // Omitting the field keeps the link exactly as it was before this parameter
@@ -384,28 +402,36 @@ func TestGenerateMagicLink_RedirectVariesWithoutReminting(t *testing.T) {
 	assert.Equal(t, "/curso/1", mustQueryParam(t, first.Link, "redirect"))
 	assert.Equal(t, "/curso/2", mustQueryParam(t, second.Link, "redirect"))
 	assert.Equal(t,
-		mustQueryParam(t, first.Link, "token"),
-		mustQueryParam(t, second.Link, "token"),
-		"both links must carry the same token")
+		shortCodeOf(t, first.Link),
+		shortCodeOf(t, second.Link),
+		"both links must resolve to the same MagicToken row")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ---------- 3. Token storage ----------
 
-// Only the bcrypt hash of the token reaches the database; a dump must not
-// yield usable links.
-func TestGenerateMagicLink_StoresOnlyTheHash(t *testing.T) {
+// The row the frontend redeems: its "shortCode" is what the link carries, its
+// "token" is a sha256 digest, and its "method" names this endpoint so the audit
+// trail can tell an API-minted link from one the panel produced.
+func TestGenerateMagicLink_MintsTheMagicTokenRow(t *testing.T) {
 	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
 	defer done()
 
-	var storedHash string
+	var storedToken, storedShortCode, storedMethod string
+	var storedUserID, storedTenantID string
+
 	mock.ExpectQuery(`FROM "User" u`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u1"))
-	mock.ExpectExec(`UPDATE "User"`).
+	mock.ExpectExec(`UPDATE "User"`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
 		WithArgs(
-			sqlmock.AnyArg(), // hash — captured below via the argument matcher
-			sqlmock.AnyArg(),
-			"u1",
+			sqlmock.AnyArg(), // id (CUID)
+			capture(&storedToken),
+			capture(&storedShortCode),
+			capture(&storedUserID),
+			capture(&storedTenantID),
+			capture(&storedMethod),
+			sqlmock.AnyArg(), // expires
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`SELECT "customDomain", subdomain FROM "Tenant"`).
@@ -417,16 +443,107 @@ func TestGenerateMagicLink_StoresOnlyTheHash(t *testing.T) {
 
 	var resp authResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	token := mustQueryParam(t, resp.Link, "token")
 
-	// Re-derive the hash the way the slice does and confirm it verifies —
-	// proving the stored value is a bcrypt hash of the token, not the token.
-	hash, err := bcrypt.GenerateFromPassword([]byte(token), bcryptCost)
-	require.NoError(t, err)
-	storedHash = string(hash)
-	assert.NoError(t, bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(token)))
-	assert.NotContains(t, storedHash, token)
+	assert.Equal(t, storedShortCode, shortCodeOf(t, resp.Link))
+	assert.Equal(t, "u1", storedUserID)
+	assert.Equal(t, "t1", storedTenantID)
+	assert.Equal(t, magicTokenMethod, storedMethod)
+	// sha256 hex, not bcrypt: the frontend compares digests.
+	assert.Len(t, storedToken, 64)
+	assert.NotContains(t, storedToken, "$2a$")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
+
+// A collision on the unique "shortCode" index is regenerated rather than
+// surfaced to the caller.
+func TestGenerateMagicLink_RetriesOnShortCodeCollision(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	mock.ExpectQuery(`FROM "User" u`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u1"))
+	mock.ExpectExec(`UPDATE "User"`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
+		WillReturnError(&pq.Error{Code: "23505", Constraint: "MagicToken_shortCode_key"})
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`SELECT "customDomain", subdomain FROM "Tenant"`).
+		WillReturnRows(sqlmock.NewRows([]string{"customDomain", "subdomain"}).AddRow("escola.com.br", nil))
+
+	w := httptest.NewRecorder()
+	f.GenerateMagicLink(w, postRequest("t1", `{"email":"a@example.com"}`))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// If the row cannot be minted the request fails. Degrading to the old
+// `/login?token=&email=` link would put the address back in the URL, silently.
+func TestGenerateMagicLink_FailsWhenTheRowCannotBeMinted(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	mock.ExpectQuery(`FROM "User" u`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u1"))
+	mock.ExpectExec(`UPDATE "User"`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
+		WillReturnError(errors.New("connection reset"))
+
+	w := httptest.NewRecorder()
+	f.GenerateMagicLink(w, postRequest("t1", `{"email":"a@example.com"}`))
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NotContains(t, w.Body.String(), "connection reset")
+}
+
+// The legacy "User"."magicToken" column keeps its bcrypt hash: the frontend
+// still honours it on the old /login route, and a dump must not yield a usable
+// token.
+func TestGenerateMagicLink_StoresOnlyTheHashOnTheLegacyColumn(t *testing.T) {
+	f, mock, _, done := newTestFeature(t, "memberclass.com.br")
+	defer done()
+
+	var legacyHash, digest string
+
+	mock.ExpectQuery(`FROM "User" u`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u1"))
+	mock.ExpectExec(`UPDATE "User"`).
+		WithArgs(capture(&legacyHash), sqlmock.AnyArg(), "u1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO "MagicToken"`).
+		WithArgs(
+			sqlmock.AnyArg(),
+			capture(&digest),
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`SELECT "customDomain", subdomain FROM "Tenant"`).
+		WillReturnRows(sqlmock.NewRows([]string{"customDomain", "subdomain"}).AddRow("escola.com.br", nil))
+
+	w := httptest.NewRecorder()
+	f.GenerateMagicLink(w, postRequest("t1", `{"email":"a@example.com"}`))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	// The raw token never leaves the process, so the assertion runs the other
+	// way: whatever the legacy column holds must be a bcrypt hash, and the two
+	// columns must not hold the same value.
+	assert.True(t, strings.HasPrefix(legacyHash, "$2"), "not a bcrypt hash: %q", legacyHash)
+	assert.NotEqual(t, legacyHash, digest)
+	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(legacyHash), []byte(digest)))
+}
+
+// capture is a sqlmock argument matcher that accepts any string and records it.
+type capturingArg struct{ into *string }
+
+func (c capturingArg) Match(v driver.Value) bool {
+	s, ok := v.(string)
+	if ok {
+		*c.into = s
+	}
+	return ok
+}
+
+func capture(into *string) sqlmock.Argument { return capturingArg{into: into} }
 
 func mustQueryParam(t *testing.T, rawURL, key string) string {
 	t.Helper()
