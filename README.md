@@ -81,7 +81,6 @@ memberclass-backend-golang/
 ├── docker-compose.yml          # Docker configuration
 ├── Dockerfile                  # Docker image
 ├── Makefile                    # Automation commands
-├── swagger.yaml                # OpenAPI documentation
 ├── memberclass-api.postman_collection.json  # Postman collection
 └── README.md                   # This file
 ```
@@ -458,7 +457,9 @@ Import the `memberclass-api.postman_collection.json` collection into Postman to 
 
 ### OpenAPI Specification
 
-The `swagger.yaml` file contains the complete API specification in OpenAPI 3.0.3 format.
+The `internal/features/api/docs/swagger.yaml` file contains the complete API specification in OpenAPI 3.0.3 format.
+
+It is embedded in the binary and served as a Go `text/template`: the brand name and the public base URL come from `PUBLIC_API_NAME` and `PUBLIC_API_URL` at request time, so a single image serves any deployment. Both are optional — unset, the docs render unbranded and boot logs a warning naming the variable. See [internal/features/api/docs/docs.go](internal/features/api/docs/docs.go).
 
 ## 🔒 Rate Limiting
 

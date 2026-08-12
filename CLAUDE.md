@@ -181,7 +181,7 @@ nothing to work with.**
 
 The tenant key moved from `mc-api-key` to `x-api-key`. Both are accepted and
 `x-api-key` wins when a caller sends both; only `x-api-key` is documented in
-[swagger.yaml](swagger.yaml). The legacy name goes when its callers do —
+[swagger.yaml](internal/features/api/docs/swagger.yaml). The legacy name goes when its callers do —
 dropping it earlier would log out every integration in one deploy.
 
 The internal API key is checked inside the handlers that use it, not by a
@@ -412,8 +412,12 @@ log. Point the platform's healthcheck at it.
 - Error bodies come in two shapes and both are contract: `{error, message}` for
   405 and unmapped codes, `{ok, error, errorCode}` for the failures clients
   switch on. Check what an endpoint already returns before changing it.
-- Swagger is hand-maintained in [swagger.yaml](swagger.yaml), served at `/docs/`,
-  and copied into the image by the Dockerfile.
+- Swagger is hand-maintained in
+  [internal/features/api/docs/swagger.yaml](internal/features/api/docs/swagger.yaml),
+  served at `/docs/`. It is a `text/template` embedded in the binary, not a file
+  next to it: `PUBLIC_API_NAME` / `PUBLIC_API_URL` fill the brand and the
+  `servers[]` host per deployment. Keep every placeholder quoted — unquoted
+  `{{` is invalid YAML.
 - CI ([.github/workflows/](.github/workflows/)) runs `go build ./...`,
   `go test ./...` and a coverage threshold over
   `internal/features`, `internal/platform`, `internal/shared` and `internal/app`.

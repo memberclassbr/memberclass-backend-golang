@@ -51,7 +51,7 @@ func createTestRouter(t *testing.T) *Router {
 	mockActivitySummary := activity_summary.New(nil, nil, nil)
 	mockMemberImport := member_import.New(nil, nil, nil, cfg)
 	mockStudent := studentfeat.New(nil, nil, nil)
-	mockSwaggerHandler := docs.New()
+	mockSwaggerHandler := docs.New(cfg, log)
 	mockAuth := authfeat.New(nil, nil, cfg, log)
 	mockSSO := ssofeat.New(nil, log)
 	mockAI := aifeat.New(nil, &config.Config{}, nil)

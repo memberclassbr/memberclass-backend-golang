@@ -156,6 +156,18 @@ type Public struct {
 	// FilesURL is the CDN prefix that resolves relative asset paths (tenant
 	// logos in email templates). Optional.
 	FilesURL string
+	// APIName is this deployment's brand, e.g. MemberClass. It names the API
+	// in the /docs page and in the OpenAPI spec it serves. Optional: unset
+	// renders the docs unbranded rather than under some other deployment's
+	// brand, and adds a warning.
+	APIName string
+	// APIURL is the public base URL of this API, e.g.
+	// https://api.memberclass.com.br. It is the `servers[]` entry of the
+	// served spec, so it must be the host a customer can actually call.
+	// Optional: unset falls back to the host the /docs request arrived on,
+	// which is right for a normal proxied setup and wrong when the docs are
+	// reached over an internal hostname.
+	APIURL string
 }
 
 // Bunny holds the account-level CDN credentials. Per-tenant library keys live
@@ -291,6 +303,8 @@ func Load() (*Config, error) {
 		Public: Public{
 			DomainURL: required("PUBLIC_DOMAIN_URL", "NEXT_PUBLIC_DOMAIN_URL"),
 			FilesURL:  lookup("PUBLIC_FILES_URL", "NEXT_PUBLIC_FILES_URL"),
+			APIName:   lookup("PUBLIC_API_NAME"),
+			APIURL:    lookup("PUBLIC_API_URL"),
 		},
 		Bunny: Bunny{
 			APIKey:  os.Getenv("BUNNY_API_KEY"),
@@ -323,6 +337,19 @@ func Load() (*Config, error) {
 		cfg.warnings = append(cfg.warnings,
 			"go-token JWTs still accept NEXTAUTH_SECRET as a fallback: once the frontend signs with "+
 				"GO_API_JWT_SECRET, set GO_API_JWT_LEGACY_FALLBACK=false to close the window")
+	}
+
+	// The docs are the one surface a customer reads verbatim, so an
+	// unconfigured deployment must say so rather than quietly serve whatever
+	// brand happens to be embedded.
+	if cfg.Public.APIName == "" {
+		cfg.warnings = append(cfg.warnings,
+			"API docs render unbranded: set PUBLIC_API_NAME to this deployment's brand (e.g. MemberClass)")
+	}
+	if cfg.Public.APIURL == "" {
+		cfg.warnings = append(cfg.warnings,
+			"API docs advertise the request host as the API base URL: set PUBLIC_API_URL "+
+				"(e.g. https://api.memberclass.com.br) so the published spec is right no matter how /docs was reached")
 	}
 
 	cfg.loadIlovePDF()

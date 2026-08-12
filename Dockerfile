@@ -29,8 +29,9 @@ RUN addgroup -g 1000 appuser && \
 WORKDIR /home/appuser
 
 # Copy binary from builder
+# The OpenAPI spec is embedded in the binary (internal/features/docs), so
+# there is nothing to copy alongside it.
 COPY --from=builder /app/main .
-COPY --from=builder /app/swagger.yaml .
 
 # Change ownership
 RUN chown -R appuser:appuser /home/appuser

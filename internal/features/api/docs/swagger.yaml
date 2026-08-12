@@ -1,14 +1,14 @@
 openapi: 3.0.3
 info:
-  title: MemberClass API
+  title: "{{.APITitle}}"
   description: |
-    API para gerenciamento de usuários, comentários, atividades do sistema MemberClass
+    API para gerenciamento de usuários, comentários, atividades do sistema {{.APIName}}
   version: 1.0.0
   contact:
-    name: MemberClass Team
+    name: "{{.APIName}} Team"
 
 servers:
-  - url: https://api.memberclass.com.br/
+  - url: "{{.APIBaseURL}}"
     description: Servidor de produção
 
 tags:
@@ -452,7 +452,7 @@ paths:
                     date: "2026-04-23T16:45:06.815Z"
                     details:
                       certificateId: "cmeg516j00001jq04lklxvhs7"
-                      certificateUrl: "https://storage.filesmemberclass.com/certificate-....pdf"
+                      certificateUrl: "{{.FilesURL}}/certificate-....pdf"
                       status: "success"
                       title: "Nome Certificado"
                   - id: "cmobpnmkl0056in0cp2yqxnfq"
@@ -2569,7 +2569,7 @@ components:
       properties:
         aluno_id:
           type: string
-          description: ID do aluno no MemberClass
+          description: "ID do aluno no {{.APIName}}"
           example: "user-123"
         email:
           type: string
