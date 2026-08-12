@@ -114,11 +114,37 @@ data.
   either, since neither shows up until a deployment with a transcription DSN
   boots.
 
+  `schema_migrations_go` is **younger than the schema it tracks**, which is the
+  other half of the same story: these files were applied by hand before the
+  runner existed, so a database can be fully migrated and still have an empty
+  bookkeeping table. The runner would then read every file as pending and apply
+  it a second time — merely wasteful on an empty database, destructive on a
+  populated one, since `002` deletes every row in `chunks`, `transcripts` and
+  `videos`. That is exactly why production broke where development passed: same
+  schema, only one of them with data.
+
+  So every migration declares a **probe** in `migrationProbes`
+  ([migrate.go](internal/platform/database/migrate.go)) — one boolean query
+  looking for the artefact that migration leaves behind. A pending migration
+  whose probe says "already there" is recorded as applied without being run,
+  once per database, and logged as `Adopted transcription migration`. A probe
+  must never raise (`to_regclass`, never `::regclass`) because a probe that
+  errors fails the boot, and it must be specific, because a false positive
+  retires a migration that never ran. `TestMigrationProbes_CoverEveryMigration`
+  makes adding a migration force the question.
+
   The migrations **alter** that schema; they do not create it. `videos`,
   `chunks`, `transcripts`, `jobs` and `token_usage` exist in no `CREATE TABLE`
   in this repository, so a transcription database that has never held them
   fails at `000`. Point `DB_TRANSCRIPTION_DSN` at an existing one, or leave it
   unset — it is optional, and unset simply disables the slice.
+
+  One environment constraint is set by the runner rather than by any file:
+  `applyMigration` opens each transaction with
+  `max_parallel_maintenance_workers = 0` and `maintenance_work_mem = '32MB'`.
+  Postgres in a container gets Docker's default 64MB `/dev/shm`, and pgvector
+  sizes the shared memory segment for a parallel HNSW build from
+  `maintenance_work_mem` — which on a managed instance does not fit.
 
 ## Environment
 
