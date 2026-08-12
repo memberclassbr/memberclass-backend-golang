@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -497,10 +498,14 @@ func TestGetLessonsCompleted_Success(t *testing.T) {
 	expectMemberLookup(mock, "a@example.com", "t1", "u1")
 
 	completedAt := time.Date(2026, 6, 1, 14, 0, 0, 0, time.UTC)
-	mock.ExpectQuery(`WITH completed_reads AS`).
+	// The Vitrine join is pinned in both expectations. Scoping through
+	// CourseOnDelivery instead asks whether the course is bundled into an offer
+	// rather than whether it belongs to the tenant, and returned an empty page
+	// for members who had completed lessons.
+	mock.ExpectQuery(`JOIN "Vitrine" v ON v\.id = c\."vitrineId"`).
 		WillReturnRows(sqlmock.NewRows([]string{"completed_at", "lesson_name", "course_name"}).
 			AddRow(completedAt, "Aula 1", "Curso 1"))
-	mock.ExpectQuery(`SELECT COUNT\(DISTINCT`).
+	mock.ExpectQuery(`SELECT COUNT\(DISTINCT.*JOIN "Vitrine" v`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
 
 	w := httptest.NewRecorder()
@@ -515,6 +520,31 @@ func TestGetLessonsCompleted_Success(t *testing.T) {
 	assert.Equal(t, "Aula 1", resp.Data.CompletedLessons[0].LessonName)
 	assert.Equal(t, "2026-06-01T14:00:00.000Z", resp.Data.CompletedLessons[0].CompletedAt)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Tenant scope belongs to the ownership chain, not the entitlement one.
+// Delivery describes what a member bought; Vitrine describes what the tenant
+// owns. Asking the first question returned nothing for lessons whose course is
+// not bound to a Delivery through CourseOnDelivery — including every course
+// granted at vitrine, module or lesson level, since deliveries bind at any of
+// those. /api/v1/user/activities always used the ownership chain, which is how
+// the two endpoints came to disagree about the same Read row.
+func TestCompletedLessonsSQL_ScopesByOwnershipNotEntitlement(t *testing.T) {
+	for name, query := range map[string]string{
+		"page":  sqlCompletedLessons,
+		"count": sqlCountCompletedLessons,
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, query, `JOIN "Vitrine" v`,
+				"tenant scope must walk course -> vitrine")
+			assert.Contains(t, query, `v."tenantId"`,
+				"the tenant filter belongs on Vitrine")
+			assert.NotContains(t, query, "CourseOnDelivery",
+				"entitlement tables hide lessons the member has genuinely completed")
+			assert.NotContains(t, query, `JOIN "Delivery"`,
+				"entitlement tables hide lessons the member has genuinely completed")
+		})
+	}
 }
 
 // The optional course filter takes $5, pushing LIMIT/OFFSET to $6/$7.
@@ -540,15 +570,59 @@ func TestQueryCompletedLessons_CourseFilterShiftsPlaceholders(t *testing.T) {
 func TestResolveWindow(t *testing.T) {
 	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 
-	t.Run("no dates defaults to the last 31 days", func(t *testing.T) {
+	t.Run("no dates defaults to the last 31 whole days", func(t *testing.T) {
 		start, end := resolveWindow(lessonsCompletedRequest{}, now)
-		assert.Equal(t, now, end)
-		assert.Equal(t, now.AddDate(0, 0, -31), start)
+		// 2026-05-16 through 2026-06-15 inclusive is 31 calendar days.
+		assert.Equal(t, time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC), start)
+		assert.Equal(t, time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC), end)
 	})
 
-	t.Run("start only covers that whole day", func(t *testing.T) {
+	t.Run("the default window covers the whole first day", func(t *testing.T) {
+		// The old offset-from-now default cut at 12:00 on the oldest day and
+		// hid anything completed before it.
+		start, _ := resolveWindow(lessonsCompletedRequest{}, now)
+		assert.Equal(t, 0, start.Hour(), "oldest day must start at midnight")
+	})
+
+	t.Run("the default window fits inside the caller-facing maximum", func(t *testing.T) {
+		start, end := resolveWindow(lessonsCompletedRequest{}, now)
+		assert.LessOrEqual(t, end.Sub(start), maxCompletedWindow,
+			"default must not be wider than a caller is allowed to request")
+	})
+
+	t.Run("the default resolves in UTC whatever zone now carries", func(t *testing.T) {
+		// datefilter.Parse resolves an explicit date-only bound in UTC. A
+		// default read in the process zone would measure a different day.
+		saoPaulo := time.FixedZone("BRT", -3*60*60)
+		start, end := resolveWindow(lessonsCompletedRequest{}, now.In(saoPaulo))
+		assert.Equal(t, time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC), start)
+		assert.Equal(t, time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC), end)
+	})
+
+	t.Run("start only keeps the spelled-out time and closes that day", func(t *testing.T) {
+		// datefilter.Parse takes RFC3339 literally; rounding the start down
+		// here would override the time the caller meant.
 		day := time.Date(2026, 3, 10, 17, 45, 0, 0, time.UTC)
 		start, end := resolveWindow(lessonsCompletedRequest{StartDate: &day}, now)
+		assert.Equal(t, day, start)
+		assert.Equal(t, time.Date(2026, 3, 10, 23, 59, 59, 999999999, time.UTC), end)
+	})
+
+	t.Run("start only never spills into the next day", func(t *testing.T) {
+		day := time.Date(2026, 3, 10, 23, 59, 0, 0, time.UTC)
+		_, end := resolveWindow(lessonsCompletedRequest{StartDate: &day}, now)
+		assert.Equal(t, 10, end.Day())
+	})
+
+	t.Run("a date-only startDate still covers its whole day", func(t *testing.T) {
+		// The date-only form arrives already at midnight from datefilter.Parse,
+		// so dropping the widening here must not narrow it.
+		req, err := parseLessonsCompleted(url.Values{
+			"email":     []string{"a@example.com"},
+			"startDate": []string{"2026-03-10"},
+		})
+		require.NoError(t, err)
+		start, end := resolveWindow(*req, now)
 		assert.Equal(t, time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC), start)
 		assert.Equal(t, time.Date(2026, 3, 10, 23, 59, 59, 999999999, time.UTC), end)
 	})

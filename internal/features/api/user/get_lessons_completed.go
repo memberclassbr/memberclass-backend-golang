@@ -59,6 +59,16 @@ const (
 	defaultWindowInDays = 31
 )
 
+// startOfDay and endOfDay widen an instant to the calendar day that contains
+// it, keeping the instant's own location.
+func startOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
+func endOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
+}
+
 // ---------- 1. HTTP handler ----------
 
 // GetLessonsCompleted handles `GET /api/v1/user/lessons/completed`.
@@ -214,16 +224,34 @@ func (f *Feature) getLessonsCompleted(ctx context.Context, tenantID string, req 
 }
 
 // resolveWindow turns the optional date parameters into a concrete range:
-// no dates means the last 31 days; a lone startDate means that whole calendar
-// day; both dates are used as given.
+// no dates means the last 31 calendar days; a lone startDate means the rest of
+// the day it names; both dates are used as given.
+//
+// A lone startDate closes at the end of its own day and never spills into the
+// next one, so a caller who names a single day gets that day. Its start is left
+// exactly where datefilter.Parse put it: a date-only bound already resolves to
+// midnight, and an RFC3339 bound spells out a time the caller meant. Rounding
+// the start down here would have overridden that time and contradicted the
+// literal reading datefilter promises.
+//
+// The default window is expressed in whole days, not in an offset from the
+// current instant. Cutting at `now minus 31 days` dropped everything completed
+// earlier in the clock-day at the far end of the range — a call at 14:32 could
+// not see a lesson finished at 09:00 on the oldest day it claimed to cover.
+// It is also resolved in UTC, because that is the zone datefilter.Parse gives
+// an explicit date-only bound; leaving it on the process zone made the default
+// and the explicit form measure days differently.
+//
+// Counting the current day as the first of the 31 keeps the default inside
+// maxCompletedWindow, so the API never returns a range wider than it lets a
+// caller ask for.
 func resolveWindow(req lessonsCompletedRequest, now time.Time) (start, end time.Time) {
 	switch {
 	case req.StartDate == nil && req.EndDate == nil:
-		return now.AddDate(0, 0, -defaultWindowInDays), now
+		today := now.UTC()
+		return startOfDay(today.AddDate(0, 0, -(defaultWindowInDays - 1))), endOfDay(today)
 	case req.StartDate != nil && req.EndDate == nil:
-		d := *req.StartDate
-		return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location()),
-			time.Date(d.Year(), d.Month(), d.Day(), 23, 59, 59, 999999999, d.Location())
+		return *req.StartDate, endOfDay(*req.StartDate)
 	default:
 		return *req.StartDate, *req.EndDate
 	}
@@ -233,8 +261,19 @@ func resolveWindow(req lessonsCompletedRequest, now time.Time) (start, end time.
 
 const (
 	// sqlCompletedLessons resolves the member's reads to lessons, then keeps
-	// only those reachable from a Delivery owned by the tenant — that join
-	// chain is where the tenant scope lives. %s is the optional course filter.
+	// only those belonging to the tenant. %s is the optional course filter.
+	//
+	// The tenant scope walks lesson → module → section → course → vitrine,
+	// because Vitrine is what a Tenant owns. It used to walk through
+	// CourseOnDelivery → Delivery instead, which asks a different question: not
+	// "does this lesson belong to the tenant" but "is this lesson's course
+	// bundled into one of its offers". A course with no CourseOnDelivery row —
+	// or one granted at vitrine, module or lesson level, since deliveries can
+	// bind at any of those — matched nothing, and the endpoint returned an
+	// empty page for a member who had genuinely completed lessons.
+	//
+	// /api/v1/user/activities has always used the vitrine chain for the same
+	// reads, which is why it listed a completion this endpoint could not see.
 	sqlCompletedLessons = `
 		WITH completed_reads AS (
 			SELECT r."createdAt", r."lessonId"
@@ -255,10 +294,9 @@ const (
 			JOIN "Module" m ON m.id = l."moduleId"
 			JOIN "Section" s ON s.id = m."sectionId"
 			JOIN "Course" c ON c.id = s."courseId"
-			JOIN "CourseOnDelivery" cod ON cod."courseId" = c.id
-			JOIN "Delivery" d ON d.id = cod."deliveryId"
+			JOIN "Vitrine" v ON v.id = c."vitrineId"
 			WHERE l.id IN (SELECT "lessonId" FROM completed_reads)
-			  AND d."tenantId" = $4%s
+			  AND v."tenantId" = $4%s
 		)
 		SELECT
 			cr."createdAt" as completed_at,
@@ -277,14 +315,13 @@ const (
 		JOIN "Module" m ON m.id = l."moduleId"
 		JOIN "Section" s ON s.id = m."sectionId"
 		JOIN "Course" c ON c.id = s."courseId"
-		JOIN "CourseOnDelivery" cod ON cod."courseId" = c.id
-		JOIN "Delivery" d ON d.id = cod."deliveryId"
+		JOIN "Vitrine" v ON v.id = c."vitrineId"
 		WHERE r."userId" = $1
 		  AND r.read = true
 		  AND r."lessonId" IS NOT NULL
 		  AND r."createdAt" >= $2
 		  AND r."createdAt" <= $3
-		  AND d."tenantId" = $4
+		  AND v."tenantId" = $4
 	`
 )
 
