@@ -425,6 +425,42 @@ func TestGetUserPurchases_UnknownEmailIsNotFound(t *testing.T) {
 
 // ---------- 5. GET /user/lessons/completed ----------
 
+// The date filters accept a bare calendar date, not only full RFC3339. A caller
+// filtering by day sends 2026-08-10, and rejecting that with "formato de data
+// inválido" while the message named no accepted format is how this endpoint
+// first looked broken.
+func TestParseLessonsCompleted_AcceptsBareDates(t *testing.T) {
+	req, err := parseLessonsCompleted(map[string][]string{
+		"email":     {"a@example.com"},
+		"startDate": {"2026-08-10"},
+		"endDate":   {"2026-08-13"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, req.StartDate)
+	require.NotNil(t, req.EndDate)
+
+	assert.Equal(t, "2026-08-10T00:00:00Z", req.StartDate.UTC().Format(time.RFC3339))
+
+	// The end bound closes at the end of the named day. Resolved to midnight it
+	// would drop almost all of the 13th, and the caller asked for the 13th.
+	lateOnTheLastDay := time.Date(2026, 8, 13, 22, 15, 0, 0, time.UTC)
+	assert.False(t, lateOnTheLastDay.After(*req.EndDate),
+		"endDate %s excludes %s", req.EndDate, lateOnTheLastDay)
+}
+
+// RFC3339 keeps meaning exactly what it says: a caller who spells out a time is
+// not rounded to a day boundary.
+func TestParseLessonsCompleted_RFC3339IsNotWidened(t *testing.T) {
+	req, err := parseLessonsCompleted(map[string][]string{
+		"email":     {"a@example.com"},
+		"startDate": {"2026-08-10T14:32:05Z"},
+		"endDate":   {"2026-08-13T09:00:00Z"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "2026-08-10T14:32:05Z", req.StartDate.UTC().Format(time.RFC3339))
+	assert.Equal(t, "2026-08-13T09:00:00Z", req.EndDate.UTC().Format(time.RFC3339))
+}
+
 func TestGetLessonsCompleted_ValidationCodes(t *testing.T) {
 	cases := []struct {
 		name     string

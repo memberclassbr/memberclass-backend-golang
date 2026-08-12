@@ -363,6 +363,10 @@ paths:
         - `endDate` sem `startDate` → erro
         - `startDate > endDate` → erro
         - Período máximo: **31 dias**
+        - Formato: `YYYY-MM-DD` ou ISO 8601 completo. Uma data pura em `endDate`
+          fecha no fim do dia, então `startDate=2026-08-10&endDate=2026-08-13`
+          cobre os quatro dias inteiros. Com ISO 8601 completo o instante é
+          usado literalmente — `2026-08-13T00:00:00Z` exclui o dia 13.
       operationId: getUserActivities
       parameters:
         - name: mc-api-key
@@ -400,7 +404,7 @@ paths:
         - name: startDate
           in: query
           required: false
-          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data início. Aceita YYYY-MM-DD (resolve para 00:00:00Z do dia) ou ISO 8601 completo (YYYY-MM-DDTHH:mm:ssZ, usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -408,7 +412,7 @@ paths:
         - name: endDate
           in: query
           required: false
-          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data fim. Aceita YYYY-MM-DD (resolve para 23:59:59.999Z do dia, então o intervalo inclui o dia inteiro) ou ISO 8601 completo (usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -495,7 +499,7 @@ paths:
                   summary: Formato de data inválido
                   value:
                     ok: false
-                    error: "formato de data inválido para startDate"
+                    error: "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
                     errorCode: "INVALID_DATE_FORMAT"
                 invalidDateRange:
                   summary: Período inválido
@@ -549,6 +553,10 @@ paths:
         - Se `endDate` sem `startDate` → erro
         - Se `startDate > endDate` → erro
         - Período máximo: **31 dias**
+        - Formato: `YYYY-MM-DD` ou ISO 8601 completo. Uma data pura em `endDate`
+          fecha no fim do dia, então `startDate=2026-08-10&endDate=2026-08-13`
+          cobre os quatro dias inteiros. Com ISO 8601 completo o instante é
+          usado literalmente — `2026-08-13T00:00:00Z` exclui o dia 13.
         
         **noAccess:** Se `true`, retorna usuários SEM atividade no período. Se `false` (padrão), retorna usuários COM atividade.
       operationId: getActivitySummary
@@ -580,7 +588,7 @@ paths:
         - name: startDate
           in: query
           required: false
-          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data início. Aceita YYYY-MM-DD (resolve para 00:00:00Z do dia) ou ISO 8601 completo (YYYY-MM-DDTHH:mm:ssZ, usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -588,7 +596,7 @@ paths:
         - name: endDate
           in: query
           required: false
-          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data fim. Aceita YYYY-MM-DD (resolve para 23:59:59.999Z do dia, então o intervalo inclui o dia inteiro) ou ISO 8601 completo (usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -637,7 +645,7 @@ paths:
                   summary: Formato de data inválido
                   value:
                     ok: false
-                    error: "formato de data inválido para startDate"
+                    error: "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
                     errorCode: "INVALID_DATE_FORMAT"
                 invalidDateRange:
                   summary: Período inválido
@@ -681,6 +689,10 @@ paths:
         - Se `endDate` sem `startDate` → erro
         - Se `startDate > endDate` → erro
         - Período máximo: **31 dias**
+        - Formato: `YYYY-MM-DD` ou ISO 8601 completo. Uma data pura em `endDate`
+          fecha no fim do dia, então `startDate=2026-08-10&endDate=2026-08-13`
+          cobre os quatro dias inteiros. Com ISO 8601 completo o instante é
+          usado literalmente — `2026-08-13T00:00:00Z` exclui o dia 13.
         
         **Cache:** Esta rota **NÃO usa cache** no Redis (dados em tempo real por usuário).
       operationId: getLessonsCompleted
@@ -720,7 +732,7 @@ paths:
         - name: startDate
           in: query
           required: false
-          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data início. Aceita YYYY-MM-DD (resolve para 00:00:00Z do dia) ou ISO 8601 completo (YYYY-MM-DDTHH:mm:ssZ, usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -728,7 +740,7 @@ paths:
         - name: endDate
           in: query
           required: false
-          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data fim. Aceita YYYY-MM-DD (resolve para 23:59:59.999Z do dia, então o intervalo inclui o dia inteiro) ou ISO 8601 completo (usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -787,7 +799,7 @@ paths:
                   summary: Formato de data inválido
                   value:
                     ok: false
-                    error: "formato de data inválido para startDate"
+                    error: "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
                     errorCode: "INVALID_DATE_FORMAT"
                 invalidDateRange:
                   summary: Período inválido

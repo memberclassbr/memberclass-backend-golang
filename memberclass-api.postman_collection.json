@@ -1121,7 +1121,7 @@
        }
       ],
       "url": {
-       "raw": "{{baseUrl}}/api/v1/user/lessons/completed?email={{email}}&courseId={{courseId}}&page=1&limit=10&startDate=2025-01-01&endDate=2025-12-31",
+       "raw": "{{baseUrl}}/api/v1/user/lessons/completed?email={{email}}&courseId={{courseId}}&page=1&limit=10&startDate=2026-08-10&endDate=2026-08-13",
        "host": [
         "{{baseUrl}}"
        ],
@@ -1155,13 +1155,13 @@
         },
         {
          "key": "startDate",
-         "value": "2025-01-01",
-         "description": "Início da janela (ISO-8601)."
+         "value": "2026-08-10",
+         "description": "Início da janela. `YYYY-MM-DD` ou ISO 8601 completo (`2026-08-10T00:00:00Z`). A data pura resolve para 00:00:00Z."
         },
         {
          "key": "endDate",
-         "value": "2025-12-31",
-         "description": "Fim da janela (ISO-8601)."
+         "value": "2026-08-13",
+         "description": "Fim da janela. `YYYY-MM-DD` fecha no **fim do dia** (23:59:59.999Z), então o dia informado entra inteiro. ISO 8601 completo é usado literalmente — `T00:00:00Z` exclui quase todo o dia."
         }
        ]
       },
@@ -1250,7 +1250,7 @@
        }
       ],
       "url": {
-       "raw": "{{baseUrl}}/api/v1/user/activities?email={{email}}&page=1&limit=10&startDate=2025-01-01&endDate=2025-12-31",
+       "raw": "{{baseUrl}}/api/v1/user/activities?email={{email}}&page=1&limit=10&startDate=2026-08-10&endDate=2026-08-13",
        "host": [
         "{{baseUrl}}"
        ],
@@ -1278,13 +1278,13 @@
         },
         {
          "key": "startDate",
-         "value": "2025-01-01",
-         "description": "Início da janela (ISO-8601)."
+         "value": "2026-08-10",
+         "description": "Início da janela. `YYYY-MM-DD` ou ISO 8601 completo (`2026-08-10T00:00:00Z`). A data pura resolve para 00:00:00Z."
         },
         {
          "key": "endDate",
-         "value": "2025-12-31",
-         "description": "Fim da janela (ISO-8601)."
+         "value": "2026-08-13",
+         "description": "Fim da janela. `YYYY-MM-DD` fecha no **fim do dia** (23:59:59.999Z), então o dia informado entra inteiro. ISO 8601 completo é usado literalmente — `T00:00:00Z` exclui quase todo o dia."
         }
        ]
       },
@@ -1489,7 +1489,7 @@
        }
       ],
       "url": {
-       "raw": "{{baseUrl}}/api/v1/user/activity/summary?page=1&limit=10&startDate=2025-01-01&endDate=2025-12-31&noAccess=true",
+       "raw": "{{baseUrl}}/api/v1/user/activity/summary?page=1&limit=10&startDate=2026-08-10&endDate=2026-08-13&noAccess=true",
        "host": [
         "{{baseUrl}}"
        ],
@@ -1513,13 +1513,13 @@
         },
         {
          "key": "startDate",
-         "value": "2025-01-01",
-         "description": "Início da janela (ISO-8601)."
+         "value": "2026-08-10",
+         "description": "Início da janela. `YYYY-MM-DD` ou ISO 8601 completo (`2026-08-10T00:00:00Z`). A data pura resolve para 00:00:00Z."
         },
         {
          "key": "endDate",
-         "value": "2025-12-31",
-         "description": "Fim da janela (ISO-8601)."
+         "value": "2026-08-13",
+         "description": "Fim da janela. `YYYY-MM-DD` fecha no **fim do dia** (23:59:59.999Z), então o dia informado entra inteiro. ISO 8601 completo é usado literalmente — `T00:00:00Z` exclui quase todo o dia."
         },
         {
          "key": "noAccess",
@@ -2123,7 +2123,7 @@
        }
       ],
       "url": {
-       "raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10&startDate=2025-01-01&endDate=2025-12-31",
+       "raw": "{{baseUrl}}/api/v1/student/report?page=1&limit=10&startDate=2026-08-10&endDate=2026-08-13",
        "host": [
         "{{baseUrl}}"
        ],
@@ -2146,13 +2146,13 @@
         },
         {
          "key": "startDate",
-         "value": "2025-01-01",
-         "description": "Início da janela (ISO-8601)."
+         "value": "2026-08-10",
+         "description": "Início da janela. `YYYY-MM-DD` ou ISO 8601 completo (`2026-08-10T00:00:00Z`). A data pura resolve para 00:00:00Z."
         },
         {
          "key": "endDate",
-         "value": "2025-12-31",
-         "description": "Fim da janela (ISO-8601)."
+         "value": "2026-08-13",
+         "description": "Fim da janela. `YYYY-MM-DD` fecha no **fim do dia** (23:59:59.999Z), então o dia informado entra inteiro. ISO 8601 completo é usado literalmente — `T00:00:00Z` exclui quase todo o dia."
         }
        ]
       },

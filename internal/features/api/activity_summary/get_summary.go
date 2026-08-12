@@ -15,6 +15,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
+
+	"github.com/memberclass-backend-golang/internal/shared/datefilter"
 )
 
 // ---------- DTOs ----------
@@ -193,16 +195,16 @@ func parseRequest(q url.Values) (*getActivitySummaryRequest, error) {
 		req.Limit = l
 	}
 	if v := q.Get("startDate"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
+		t, err := datefilter.Parse(v, datefilter.StartOfDay)
 		if err != nil {
-			return nil, errors.New("formato de data inválido para startDate")
+			return nil, errors.New("formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)")
 		}
 		req.StartDate = &t
 	}
 	if v := q.Get("endDate"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
+		t, err := datefilter.Parse(v, datefilter.EndOfDay)
 		if err != nil {
-			return nil, errors.New("formato de data inválido para endDate")
+			return nil, errors.New("formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)")
 		}
 		req.EndDate = &t
 	}
@@ -237,7 +239,8 @@ func classifyParseError(err error) string {
 	switch err.Error() {
 	case "page deve ser um número", "limit deve ser um número":
 		return "INVALID_PAGINATION"
-	case "formato de data inválido para startDate", "formato de data inválido para endDate":
+	case "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)",
+		"formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)":
 		return "INVALID_DATE_FORMAT"
 	default:
 		return "INVALID_REQUEST"

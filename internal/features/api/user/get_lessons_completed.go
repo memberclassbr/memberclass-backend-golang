@@ -11,6 +11,8 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
+
+	"github.com/memberclass-backend-golang/internal/shared/datefilter"
 )
 
 // ---------- DTOs ----------
@@ -48,8 +50,8 @@ const (
 	errLimitNumber      = "limit deve ser um número"
 	errPageRange        = "page deve ser >= 1"
 	errLimitRange       = "limit deve ser entre 1 e 100"
-	errStartDateFormat  = "formato de data inválido para startDate"
-	errEndDateFormat    = "formato de data inválido para endDate"
+	errStartDateFormat  = "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+	errEndDateFormat    = "formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
 	errStartRequired    = "data de início é obrigatória quando data final é fornecida"
 	errStartAfterEnd    = "a data de início não pode ser maior que a data de fim"
 	errWindowTooWide    = "período máximo de 31 dias"
@@ -121,7 +123,7 @@ func parseLessonsCompleted(query url.Values) (*lessonsCompletedRequest, error) {
 	}
 
 	if v := query.Get("startDate"); v != "" {
-		startDate, err := time.Parse(time.RFC3339, v)
+		startDate, err := datefilter.Parse(v, datefilter.StartOfDay)
 		if err != nil {
 			return nil, errors.New(errStartDateFormat)
 		}
@@ -129,7 +131,7 @@ func parseLessonsCompleted(query url.Values) (*lessonsCompletedRequest, error) {
 	}
 
 	if v := query.Get("endDate"); v != "" {
-		endDate, err := time.Parse(time.RFC3339, v)
+		endDate, err := datefilter.Parse(v, datefilter.EndOfDay)
 		if err != nil {
 			return nil, errors.New(errEndDateFormat)
 		}
