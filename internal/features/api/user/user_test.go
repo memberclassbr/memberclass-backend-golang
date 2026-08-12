@@ -179,16 +179,25 @@ func TestGetUserInformations_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
 
 	lastAccess := time.Date(2026, 5, 1, 8, 30, 0, 0, time.UTC)
-	mock.ExpectQuery(`WITH users_base AS`).
+	// Pinning "LoginEvent" here is the point of the expectation. lastAccess used
+	// to read "SystemLog", which stopped receiving logins and returned null for
+	// every member — a swap sqlmock cannot notice unless the table is matched.
+	mock.ExpectQuery(`FROM "LoginEvent" le`).
 		WithArgs("t1", 10, 0).
 		WillReturnRows(sqlmock.NewRows([]string{"userId", "email", "name", "is_paid", "last_access"}).
 			AddRow("u1", "a@example.com", "Aluno", true, lastAccess))
 
 	assignedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	expiresAt := time.Date(2027, 4, 1, 0, 0, 0, 0, time.UTC)
+	lastEventAt := time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC)
 	mock.ExpectQuery(`FROM "MemberOnDelivery"`).
 		WithArgs(sqlmock.AnyArg(), "t1").
-		WillReturnRows(sqlmock.NewRows([]string{"memberId", "deliveryId", "assignedAt", "delivery_name"}).
-			AddRow("u1", "d1", assignedAt, "Curso Base"))
+		WillReturnRows(sqlmock.NewRows([]string{
+			"memberId", "deliveryId", "assignedAt", "delivery_name",
+			"status", "expiresAt", "platform",
+			"externalSubscriptionId", "canceledAt", "lastEventAt",
+		}).AddRow("u1", "d1", assignedAt, "Curso Base",
+			"active", expiresAt, "hotmart", "sub_123", nil, lastEventAt))
 
 	w := httptest.NewRecorder()
 	f.GetUserInformations(w, requestWithTenant("/informations", "t1"))
@@ -204,8 +213,66 @@ func TestGetUserInformations_Success(t *testing.T) {
 	// The layout is not RFC3339: clients parse the fixed .000Z suffix.
 	assert.Equal(t, "2026-05-01T08:30:00.000Z", *resp.Users[0].LastAccess)
 	require.Len(t, resp.Users[0].Deliveries, 1)
-	assert.Equal(t, "Curso Base", resp.Users[0].Deliveries[0].Name)
+	d := resp.Users[0].Deliveries[0]
+	assert.Equal(t, "Curso Base", d.Name)
+	assert.Equal(t, "active", d.Status)
+	require.NotNil(t, d.ExpiresAt)
+	assert.Equal(t, "2027-04-01T00:00:00.000Z", *d.ExpiresAt)
+	require.NotNil(t, d.Platform)
+	assert.Equal(t, "hotmart", *d.Platform)
+	require.NotNil(t, d.ExternalSubscriptionID)
+	assert.Equal(t, "sub_123", *d.ExternalSubscriptionID)
+	require.NotNil(t, d.LastEventAt)
+	// Not cancelled: the field stays null rather than becoming a zero time.
+	assert.Nil(t, d.CanceledAt)
 	assert.Equal(t, int64(1), resp.Pagination.TotalCount)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// A lifetime purchase has no expiry and a hand-made grant has no gateway
+// origin. Both must stay null in the response: flattening them to "" would make
+// a manual grant indistinguishable from one that lost its platform.
+func TestGetUserInformations_LifetimeGrantKeepsNulls(t *testing.T) {
+	f, mock, _, done := newTestFeature(t)
+	defer done()
+
+	mock.ExpectQuery(`SELECT COUNT\(\*\)`).
+		WithArgs("t1").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+
+	mock.ExpectQuery(`FROM "LoginEvent" le`).
+		WithArgs("t1", 10, 0).
+		WillReturnRows(sqlmock.NewRows([]string{"userId", "email", "name", "is_paid", "last_access"}).
+			AddRow("u1", "a@example.com", "Aluno", false, nil))
+
+	assignedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`FROM "MemberOnDelivery"`).
+		WithArgs(sqlmock.AnyArg(), "t1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"memberId", "deliveryId", "assignedAt", "delivery_name",
+			"status", "expiresAt", "platform",
+			"externalSubscriptionId", "canceledAt", "lastEventAt",
+		}).AddRow("u1", "d1", assignedAt, "Curso Vitalício",
+			"active", nil, nil, nil, nil, nil))
+
+	w := httptest.NewRecorder()
+	f.GetUserInformations(w, requestWithTenant("/informations", "t1"))
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp userInformationsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Users, 1)
+	assert.Nil(t, resp.Users[0].LastAccess)
+	require.Len(t, resp.Users[0].Deliveries, 1)
+
+	d := resp.Users[0].Deliveries[0]
+	assert.Equal(t, "active", d.Status)
+	assert.Nil(t, d.ExpiresAt)
+	assert.Nil(t, d.Platform)
+	assert.Nil(t, d.ExternalSubscriptionID)
+	assert.Nil(t, d.CanceledAt)
+	assert.Nil(t, d.LastEventAt)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

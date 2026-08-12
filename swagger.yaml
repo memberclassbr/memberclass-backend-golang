@@ -250,12 +250,26 @@ paths:
                     email: "usuario@exemplo.com"
                     isPaid: true
                     deliveries:
+                      # Assinatura vinda de gateway, ativa.
                       - id: "delivery-1"
                         name: "Curso de Programação"
                         accessDate: "2024-01-15T10:30:00Z"
+                        status: "active"
+                        expiresAt: "2027-04-01T00:00:00.000Z"
+                        platform: "hotmart"
+                        externalSubscriptionId: "sub_123"
+                        canceledAt: null
+                        lastEventAt: "2026-04-02T12:00:00.000Z"
+                      # Compra única/concessão manual: vitalícia e sem gateway.
                       - id: "delivery-2"
                         name: "Curso de Design"
                         accessDate: "2024-02-20T14:00:00Z"
+                        status: "active"
+                        expiresAt: null
+                        platform: null
+                        externalSubscriptionId: null
+                        canceledAt: null
+                        lastEventAt: null
                     lastAccess: "2024-03-10T09:15:00Z"
                   - userId: "user-456"
                     email: "outro@exemplo.com"
@@ -2062,11 +2076,17 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Data do último acesso
+          description: >-
+            Data do último login, lida da entidade LoginEvent. Null quando o
+            usuário nunca logou.
           example: "2024-03-10T09:15:00Z"
 
     DeliveryInfo:
       type: object
+      description: >-
+        Uma concessão de acesso (MemberOnDelivery). Além da identidade da
+        entrega, carrega o ciclo de vida do pagamento, para distinguir um acesso
+        vivo de um expirado, reembolsado ou cancelado sem uma segunda chamada.
       properties:
         id:
           type: string
@@ -2081,6 +2101,47 @@ components:
           format: date-time
           description: Data de acesso à entrega
           example: "2024-01-15T10:30:00Z"
+        status:
+          type: string
+          description: Estado do acesso.
+          enum: [active, expired, refunded, canceled]
+          example: "active"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Data de expiração enviada pelo gateway. Null significa vitalício
+            (compra única), não "sem informação".
+          example: "2027-04-01T00:00:00.000Z"
+        platform:
+          type: string
+          nullable: true
+          description: >-
+            Origem do acesso. Null em concessões feitas à mão, sem webhook de
+            gateway.
+          example: "hotmart"
+        externalSubscriptionId:
+          type: string
+          nullable: true
+          description: >-
+            ID da assinatura no gateway. Correlaciona renovações do mesmo
+            acesso.
+          example: "sub_123"
+        canceledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Quando a assinatura foi cancelada. O acesso segue válido até
+            expiresAt.
+          example: null
+        lastEventAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Último evento de pagamento que tocou esta concessão.
+          example: "2026-04-02T12:00:00.000Z"
 
     CreateSocialCommentRequest:
       type: object
