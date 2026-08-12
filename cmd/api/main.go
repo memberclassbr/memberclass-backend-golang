@@ -2,273 +2,67 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"net/http"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/joho/godotenv"
-	ai3 "github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
-	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
-	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
-	lesson2 "github.com/memberclass-backend-golang/internal/application/handlers/http/lesson"
-	sso2 "github.com/memberclass-backend-golang/internal/application/handlers/http/sso"
-	student2 "github.com/memberclass-backend-golang/internal/application/handlers/http/student"
-	user4 "github.com/memberclass-backend-golang/internal/application/handlers/http/user"
-	purchase2 "github.com/memberclass-backend-golang/internal/application/handlers/http/user/purchase"
-	"github.com/memberclass-backend-golang/internal/application/handlers/http/video"
-	vitrine4 "github.com/memberclass-backend-golang/internal/application/handlers/http/vitrine"
-	"github.com/memberclass-backend-golang/internal/application/jobs"
-	analyticsjobs "github.com/memberclass-backend-golang/internal/application/jobs/analytics"
-	auth3 "github.com/memberclass-backend-golang/internal/application/middlewares/auth"
-	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
-	"github.com/memberclass-backend-golang/internal/application/router"
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	"github.com/memberclass-backend-golang/internal/domain/ports/ai"
-	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
-	comment2 "github.com/memberclass-backend-golang/internal/domain/ports/comment"
-	sso3 "github.com/memberclass-backend-golang/internal/domain/ports/sso"
-	tenant2 "github.com/memberclass-backend-golang/internal/domain/ports/tenant"
-	user2 "github.com/memberclass-backend-golang/internal/domain/ports/user"
-	vitrine2 "github.com/memberclass-backend-golang/internal/domain/ports/vitrine"
-	ai2 "github.com/memberclass-backend-golang/internal/domain/usecases/ai"
-	"github.com/memberclass-backend-golang/internal/domain/usecases/auth"
-	bunny2 "github.com/memberclass-backend-golang/internal/domain/usecases/bunny"
-	comment3 "github.com/memberclass-backend-golang/internal/domain/usecases/comment"
-	"github.com/memberclass-backend-golang/internal/domain/usecases/lessons"
-	sso4 "github.com/memberclass-backend-golang/internal/domain/usecases/sso"
-	"github.com/memberclass-backend-golang/internal/domain/usecases/student"
-	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
-	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
-	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
-	"github.com/memberclass-backend-golang/internal/features/docs"
-	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
-	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
-	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
-	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/cache"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/database"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/bunny"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/ilovepdf"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/external_services/resend"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/rate_limiter"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/comment"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/lesson"
-	sso_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/sso"
-	student_report "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/student_report"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/tenant"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/topic"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/user"
-	vitrine_repository "github.com/memberclass-backend-golang/internal/infrastructure/adapters/repository/vitrine"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/storage"
-	"go.uber.org/fx"
+	"github.com/memberclass-backend-golang/internal/app"
+	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 )
 
+// main does nothing but choose the exit code. All the work is in run, because
+// os.Exit skips deferred calls: with the body inline, a failure to open the
+// database would exit before the telemetry shutdown ran, and the spans
+// describing that failure would die with the process.
 func main() {
-	_ = godotenv.Load()
-
-	fx.New(
-		fx.Provide(
-			logger.NewLogger,
-			database.NewMultiDB,
-			database.DefaultDB,
-			database.NewMigrationService,
-			cache.NewRedisCache,
-			storage.NewDigitalOceanSpaces,
-
-			tenant.NewTenantRepository,
-			user.NewUserRepository,
-			lesson.NewLessonRepoResolver,
-			lesson.NewLessonRepository,
-			comment.NewCommentRepository,
-			comment.NewSocialCommentRepository,
-			topic.NewTopicRepository,
-			student_report.NewStudentReportRepository,
-			sso_repository.NewSSORepository,
-			vitrine_repository.NewVitrineRepository,
-
-			rate_limiter.NewRateLimiterUpload,
-			rate_limiter.NewRateLimiterTenant,
-			rate_limiter.NewRateLimiterIP,
-			ilovepdf.NewIlovePdfService,
-			bunny.NewBunnyService,
-			resend.New,
-
-			user3.NewValidateSessionUseCase,
-			lessons.NewPdfProcessorUseCase,
-			bunny2.NewTenantGetTenantBunnyCredentialsUseCase,
-			bunny2.NewUploadVideoBunnyCdnUseCase,
-			func(logger ports.Logger, commentRepo comment2.CommentRepository, userRepo user2.UserRepository) comment2.CommentUseCase {
-				return comment3.NewCommentUseCase(logger, commentRepo, userRepo)
-			},
-			auth.NewApiTokenTenantUseCase,
-			user3.NewUserPurchaseUseCase,
-			user3.NewUserInformationsUseCase,
-			comment3.NewSocialCommentUseCase,
-			activity_summary.New,
-			user_activities.New,
-			member_import.New,
-			notificationsworker.New,
-			// Transcription slice owns the entire pipeline (Bunny → Whisper →
-			// chunk → embed → Railway pgvector). Pulls its own *sql.DB out
-			// of the DBMap (transcription bucket) + memberclass DefaultDB.
-			// No cron — the internal admin UI POSTs to the slice with the
-			// explicit list of lessonIds it wants transcribed.
-			func(dbMap database.DBMap, defaultDB *sql.DB, log ports.Logger, bunnySvc bunnyport.BunnyService) *transcriptionworker.Feature {
-				txDB := dbMap["transcription"]
-				if txDB == nil {
-					log.Warn("transcription slice will be inert: DB_TRANSCRIPTION_DSN not configured")
-				}
-				return transcriptionworker.New(txDB, defaultDB, log, bunnySvc)
-			},
-			lessons.NewLessonsCompletedUseCase,
-			student.NewStudentReportUseCase,
-			auth.NewAuthUseCase,
-			ai2.NewAILessonUseCase,
-			func(tenantRepo tenant2.TenantRepository, logger ports.Logger) ai.AITenantUseCase {
-				return ai2.NewAITenantUseCase(tenantRepo, logger)
-			},
-			func(ssoRepo sso3.SSORepository, userRepo user2.UserRepository, logger ports.Logger) sso3.SSOUseCase {
-				return sso4.NewSSOUseCase(ssoRepo, userRepo, logger)
-			},
-			func(vitrineRepo vitrine2.VitrineRepository) vitrine2.VitrineUseCase {
-				return vitrine3.NewVitrineUseCase(vitrineRepo)
-			},
-
-			rate_limit.NewRateLimitMiddleware,
-			rate_limit.NewRateLimitTenantMiddleware,
-			rate_limit.NewRateLimitIPMiddleware,
-			auth3.NewAuthMiddleware,
-			auth3.NewAuthExternalMiddleware,
-			auth3.NewBearerMiddleware,
-
-			lesson2.NewLessonHandler,
-			video.NewVideoHandler,
-			comment4.NewCommentHandler,
-			purchase2.NewUserPurchaseHandler,
-			user4.NewUserInformationsHandler,
-			comment4.NewSocialCommentHandler,
-			lesson2.NewLessonsCompletedHandler,
-			student2.NewStudentReportHandler,
-			docs.New,
-			auth2.NewAuthHandler,
-			sso2.NewSSOHandler,
-			ai3.NewAILessonHandler,
-			ai3.NewAITenantHandler,
-			vitrine4.NewVitrineHandler,
-
-			router.NewRouter,
-			jobs.NewScheduler,
-		),
-		fx.Invoke(startApplication),
-	)
-
+	os.Exit(run())
 }
 
-func startApplication(
-	log ports.Logger,
-	dbMap database.DBMap,
-	db *sql.DB,
-	cache ports.Cache,
-	migrationService *database.MigrationService,
-	router *router.Router,
-	scheduler *jobs.Scheduler,
-	transcriptionFeat *transcriptionworker.Feature,
-	memberImport *member_import.Feature,
-	notifWorker *notificationsworker.Feature,
-) {
-	router.SetupRoutes()
+func run() int {
+	_ = godotenv.Load()
 
-	// Analytics rollup jobs. Scheduler uses WithSeconds() (6 fields).
-	if err := scheduler.AddJob(analyticsjobs.NewDailyRollupJob(db, log), "0 0 8 * * *"); err != nil {
-		log.Error("failed to register analytics.daily_rollup", "err", err.Error())
-	}
-	if err := scheduler.AddJob(analyticsjobs.NewMonthlyRollupJob(db, log), "0 0 9 1 * *"); err != nil {
-		log.Error("failed to register analytics.monthly_rollup", "err", err.Error())
+	// Config is resolved before anything else, so a deployment with missing
+	// variables dies here naming every offender at once instead of booting
+	// into a half-working state. Logging is not up yet, hence stderr.
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid configuration: %v\n", err)
+		return 1
 	}
 
-	scheduler.Start()
+	log := logger.NewLogger()
 
-	// Member-import slice: clear orphaned "processing" imports on startup,
-	// then kick off the 24h retention goroutine for UserImportRow.
-	member_import.StartupReset(db, log)
-	importRetentionCtx, stopImportRetention := context.WithCancel(context.Background())
-	defer stopImportRetention()
-	member_import.StartRetentionJob(importRetentionCtx, db, log)
-
-	// Notifications worker: poll the Notification table, dispatch FCM pushes,
-	// run daily cleanup. Started here so push delivery is live as soon as
-	// the HTTP server is.
-	notifCtx, stopNotifWorker := context.WithCancel(context.Background())
-	defer stopNotifWorker()
-	notifWorker.Start(notifCtx)
-	notifWorker.StartCleanupJob(notifCtx)
-
-	// Transcription worker: poll the Railway pgvector jobs table, process
-	// VIDEO_PROCESSING jobs end-to-end (Bunny → Whisper → chunk → embed →
-	// pgvector). Started here so freshly enqueued lessons begin processing
-	// as soon as the HTTP server is up.
-	txCtx, stopTxWorker := context.WithCancel(context.Background())
-	defer stopTxWorker()
-	transcriptionFeat.Start(txCtx)
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8181"
+	// Telemetry is installed before the first connection is opened, so the
+	// failures below are instrumented too. It never blocks boot: a deployment
+	// with no collector configured runs uninstrumented and says so.
+	shutdownTelemetry, err := telemetry.Init(context.Background(), cfg, log)
+	if err != nil {
+		log.Error("telemetry init failed, continuing uninstrumented: " + err.Error())
+		shutdownTelemetry = func(context.Context) error { return nil }
 	}
-
-	server := &http.Server{
-		Addr:    ":" + port,
-		Handler: router,
-	}
-
-	go func() {
-		log.Info("Application started successfully")
-		log.Info("Server running on :" + port)
-
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("Failed to start server: " + err.Error())
+	defer func() {
+		if err := shutdownTelemetry(context.Background()); err != nil {
+			log.Error("telemetry shutdown: " + err.Error())
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	log.Info("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	scheduler.Stop()
-	// Order matters: stop every worker that owns a goroutine pool BEFORE
-	// dbMap.CloseAll() runs — an in-flight query against a closed *sql.DB
-	// panics.
-	notifWorker.Stop(10 * time.Second)
-	stopNotifWorker()
-	transcriptionFeat.Stop(15 * time.Second)
-	stopTxWorker()
-
-	if err := server.Shutdown(ctx); err != nil {
-		log.Error("Server forced to shutdown: " + err.Error())
+	application, err := app.New(cfg, log)
+	if err != nil {
+		log.Error("failed to start: " + err.Error())
+		return 1
 	}
 
-	// Drain in-flight member-import workers before the DB closes so their
-	// UserImport rows reach a terminal state. Bounded by the same 30s
-	// ctx deadline above; stragglers are recovered by StartupReset on the
-	// next boot after a 5-min grace.
-	memberImport.Wait(ctx)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	if err := cache.Close(); err != nil {
-		log.Error("Error closing cache: " + err.Error())
+	if err := application.Run(ctx); err != nil {
+		log.Error("server error: " + err.Error())
+		return 1
 	}
 
-	if err := dbMap.CloseAll(); err != nil {
-		log.Error("Error closing databases: " + err.Error())
-	}
-
-	log.Info("Server exited")
+	return 0
 }

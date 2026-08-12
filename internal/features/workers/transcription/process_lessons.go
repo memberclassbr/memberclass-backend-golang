@@ -37,12 +37,12 @@ type skippedLesson struct {
 }
 
 type processLessonsResponse struct {
-	Success      bool             `json:"success"`
-	Message      string           `json:"message"`
-	TenantID     string           `json:"tenantId"`
-	Enqueued     []enqueuedLesson `json:"enqueued"`
-	Skipped      []skippedLesson  `json:"skipped,omitempty"`
-	EnqueuedCount int             `json:"enqueuedCount"`
+	Success       bool             `json:"success"`
+	Message       string           `json:"message"`
+	TenantID      string           `json:"tenantId"`
+	Enqueued      []enqueuedLesson `json:"enqueued"`
+	Skipped       []skippedLesson  `json:"skipped,omitempty"`
+	EnqueuedCount int              `json:"enqueuedCount"`
 }
 
 // ---------- 1. HTTP handler ----------
@@ -144,10 +144,10 @@ func (f *Feature) enqueueAllUnprocessed(ctx context.Context, tenantID string) (*
 	var lessons []lessonRow
 	for rows.Next() {
 		var (
-			l                                                                                  lessonRow
-			slug                                                                               string
-			lessonType, thumbnail, content                                                     *string
-			moduleID, moduleName, sectionID, sectionName, courseName, vitrineID, vitrineName   string
+			l                                                                                lessonRow
+			slug                                                                             string
+			lessonType, thumbnail, content                                                   *string
+			moduleID, moduleName, sectionID, sectionName, courseName, vitrineID, vitrineName string
 		)
 		if err := rows.Scan(
 			&l.ID, &l.Name, &slug,
@@ -242,10 +242,10 @@ func (f *Feature) enqueueSelectedLessons(ctx context.Context, tenantID string, l
 	found := make(map[string]lessonRow, len(lessonIDs))
 	for rows.Next() {
 		var (
-			l                                                                                  lessonRow
-			slug                                                                               string
-			lessonType, thumbnail, content                                                     *string
-			moduleID, moduleName, sectionID, sectionName, courseName, vitrineID, vitrineName   string
+			l                                                                                lessonRow
+			slug                                                                             string
+			lessonType, thumbnail, content                                                   *string
+			moduleID, moduleName, sectionID, sectionName, courseName, vitrineID, vitrineName string
 		)
 		if err := rows.Scan(
 			&l.ID, &l.Name, &slug,

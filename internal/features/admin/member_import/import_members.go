@@ -7,11 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/application/middlewares/auth"
-	"github.com/memberclass-backend-golang/internal/domain/utils"
+	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
+	"github.com/memberclass-backend-golang/internal/shared/utils"
 )
 
 // ---------- Request/response DTOs ----------
@@ -31,6 +30,9 @@ type importUserInput struct {
 }
 
 type importRequest struct {
+	// TenantID is redundant: the tenant comes off the Bearer token's claim.
+	// Still accepted, and still checked — a caller that sends the wrong one is
+	// told rather than having the field quietly ignored.
 	TenantID    string            `json:"tenantId"`
 	FileName    string            `json:"fileName"`
 	Users       []importUserInput `json:"users"`
@@ -65,13 +67,12 @@ type tenantRow struct {
 //
 // Flow:
 //  1. Decode body, basic shape validation.
-//  2. Resolve session from context (put there by the auth middleware).
-//  3. Query UsersOnTenants to confirm the session user belongs to tenantId
-//     with role != "member".
-//  4. Load the tenant row (needed to build email links + batch emails).
-//  5. INSERT a "UserImport" header with status="processing" and respond 202
+//  2. Read the caller's role in the token's tenant out of "UsersOnTenants" and
+//     require owner or admin.
+//  3. Load the tenant row (needed to build email links + batch emails).
+//  4. INSERT a "UserImport" header with status="processing" and respond 202
 //     immediately with { importId }.
-//  6. Spawn a goroutine (panic-recovered) that processes the full job.
+//  5. Spawn a goroutine (panic-recovered) that processes the full job.
 func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 	var req importRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -84,26 +85,21 @@ func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authUser := auth.GetAuthUser(r.Context())
-	if authUser == nil || authUser.UserID == "" {
-		writeError(w, http.StatusUnauthorized, "session not found")
-		return
-	}
-
-	role, err := f.loadRoleForTenant(r.Context(), authUser.UserID, req.TenantID)
+	// Bulk import writes to every member of the tenant, so it is the one route
+	// of the three that is not open to every role.
+	grant, err := f.roles.Authorize(r.Context(), tenantrole.OwnerOrAdmin...)
 	if err != nil {
-		if errors.Is(err, errNotMember) {
-			writeError(w, http.StatusForbidden, "user does not belong to tenant")
-			return
-		}
-		f.log.Error("import: role lookup failed", "error", err.Error())
-		writeError(w, http.StatusInternalServerError, "failed to validate tenant access")
+		f.writeAuthError(w, err)
 		return
 	}
-	if role == "" || role == "member" {
-		writeError(w, http.StatusForbidden, "insufficient role")
+	if err := grant.Confirm(req.TenantID); err != nil {
+		f.writeAuthError(w, err)
 		return
 	}
+	// From here on the tenant is the token's, never the body's. Overwriting the
+	// field means the worker, the header row and the emails all read the same
+	// resolved value instead of each picking a source.
+	req.TenantID = grant.TenantID
 
 	tenant, err := f.loadTenant(r.Context(), req.TenantID)
 	if err != nil {
@@ -112,7 +108,7 @@ func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	importID, err := f.createImportHeader(r.Context(), authUser.UserID, &req)
+	importID, err := f.createImportHeader(r.Context(), grant.UserID, &req)
 	if err != nil {
 		f.log.Error("import: create header failed", "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "failed to start import")
@@ -155,9 +151,6 @@ const (
 )
 
 func validateRequest(req *importRequest) error {
-	if req.TenantID == "" {
-		return errors.New("tenantId is required")
-	}
 	if len(req.Users) == 0 {
 		return errors.New("users is empty")
 	}
@@ -177,24 +170,24 @@ func validateRequest(req *importRequest) error {
 
 // ---------- Auth: role lookup ----------
 
-var errNotMember = errors.New("user is not a member of tenant")
-
-func (f *Feature) loadRoleForTenant(ctx context.Context, userID, tenantID string) (string, error) {
-	const q = `
-		SELECT role
-		FROM "UsersOnTenants"
-		WHERE "userId" = $1 AND "tenantId" = $2
-		LIMIT 1
-	`
-	var role string
-	err := f.db.QueryRowContext(ctx, q, userID, tenantID).Scan(&role)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", errNotMember
-		}
-		return "", err
+// writeAuthError turns a tenantrole failure into this slice's error envelope.
+// The messages stay as specific as they were: an admin debugging a 403 needs
+// to know whether the account is outside the tenant or merely too junior, and
+// neither fact is a secret from a caller who already proved who they are.
+func (f *Feature) writeAuthError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, tenantrole.ErrNoIdentity):
+		writeError(w, http.StatusUnauthorized, "session not found")
+	case errors.Is(err, tenantrole.ErrNotMember):
+		writeError(w, http.StatusForbidden, "user does not belong to tenant")
+	case errors.Is(err, tenantrole.ErrForbiddenRole):
+		writeError(w, http.StatusForbidden, "insufficient role")
+	case errors.Is(err, tenantrole.ErrTenantMismatch):
+		writeError(w, http.StatusForbidden, "tenantId does not match the authenticated tenant")
+	default:
+		f.log.Error("import: role lookup failed", "error", err.Error())
+		writeError(w, http.StatusInternalServerError, "failed to validate tenant access")
 	}
-	return role, nil
 }
 
 // ---------- Tenant load ----------
@@ -264,8 +257,7 @@ func writeError(w http.ResponseWriter, code int, message string) {
 
 // tenantDomain picks the public domain for this tenant, matching the Next.js
 // logic: customDomain wins outright; otherwise build `<subdomain>.<rootDomain>`
-// where rootDomain is PUBLIC_DOMAIN_URL (the customer-facing frontend host,
-// NOT the backend's own PUBLIC_ROOT_DOMAIN).
+// where rootDomain is PUBLIC_DOMAIN_URL, the customer-facing frontend host.
 //
 // Defensive: normalizeEmailDomain strips any scheme/port/path from
 // `t.CustomDomain` so if a tenant admin saved it as "https://app.acme.com/"
@@ -284,16 +276,6 @@ func tenantDomain(t *tenantRow, rootDomain string) string {
 		return rootDomain
 	}
 	return sub + "." + rootDomain
-}
-
-// pickProtocol decides http vs https for the magic-link base URL based on
-// the domain shape. Only bare localhost (with or without port) maps to http
-// — we anchor on the full token to avoid `localhostfoo.com` sliding in.
-func pickProtocol(domain string) string {
-	if domain == "localhost" || strings.HasPrefix(domain, "localhost:") {
-		return "http"
-	}
-	return "https"
 }
 
 // parseAccession parses the Next.js `dd/MM/yyyy HH:mm:ss` format; falls back

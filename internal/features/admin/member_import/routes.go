@@ -6,5 +6,5 @@ import "github.com/go-chi/chi/v5"
 // to `/imports` (the admin/frontend API prefix). CORS for this prefix is
 // applied by the router when mounting /imports.
 func (f *Feature) Register(r chi.Router, mw MiddlewareSet) {
-	r.With(mw.SessionAuth).Post("/members", f.ImportMembers)
+	r.With(mw.BearerAuth).Post("/members", f.ImportMembers)
 }

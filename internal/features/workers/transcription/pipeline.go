@@ -21,7 +21,7 @@ import (
 type jobPayload struct {
 	LessonID string `json:"lessonId"`
 	TenantID string `json:"tenantId"`
-	VideoURL string `json:"videoUrl"`         // lesson.mediaUrl (Bunny embed URL)
+	VideoURL string `json:"videoUrl"` // lesson.mediaUrl (Bunny embed URL)
 	CourseID string `json:"courseId,omitempty"`
 	Title    string `json:"title,omitempty"`
 }
@@ -62,8 +62,8 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
 
 	// 1. Tenant lookup + AI guard.
 	var (
-		tID, tName             string
-		aiEnabled              sql.NullBool
+		tID, tName              string
+		aiEnabled               sql.NullBool
 		bunnyLibID, bunnyAPIKey sql.NullString
 	)
 	row := f.memberclassDB.QueryRowContext(ctx, sqlSelectTenantBunnyCreds, tenantID)
@@ -212,9 +212,9 @@ func (f *Feature) executeJob(ctx context.Context, jobID, tenantID string, rawPay
 
 	videoID := uuid.NewString()
 	videoMetadata, _ := json.Marshal(map[string]any{
-		"jobId":         jobID,
+		"jobId":          jobID,
 		"embeddingModel": embedModel,
-		"transcriber":   transcriberTag,
+		"transcriber":    transcriberTag,
 	})
 	if err := tx.QueryRowContext(ctx, sqlUpsertVideo,
 		videoID, tenantID, p.CourseID, p.LessonID, p.Title,
@@ -388,7 +388,7 @@ func pgvectorString(v []float32) string {
 }
 
 // nullableString returns nil for an empty string so empty course_id /
-// lesson_id values land in the DB as NULL rather than '' (the legacy
+// lesson_id values land in the DB as NULL rather than ” (the legacy
 // schema treats both as `nullable text` and downstream RAG filters
 // rely on IS NULL semantics).
 func nullableString(s string) any {

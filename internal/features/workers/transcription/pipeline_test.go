@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/infrastructure/adapters/logger"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
 
 // fakeAudio writes a tiny non-empty MP3 fixture and returns it as the only
@@ -504,4 +504,3 @@ func TestExecuteJob_BunnyURLStillUsesAudioWhisperPath(t *testing.T) {
 		t.Fatalf("memberclass DB expectations: %v", err)
 	}
 }
-
