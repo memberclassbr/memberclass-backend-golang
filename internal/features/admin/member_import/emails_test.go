@@ -127,7 +127,7 @@ func TestRenderEmail_LoginSubstitutesVariables(t *testing.T) {
 		name:  "Tete",
 		input: importUserInput{Email: "TETE@example.com"},
 	}
-	link := "https://demo.memberclass.com.br/login?code=ABC123&isReset=false"
+	link := "https://demo.memberclass.com.br/api/auth/magic/K4TQ9BXMR7DZ"
 	i18n := translationsFor("pt-br")
 
 	subject, html := renderEmail("login", state, tenant, link, "iL95MxdE", nil, i18n)
@@ -153,11 +153,14 @@ func TestRenderEmail_DeliverySkipsCredentials(t *testing.T) {
 	state := &rowState{name: "Tete", input: importUserInput{Email: "tete@example.com"}}
 	i18n := translationsFor("pt-br")
 
-	_, html := renderEmail("delivery", state, tenant, "https://x/login?code=A", "", nil, i18n)
+	_, html := renderEmail("delivery", state, tenant, "https://x/api/auth/magic/ABCD2345EFGH", "", nil, i18n)
 
 	assert.NotContains(t, html, "Use os dados abaixo", "delivery email omits credentials hint")
 	assert.Contains(t, html, "Redefinir senha", "delivery shows reset link")
-	assert.Contains(t, html, "isReset=true", "reset link carries isReset=true")
+	// `next=reset` is what tells the frontend to leave "usedAt" alone, so the
+	// reset handler can still claim the row.
+	assert.Contains(t, html, "next=reset", "reset link carries next=reset")
+	assert.NotContains(t, html, "isReset", "the old reset flag is gone")
 }
 
 func TestRenderEmail_OverridePreservesTenantVariables(t *testing.T) {

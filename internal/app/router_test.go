@@ -37,7 +37,10 @@ func (discardLogger) Error(string, ...any) {}
 
 func createTestRouter(t *testing.T) *Router {
 	log := discardLogger{}
-	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "test-secret"}}
+	cfg := &config.Config{Auth: config.Auth{
+		NextAuthSecret: "test-secret",
+		GoAPIJWTSecret: "go-api-test-secret-at-least-32-bytes",
+	}}
 
 	mockVideo := videofeat.New(nil, nil, log)
 	mockLessonPDF := lessonpdf.New(nil, nil, nil, cfg, log)
@@ -46,21 +49,20 @@ func createTestRouter(t *testing.T) *Router {
 	mockUser := userfeat.New(nil, nil, nil)
 	mockSocial := socialfeat.New(nil, nil)
 	mockActivitySummary := activity_summary.New(nil, nil, nil)
-	mockMemberImport := member_import.New(nil, nil, nil)
+	mockMemberImport := member_import.New(nil, nil, nil, cfg)
 	mockStudent := studentfeat.New(nil, nil, nil)
 	mockSwaggerHandler := docs.New()
 	mockAuth := authfeat.New(nil, nil, cfg, log)
-	mockSSO := ssofeat.New(nil, cfg, log)
+	mockSSO := ssofeat.New(nil, log)
 	mockAI := aifeat.New(nil, &config.Config{}, nil)
 	mockVitrine := vitrinefeat.New(nil, nil)
 	rateLimitMiddleware := mw.NewRateLimitMiddleware(nil, log)
 	rateLimitTenantMiddleware := mw.NewRateLimitTenantMiddleware(nil, log)
 	rateLimitIPMiddleware := mw.NewRateLimitIPMiddleware(nil, log)
-	authMiddleware := mw.NewAuthMiddleware(nil, cfg, log)
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
-	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
+	bearerMiddleware := mw.NewBearerMiddleware(cfg, nil, log)
 
-	return newRouter(log, mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, healthfeat.New(nil, nil, log), rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return newRouter(log, mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, healthfeat.New(nil, nil, log), rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
@@ -71,7 +73,7 @@ func TestNewRouter(t *testing.T) {
 	assert.NotNil(t, router.video)
 	assert.NotNil(t, router.lessonPDF)
 	assert.NotNil(t, router.rateLimitMiddleware)
-	assert.NotNil(t, router.authMiddleware)
+	assert.NotNil(t, router.authExternalMiddleware)
 }
 
 func TestRouter_SetupRoutes(t *testing.T) {
@@ -84,8 +86,13 @@ func TestRouter_SetupRoutes(t *testing.T) {
 		path   string
 		status int // Expected status (404 for non-existent routes, or actual status for existing ones)
 	}{
-		// Video routes
-		{"POST", "/api/v1/videos/upload", 404}, // Will be 404 because we don't have actual handler implementation
+		// The frontend-origin trio moved to the root, and each now sits behind
+		// the Bearer middleware: no token means 401, and the old /api paths are
+		// gone rather than dual-mounted.
+		{"POST", "/videos/upload", 401},
+		{"POST", "/sso/generate-token", 401},
+		{"POST", "/api/v1/videos/upload", 404},
+		{"POST", "/api/v1/sso/generate-token", 404},
 
 		// Lesson routes
 		{"POST", "/api/lessons/pdf-process", 404},               // Will be 404 because we don't have actual handler implementation
@@ -147,7 +154,7 @@ func TestRouter_RouteStructure(t *testing.T) {
 	})
 
 	expectedRoutes := []string{
-		"POST /api/v1/videos/upload",
+		"POST /videos/upload",
 		"POST /api/lessons/pdf-process",
 		"POST /api/lessons/process-all-pdfs",
 		"POST /api/lessons/{lessonId}/pdf-regenerate",
@@ -200,4 +207,48 @@ func TestRouter_MiddlewareOrder(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.NotEqual(t, 0, w.Code)
+}
+
+// ---------- CORS ----------
+
+// The policy used to reflect the caller's Origin AND send
+// Access-Control-Allow-Credentials: true. That pair is what lets any page on
+// the internet drive this API with the visitor's next-auth.session-token cookie
+// attached and read the reply. A literal "*" is what forbids it — a browser
+// will not send credentials to a wildcard origin — so these two assertions are
+// the guard, not a style preference.
+func TestRouter_CORSIsAWildcardWithoutCredentials(t *testing.T) {
+	router := createTestRouter(t)
+	router.SetupRoutes()
+
+	req := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+
+	w := httptest.NewRecorder()
+	router.Router.ServeHTTP(w, req)
+
+	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"),
+		"the Origin must not be echoed back")
+	assert.NotEqual(t, "https://evil.example", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"),
+		"credentials must never be allowed cross-origin")
+}
+
+// Same on an actual response, not just the preflight: the header the browser
+// enforces on is the one attached to the real request.
+func TestRouter_CORSOnASimpleRequest(t *testing.T) {
+	router := createTestRouter(t)
+	router.SetupRoutes()
+
+	// An unrouted path: CORS runs above the mux, so the headers are set either
+	// way, and a 404 keeps a handler with nil dependencies out of the test.
+	req := httptest.NewRequest(http.MethodGet, "/no-such-route", nil)
+	req.Header.Set("Origin", "https://evil.example")
+
+	w := httptest.NewRecorder()
+	router.Router.ServeHTTP(w, req)
+
+	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
 }

@@ -53,9 +53,9 @@ duplicate it until the duplication actually hurts, then extract to
 contract next to its implementation — there is no separate ports package.
 
 `internal/shared` is code several slices need but nothing outside the process
-cares about: `tenant` (the request's tenant + context key), `session` (the
-NextAuth payload), `middleware`, `httpx`, `memberclasserrors`, `pagination`,
-`constants`, `utils`.
+cares about: `tenant` (the request's tenant + context key), `middleware`,
+`tenantrole`, `magiclink`, `httpx`, `memberclasserrors`, `pagination`,
+`datefilter`, `constants`, `utils`.
 
 ### Rules for new work
 
@@ -118,16 +118,24 @@ Default port is `8181`.
 
 ## Authentication
 
-Four credentials, each guarding a different surface:
+Three credentials, each guarding a different surface, and **all three travel in
+a header**:
 
-| Credential | Header / cookie | Guards |
+| Credential | Header | Guards |
 |---|---|---|
 | Tenant external API key | `x-api-key` (legacy: `mc-api-key`) | most of `/api/v1/*` |
-| Internal API key | `x-internal-api-key` | `/api/v1/ai/*`, `/api/v1/sso/generate-token`, `/api/lessons/*` |
-| NextAuth session | `next-auth.session-token` cookie | `/api/comments` |
-| NextAuth Bearer JWT | `Authorization: Bearer` | `/imports/*` |
+| Internal API key | `x-internal-api-key` | `/api/v1/ai/*`, `/api/lessons/*` |
+| go-token Bearer JWT | `Authorization: Bearer` | `/imports/*`, `/sso/*`, `/videos/*` |
 
 The middlewares live in [internal/shared/middleware](internal/shared/middleware).
+
+There used to be a fourth: the NextAuth session cookie, on `GET /api/comments`.
+Both are gone. That route was a second mount of the `/api/v1/comments` listing
+with no callers left, and being cookie-authenticated it was the only thing here
+reachable with a credential a browser attaches by itself — which is what forced
+the CORS policy to allow credentials. Removing it is what lets that policy be a
+literal `*`. **No ambient credential reaches this service any more, so CSRF has
+nothing to work with.**
 
 The tenant key moved from `mc-api-key` to `x-api-key`. Both are accepted and
 `x-api-key` wins when a caller sends both; only `x-api-key` is documented in
@@ -138,9 +146,153 @@ The internal API key is checked inside the handlers that use it, not by a
 middleware; those checks reject an empty incoming key so an unset
 `INTERNAL_AI_API_KEY` cannot leave an endpoint open.
 
-**`POST /api/v1/videos/upload` has no credential check** — only the upload rate
-limiter. That predates this structure and was left as it was; adding auth would
-break the frontend that calls it.
+### The frontend-origin surface: `/imports`, `/sso`, `/videos`
+
+These three sit at the root, without the `/api` prefix, because the same thing
+is true of all of them: they are called by the Next.js admin frontend with a
+short-lived Bearer JWT minted at `/api/auth/go-token?tenantId=X` on the Next
+side, using `GO_API_JWT_SECRET`.
+
+**The token is scoped to one tenant.** Before minting, the frontend checks that
+the session's user holds a row in `"UsersOnTenants"` for X and refuses with 403
+if not; the token then carries `tenantId` and the `role` read from that row:
+
+```json
+{ "sub": "...", "email": "...", "tenantId": "...", "role": "...",
+  "aud": "memberclass-go-api", "jti": "...", "iat": 0, "exp": 0 }
+```
+
+`tenantId` is where every one of these handlers gets its tenant, and the only
+place. The request bodies still accept the field, but it is *checked against the
+claim* and never read as the source — a body is chosen by the caller and a claim
+is not, so reading it would give the scope straight back. A body naming a
+different tenant is 403, not a silent redirect into the token's own.
+`tenantrole.Authorize` takes no tenant argument at all, so no call site can
+reintroduce this.
+
+`role` is now trustworthy in a way it was not before — it is read from the
+database for the tenant the token names — but it is still a snapshot up to the
+token's lifetime old, so [internal/shared/tenantrole](internal/shared/tenantrole)
+re-reads the row on every request. A demotion lands on the next call rather than
+whenever the token happens to expire.
+
+The middleware rejects, rather than defaults, on every claim it needs: no
+`aud`, no `tenantId`, no `exp`, wrong audience. A claim that is merely absent is
+the shape a forged or stale token takes.
+
+`aud` stops another service that verifies HS256 against the same secret from
+taking a go-token as its own.
+
+That secret is migrating off `NEXTAUTH_SECRET`, which the session cookie's key
+also derives from — sharing one means a leaked go-token key is also a forged
+session. The frontend treats its `GO_API_JWT_SECRET` as optional and falls back
+to `NEXTAUTH_SECRET`, so this side does too, in three states:
+
+| State | Config | Accepted |
+|---|---|---|
+| 1 | `GO_API_JWT_SECRET` unset | `NEXTAUTH_SECRET` |
+| 2 | it set | **both** |
+| 3 | `GO_API_JWT_LEGACY_FALLBACK=false` | only `GO_API_JWT_SECRET` |
+
+State 2 is what lets either side deploy first. **State 3 is the only one that
+buys anything**, and `config.Load` warns at boot until a deployment reaches it.
+The 32-byte floor applies to the new variable when set — the Bearer
+verification is hand-rolled HMAC, so nothing in the crypto path would otherwise
+stop a short, offline-brute-forceable key. It is not applied to
+`NEXTAUTH_SECRET`, which is already deployed at whatever length it has.
+
+`jti` backs a Redis denylist (`go-token:revoked:<jti>`) for a logout or an
+access revoked inside the token's window. The check fails **open** on a Redis
+error and skips tokens with no `jti`: what it shortens is a window already
+bounded by `exp`, and failing closed would take every admin route down whenever
+Redis blinks. Role changes never depend on it.
+
+Which roles pass is declared per route, at the call site:
+
+| Route | Roles |
+|---|---|
+| `POST /imports/members` | `owner`, `admin` |
+| `POST /videos/upload` | any role in the tenant |
+| `POST /sso/generate-token` | any role **for their own account**; `owner`/`admin` to mint for another `userId` |
+
+The SSO split is not incidental. The token that endpoint mints is redeemed at
+`validate-token` for the target user's identity on the tenant's external site,
+so minting one for somebody else is impersonation rather than delegation.
+
+`POST /api/v1/sso/validate-token` stays under `/api/v1` behind the tenant API
+key: it is called by the tenant's own site, which holds no NextAuth session and
+has no way to mint a Bearer.
+
+`POST /videos/upload` used to carry no credential at all, and
+`POST /sso/generate-token` used to be gated by `x-internal-api-key`. Both moved
+in one cutover — the old paths are gone, not dual-mounted — so the frontend has
+to deploy alongside this service.
+
+### Magic links
+
+Two places mint passwordless login links — `POST /api/v1/auth` and the
+first-access emails from `member_import`. They share
+[internal/shared/magiclink](internal/shared/magiclink), which is the Go half of
+a contract the Next.js frontend owns.
+
+A link is `https://<tenant domain>/api/auth/magic/<shortCode>`. The short code
+is the only thing in the URL: the member's address used to travel in the query
+string and no longer does, because a login URL ends up in mail archives, proxy
+logs and shared screenshots. The frontend resolves the code, stamps `usedAt` and
+finishes the sign-in — so a guessed code posted straight at `/login` does not
+authenticate, since only the magic route sets that column.
+
+The host is the tenant's `customDomain`, or its subdomain under
+`PUBLIC_DOMAIN_URL`. That variable is the only domain this service knows:
+`PUBLIC_ROOT_DOMAIN` used to sit beside it holding the backend's own host:port,
+every deployment set the two to the same value, and the one path that read it
+built member-facing links pointing at the backend. It is gone.
+
+A reset link is the same URL with `?next=reset`, which tells the frontend to
+leave `usedAt` alone; there the reset handler is what claims the row. Only the
+delivery email emits it. `?redirect=<path>` is a post-login destination and is
+accepted as a same-site relative path only — that check is the whole of the
+open-redirect defence.
+
+Both slices write two hashes for one token, and they are not interchangeable:
+
+| Column | Hash | Why |
+|---|---|---|
+| `"MagicToken"."token"` | sha256 hex | Compared against what the frontend computes; a salted hash never matches |
+| `"User"."magicToken"` | bcrypt | Legacy column, honoured by the old `/login?token=` route |
+
+Minting the `"MagicToken"` row is not optional. If the insert fails, the request
+fails — falling back to the old link shape would put the member's address back
+in a URL without anyone noticing.
+
+`"MagicToken"."method"` is the audit trail for how a link came to exist; each
+minting path uses its own value (`api_magic_link`, `admin_import`) rather than
+borrowing the frontend's.
+
+## CORS
+
+One policy on the root router: a literal `*`, no Origin reflection, no
+`Access-Control-Allow-Credentials`.
+
+The last two are the point. Reflecting the Origin *and* allowing credentials —
+which is what this sent until the go-token work — is the pair browsers read as
+"any site may make an authenticated cross-origin request here and read the
+reply". `GET /api/comments` authenticated with the `next-auth.session-token`
+cookie, so any page could have driven it with a visitor's session attached.
+
+Two changes closed that, and they belong together: the cookie route was removed,
+and the policy became a literal `*` with credentials off. Either alone would
+have been weaker — the wildcard is the enforcement, because a browser will not
+send credentials to a wildcard origin at all.
+
+It stays a wildcard rather than an allowlist because tenants bring their own
+custom domains and the set is not enumerable from a deployment. Nothing is given
+away by that now: every credential this service accepts travels in a header a
+browser will not attach on its own, so a cross-origin request from an attacker's
+page arrives unauthenticated — a request from nobody.
+
+If a route ever needs to be callable cross-origin from a browser *with* a
+credential, give it a header credential. Do not widen this back.
 
 ## Rate limiting
 
