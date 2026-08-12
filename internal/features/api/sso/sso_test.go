@@ -176,13 +176,13 @@ func TestGenerateSSOToken_RejectsTenantTheCallerDoesNotBelongTo(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+// `externalUrl` is the only field with no sensible default — the whole point
+// of the endpoint is the site being handed off to.
 func TestGenerateSSOToken_RequiredFields(t *testing.T) {
 	cases := map[string]struct {
 		body        string
 		externalURL string
 	}{
-		"missing userId":      {`{"tenantId":"t1"}`, "https://escola.com.br"},
-		"missing tenantId":    {`{"userId":"u1"}`, "https://escola.com.br"},
 		"missing externalUrl": {`{"userId":"u1","tenantId":"t1"}`, ""},
 		"malformed body":      {`{not json`, "https://escola.com.br"},
 	}
@@ -201,6 +201,121 @@ func TestGenerateSSOToken_RequiredFields(t *testing.T) {
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+// ---------- 1b. Defaults for userId and tenantId ----------
+
+// expectTenantsOf queues the membership listing that backs the tenantId
+// default.
+func expectTenantsOf(mock sqlmock.Sqlmock, callerID string, tenantIDs ...string) {
+	rows := sqlmock.NewRows([]string{"tenantId"})
+	for _, id := range tenantIDs {
+		rows.AddRow(id)
+	}
+	mock.ExpectQuery(`SELECT "tenantId" FROM "UsersOnTenants"`).
+		WithArgs(callerID).
+		WillReturnRows(rows)
+}
+
+// An empty body is a complete request: it means "a hand-off for me, in my
+// tenant". Both fields come off the caller.
+func TestGenerateSSOToken_DefaultsBothFieldsToTheCaller(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectTenantsOf(mock, "u1", "t1")
+	expectRole(mock, "u1", "t1", "member")
+	mock.ExpectQuery(`FROM "User" WHERE id`).
+		WithArgs("u1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`FROM "UsersOnTenants"`).
+		WithArgs("u1", "t1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "u1", "t1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(``, "https://escola.com.br", "u1"))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// A tenantId in the body is used as given — no listing query runs.
+func TestGenerateSSOToken_ExplicitTenantSkipsTheLookup(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectRole(mock, "u1", "t1", "member")
+	mock.ExpectQuery(`FROM "User" WHERE id`).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`FROM "UsersOnTenants"`).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{"tenantId":"t1"}`, "https://escola.com.br", "u1"))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// "UsersOnTenants" is many-to-many, so a caller can hold a different role in
+// each of several tenants. Picking one would mint a hand-off into the wrong
+// one, so the request is refused until it says which.
+func TestGenerateSSOToken_AmbiguousTenantIsRejected(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectTenantsOf(mock, "u1", "t1", "t2")
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{}`, "https://escola.com.br", "u1"))
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "INVALID_REQUEST", bodyOf(t, w)["errorCode"])
+	assert.Contains(t, bodyOf(t, w)["error"], "mais de um tenant")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGenerateSSOToken_CallerWithNoTenantIsForbidden(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectTenantsOf(mock, "u1")
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{}`, "https://escola.com.br", "u1"))
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The default is the *caller*, never the userId in the body: an owner naming
+// somebody else still has their own memberships listed, so a target who
+// belongs elsewhere cannot drag the hand-off into another tenant.
+func TestGenerateSSOToken_TenantDefaultFollowsTheCallerNotTheTarget(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectTenantsOf(mock, "boss", "t1")
+	expectRole(mock, "boss", "t1", "owner")
+	mock.ExpectQuery(`FROM "User" WHERE id`).
+		WithArgs("someone").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`FROM "UsersOnTenants"`).
+		WithArgs("someone", "t1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{"userId":"someone"}`, "https://escola.com.br", "boss"))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ---------- 2. generate-token rules ----------
