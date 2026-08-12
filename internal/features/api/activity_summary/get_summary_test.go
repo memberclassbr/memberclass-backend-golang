@@ -330,3 +330,18 @@ func ptr[T any](v T) *T { return &v }
 
 // Ensure we compile against *sql.DB (sanity check for New signature).
 var _ = func() *Feature { return New((*sql.DB)(nil), (*fakeCache)(nil), fakeLogger{}) }
+
+// The three endpoints with a date window share one policy. This asserts this
+// slice is on it: the default used to be an offset from the current instant,
+// which left the oldest day of the range half covered.
+func TestResolveDateRange_DefaultIsWholeCalendarDays(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	start, end := resolveDateRange(getActivitySummaryRequest{}, now)
+
+	assert.Equal(t, time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC), start,
+		"oldest day must start at midnight, not at the hour of the call")
+	assert.Equal(t, time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC), end)
+	assert.LessOrEqual(t, end.Sub(start), time.Duration(31)*24*time.Hour,
+		"default must not exceed the window a caller may request")
+}

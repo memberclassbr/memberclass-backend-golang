@@ -84,7 +84,7 @@ func (f *Feature) GetActivitySummary(w http.ResponseWriter, r *http.Request) {
 // ---------- 2. Business rule ----------
 
 func (f *Feature) getSummary(ctx context.Context, req getActivitySummaryRequest, tenantID string) (*activitySummaryResponse, error) {
-	startDate, endDate := resolveDateRange(req)
+	startDate, endDate := resolveDateRange(req, time.Now())
 
 	cacheKey := buildCacheKey(tenantID, req, startDate, endDate)
 
@@ -126,23 +126,16 @@ func (f *Feature) getSummary(ctx context.Context, req getActivitySummaryRequest,
 	return resp, nil
 }
 
-// resolveDateRange applies the slice's date-default policy.
-//   - no dates provided → last 31 days ending now
-//   - only startDate    → single-day window [00:00, 23:59:59.999999999]
-//   - both provided     → used as-is
-func resolveDateRange(req getActivitySummaryRequest) (time.Time, time.Time) {
-	now := time.Now()
+// defaultWindowDays is the span applied when the caller supplies no dates. It
+// matches the 31-day ceiling validate() enforces on an explicit range, so the
+// default never returns a window wider than a caller may ask for.
+const defaultWindowDays = 31
 
-	if req.StartDate == nil && req.EndDate == nil {
-		return now.AddDate(0, 0, -31), now
-	}
-	if req.StartDate != nil && req.EndDate == nil {
-		s := *req.StartDate
-		start := time.Date(s.Year(), s.Month(), s.Day(), 0, 0, 0, 0, s.Location())
-		end := time.Date(s.Year(), s.Month(), s.Day(), 23, 59, 59, 999999999, s.Location())
-		return start, end
-	}
-	return *req.StartDate, *req.EndDate
+// resolveDateRange applies the date policy shared by the three endpoints with
+// a date window. `now` is a parameter so the default range can be asserted:
+// reading the clock inside made the only interesting case untestable.
+func resolveDateRange(req getActivitySummaryRequest, now time.Time) (time.Time, time.Time) {
+	return datefilter.ResolveWindow(req.StartDate, req.EndDate, now, defaultWindowDays)
 }
 
 func buildPaginationMeta(page, limit int, total int64) pagination.Meta {

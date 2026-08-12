@@ -35,6 +35,53 @@ const (
 	EndOfDay
 )
 
+// startOfDay and endOfDay widen an instant to the calendar day containing it,
+// keeping the instant's own location. They are unexported because StartOfDay
+// and EndOfDay are already taken by the Boundary constants, which is what
+// callers name at a Parse call site.
+func startOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
+func endOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), t.Location())
+}
+
+// ResolveWindow turns the optional startDate / endDate into a concrete range:
+//
+//   - neither given: the last defaultDays calendar days, ending today;
+//   - startDate alone: from that instant to the end of its day;
+//   - both given: used as they are.
+//
+// The lone-startDate case keeps the instant as given rather than rounding it
+// down. A date-only bound already arrives at midnight from Parse, so it still
+// covers its whole day; rounding here would instead discard the time a caller
+// spelled out in RFC3339, which Parse deliberately preserved.
+//
+// The default is counted in whole days rather than as an offset from the
+// current instant. Cutting at `now minus 31 days` left the oldest day of the
+// range half covered, so a call at 14:32 could not see something recorded at
+// 09:00 on the far end of the window it claimed to return, and the same request
+// answered differently as the day went on.
+//
+// It resolves in UTC because that is the zone Parse gives a date-only bound.
+// Leaving it on the process zone made the default and the explicit form measure
+// days differently, on a machine whose zone nobody had chosen deliberately.
+//
+// Today counts as the first of the defaultDays, so the default window never
+// exceeds a range a caller is allowed to ask for.
+func ResolveWindow(start, end *time.Time, now time.Time, defaultDays int) (time.Time, time.Time) {
+	switch {
+	case start == nil && end == nil:
+		today := now.UTC()
+		return startOfDay(today.AddDate(0, 0, -(defaultDays - 1))), endOfDay(today)
+	case start != nil && end == nil:
+		return *start, endOfDay(*start)
+	default:
+		return *start, *end
+	}
+}
+
 // Parse reads a query parameter as an instant.
 //
 // RFC3339 is taken literally: a caller who spells out the time means it, and

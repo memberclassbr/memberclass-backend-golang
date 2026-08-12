@@ -68,3 +68,85 @@ func TestParse_Rejects(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveWindow_DefaultIsWholeCalendarDays(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	start, end := ResolveWindow(nil, nil, now, 31)
+
+	// 2026-05-16 through 2026-06-15 inclusive is 31 calendar days.
+	if want := time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC); !start.Equal(want) {
+		t.Errorf("start = %s, want %s", start, want)
+	}
+	if want := time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC); !end.Equal(want) {
+		t.Errorf("end = %s, want %s", end, want)
+	}
+
+	// The offset-from-now form this replaced cut the oldest day at 12:00 and
+	// hid anything recorded before it, so the same request answered differently
+	// as the day went on.
+	if start.Hour() != 0 {
+		t.Errorf("oldest day starts at %02d:00, want midnight", start.Hour())
+	}
+}
+
+func TestResolveWindow_DefaultIgnoresTheProcessZone(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	saoPaulo := time.FixedZone("BRT", -3*60*60)
+
+	utcStart, utcEnd := ResolveWindow(nil, nil, now, 31)
+	localStart, localEnd := ResolveWindow(nil, nil, now.In(saoPaulo), 31)
+
+	// Parse resolves an explicit date-only bound in UTC. A default measured in
+	// whatever zone the container happens to carry would cover a different day.
+	if !utcStart.Equal(localStart) || !utcEnd.Equal(localEnd) {
+		t.Errorf("zone changed the window: %s..%s vs %s..%s",
+			utcStart, utcEnd, localStart, localEnd)
+	}
+}
+
+func TestResolveWindow_StartAloneKeepsItsTimeAndClosesTheDay(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	at := time.Date(2026, 3, 10, 17, 45, 0, 0, time.UTC)
+
+	start, end := ResolveWindow(&at, nil, now, 31)
+
+	// Parse takes RFC3339 literally; rounding the start down here would discard
+	// the time the caller spelled out.
+	if !start.Equal(at) {
+		t.Errorf("start = %s, want the instant as given %s", start, at)
+	}
+	if want := time.Date(2026, 3, 10, 23, 59, 59, 999999999, time.UTC); !end.Equal(want) {
+		t.Errorf("end = %s, want %s", end, want)
+	}
+}
+
+func TestResolveWindow_BareStartDateStillCoversItsDay(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	// A date-only bound arrives already at midnight, so not rounding the start
+	// must not narrow it.
+	at, err := Parse("2026-03-10", StartOfDay)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	start, end := ResolveWindow(&at, nil, now, 31)
+	if want := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC); !start.Equal(want) {
+		t.Errorf("start = %s, want %s", start, want)
+	}
+	if want := time.Date(2026, 3, 10, 23, 59, 59, 999999999, time.UTC); !end.Equal(want) {
+		t.Errorf("end = %s, want %s", end, want)
+	}
+}
+
+func TestResolveWindow_BothBoundsAreUsedAsGiven(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	a := time.Date(2026, 3, 1, 6, 0, 0, 0, time.UTC)
+	b := time.Date(2026, 3, 20, 6, 0, 0, 0, time.UTC)
+
+	start, end := ResolveWindow(&a, &b, now, 31)
+	if !start.Equal(a) || !end.Equal(b) {
+		t.Errorf("got %s..%s, want %s..%s", start, end, a, b)
+	}
+}

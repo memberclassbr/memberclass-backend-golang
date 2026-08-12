@@ -358,8 +358,11 @@ paths:
         é omitido.
 
         **Regras de Data:**
-        - Sem `startDate` e `endDate` → últimos 31 dias
-        - Apenas `startDate` → dia inteiro de `startDate` (00:00 a 23:59)
+        - Sem `startDate` e `endDate` → últimos **31 dias-calendário em UTC**,
+          contando hoje: de 00:00:00Z do dia mais antigo até 23:59:59.999Z de hoje
+        - Apenas `startDate` → daquele instante até 23:59:59.999Z do mesmo dia.
+          Uma data pura (`YYYY-MM-DD`) chega em 00:00, então cobre o dia inteiro;
+          um ISO 8601 com hora preserva a hora informada
         - `endDate` sem `startDate` → erro
         - `startDate > endDate` → erro
         - Período máximo: **31 dias**
@@ -548,8 +551,11 @@ paths:
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
         
         **Regras de Data:**
-        - Se `startDate` e `endDate` não informados → últimos 31 dias
-        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `startDate` e `endDate` não informados → últimos **31 dias-calendário
+          em UTC**, contando hoje: de 00:00:00Z do dia mais antigo até 23:59:59.999Z de hoje
+        - Se apenas `startDate` → daquele instante até 23:59:59.999Z do mesmo dia.
+          Uma data pura chega em 00:00 e cobre o dia inteiro; um ISO 8601 com hora
+          preserva a hora informada
         - Se `endDate` sem `startDate` → erro
         - Se `startDate > endDate` → erro
         - Período máximo: **31 dias**
@@ -684,8 +690,11 @@ paths:
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
         
         **Regras de Data:**
-        - Se `startDate` e `endDate` não informados → últimos 31 dias
-        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `startDate` e `endDate` não informados → últimos **31 dias-calendário
+          em UTC**, contando hoje: de 00:00:00Z do dia mais antigo até 23:59:59.999Z de hoje
+        - Se apenas `startDate` → daquele instante até 23:59:59.999Z do mesmo dia.
+          Uma data pura chega em 00:00 e cobre o dia inteiro; um ISO 8601 com hora
+          preserva a hora informada
         - Se `endDate` sem `startDate` → erro
         - Se `startDate > endDate` → erro
         - Período máximo: **31 dias**

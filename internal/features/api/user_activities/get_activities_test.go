@@ -326,7 +326,7 @@ func TestGetActivities_ProdMode_CacheHitReturnsStoredMeta(t *testing.T) {
 	}
 	raw, _ := json.Marshal(stored)
 	req := getActivitiesRequest{Email: "a@b.com", Page: 1, Limit: 10}
-	startDate, endDate := resolveDateRange(req)
+	startDate, endDate := resolveDateRange(req, time.Now())
 	cache.store[buildCacheKey("tenant-123", "user-1", req, startDate, endDate)] = string(raw)
 
 	resp, err := f.getActivities(context.Background(), req, "tenant-123")
@@ -340,7 +340,7 @@ func TestGetActivities_ProdMode_CacheHitReturnsStoredMeta(t *testing.T) {
 
 func TestBuildCacheKey_IncludesTenantAndUser(t *testing.T) {
 	req := getActivitiesRequest{Email: "a@b.com", Page: 1, Limit: 10}
-	start, end := resolveDateRange(req)
+	start, end := resolveDateRange(req, time.Now())
 	keyA := buildCacheKey("tenant-A", "user-1", req, start, end)
 	keyB := buildCacheKey("tenant-B", "user-1", req, start, end)
 	keyC := buildCacheKey("tenant-A", "user-2", req, start, end)
@@ -418,4 +418,19 @@ func TestGetActivities_HTTP_Success(t *testing.T) {
 	var details map[string]any
 	require.NoError(t, json.Unmarshal(body.Events[0].Details, &details))
 	assert.Equal(t, "slides.pdf", details["arquiveName"])
+}
+
+// The three endpoints with a date window share one policy. This asserts this
+// slice is on it: the default used to be an offset from the current instant,
+// which left the oldest day of the range half covered.
+func TestResolveDateRange_DefaultIsWholeCalendarDays(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	start, end := resolveDateRange(getActivitiesRequest{}, now)
+
+	assert.Equal(t, time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC), start,
+		"oldest day must start at midnight, not at the hour of the call")
+	assert.Equal(t, time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC), end)
+	assert.LessOrEqual(t, end.Sub(start), time.Duration(31)*24*time.Hour,
+		"default must not exceed the window a caller may request")
 }

@@ -59,16 +59,6 @@ const (
 	defaultWindowInDays = 31
 )
 
-// startOfDay and endOfDay widen an instant to the calendar day that contains
-// it, keeping the instant's own location.
-func startOfDay(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-}
-
-func endOfDay(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
-}
-
 // ---------- 1. HTTP handler ----------
 
 // GetLessonsCompleted handles `GET /api/v1/user/lessons/completed`.
@@ -223,38 +213,11 @@ func (f *Feature) getLessonsCompleted(ctx context.Context, tenantID string, req 
 	}, nil
 }
 
-// resolveWindow turns the optional date parameters into a concrete range:
-// no dates means the last 31 calendar days; a lone startDate means the rest of
-// the day it names; both dates are used as given.
-//
-// A lone startDate closes at the end of its own day and never spills into the
-// next one, so a caller who names a single day gets that day. Its start is left
-// exactly where datefilter.Parse put it: a date-only bound already resolves to
-// midnight, and an RFC3339 bound spells out a time the caller meant. Rounding
-// the start down here would have overridden that time and contradicted the
-// literal reading datefilter promises.
-//
-// The default window is expressed in whole days, not in an offset from the
-// current instant. Cutting at `now minus 31 days` dropped everything completed
-// earlier in the clock-day at the far end of the range — a call at 14:32 could
-// not see a lesson finished at 09:00 on the oldest day it claimed to cover.
-// It is also resolved in UTC, because that is the zone datefilter.Parse gives
-// an explicit date-only bound; leaving it on the process zone made the default
-// and the explicit form measure days differently.
-//
-// Counting the current day as the first of the 31 keeps the default inside
-// maxCompletedWindow, so the API never returns a range wider than it lets a
-// caller ask for.
+// resolveWindow applies the slice's date policy. The policy itself lives in
+// datefilter, shared with /user/activities and /user/activity/summary: all
+// three advertise "last 31 days" and used to measure it two different ways.
 func resolveWindow(req lessonsCompletedRequest, now time.Time) (start, end time.Time) {
-	switch {
-	case req.StartDate == nil && req.EndDate == nil:
-		today := now.UTC()
-		return startOfDay(today.AddDate(0, 0, -(defaultWindowInDays - 1))), endOfDay(today)
-	case req.StartDate != nil && req.EndDate == nil:
-		return *req.StartDate, endOfDay(*req.StartDate)
-	default:
-		return *req.StartDate, *req.EndDate
-	}
+	return datefilter.ResolveWindow(req.StartDate, req.EndDate, now, defaultWindowInDays)
 }
 
 // ---------- 3. SQL ----------
