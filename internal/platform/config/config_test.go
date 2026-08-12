@@ -32,6 +32,7 @@ func setEnv(t *testing.T, overrides map[string]string) {
 	for _, k := range []string{
 		"APP_ENV", "PORT", "LOG_LEVEL", "DB_DRIVER",
 		"PUBLIC_FILES_URL", "NEXT_PUBLIC_FILES_URL", "NEXT_PUBLIC_DOMAIN_URL",
+		"PUBLIC_API_NAME", "PUBLIC_API_URL",
 		"BUNNY_API_KEY", "BUNNY_BASE_URL", "BUNNY_TIMEOUT_SECONDS",
 		"ILOVEPDF_API_KEYS", "ILOVEPDF_BASE_URL",
 		"RESEND_API_KEY", "RESEND_BASE_URL",
@@ -354,4 +355,42 @@ func TestLoad_WarnsWhileTheSessionSecretIsStillAccepted(t *testing.T) {
 			t.Errorf("still warning about the secret in the end state:\n%s", strings.Join(cfg.Warnings(), "\n"))
 		}
 	})
+}
+
+// The docs are the one surface a customer reads verbatim, so a deployment that
+// never set its brand must say so at boot rather than serve generic docs
+// silently.
+func TestLoad_WarnsWhenTheDocsBrandingIsUnset(t *testing.T) {
+	setEnv(t, nil)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	warnings := strings.Join(cfg.Warnings(), "\n")
+	for _, want := range []string{"PUBLIC_API_NAME", "PUBLIC_API_URL"} {
+		if !strings.Contains(warnings, want) {
+			t.Errorf("boot log does not name %s:\n%s", want, warnings)
+		}
+	}
+}
+
+func TestLoad_DocsBrandingIsSilentWhenConfigured(t *testing.T) {
+	setEnv(t, map[string]string{
+		"PUBLIC_API_NAME": "Ephra",
+		"PUBLIC_API_URL":  "https://api.ephra.com.br",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Public.APIName != "Ephra" || cfg.Public.APIURL != "https://api.ephra.com.br" {
+		t.Errorf("Public = %+v, want the configured brand and URL", cfg.Public)
+	}
+	if warnings := strings.Join(cfg.Warnings(), "\n"); strings.Contains(warnings, "PUBLIC_API_") {
+		t.Errorf("still warning about configured variables:\n%s", warnings)
+	}
 }

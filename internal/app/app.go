@@ -148,7 +148,7 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 		memberImport,
 		transcription,
 		studentfeat.New(db, redis, log),
-		docs.New(),
+		docs.New(cfg, log),
 		authfeat.New(db, redis, cfg, log),
 		ssofeat.New(db, log),
 		aifeat.New(db, cfg, log),
