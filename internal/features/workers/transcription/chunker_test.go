@@ -61,10 +61,10 @@ func TestSplitIntoChunks_OverflowProducesMultiple(t *testing.T) {
 
 func TestSplitIntoChunks_OverlapCoversTailOfPrevious(t *testing.T) {
 	segs := []whisperSegment{
-		{Start: 0, End: 1, Text: strings.Repeat("foo ", 50)},   // ~65 tokens
-		{Start: 1, End: 2, Text: strings.Repeat("bar ", 50)},   // ~65 tokens
-		{Start: 2, End: 3, Text: strings.Repeat("baz ", 50)},   // ~65 tokens
-		{Start: 3, End: 4, Text: strings.Repeat("qux ", 50)},   // ~65 tokens
+		{Start: 0, End: 1, Text: strings.Repeat("foo ", 50)}, // ~65 tokens
+		{Start: 1, End: 2, Text: strings.Repeat("bar ", 50)}, // ~65 tokens
+		{Start: 2, End: 3, Text: strings.Repeat("baz ", 50)}, // ~65 tokens
+		{Start: 3, End: 4, Text: strings.Repeat("qux ", 50)}, // ~65 tokens
 	}
 	chunks := splitIntoChunks(segs, 100, 30)
 	if len(chunks) < 2 {

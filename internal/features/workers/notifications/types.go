@@ -23,7 +23,9 @@ const (
 )
 
 // Status matches Notification.status. The worker only writes:
-//   pending → sending → sent | failed
+//
+//	pending → sending → sent | failed
+//
 // 'canceled' is set by the admin app and is ignored by the claim query.
 type Status string
 

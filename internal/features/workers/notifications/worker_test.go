@@ -365,4 +365,3 @@ func TestSelectFirebaseKey_BadJSON(t *testing.T) {
 	_, _, err := selectFirebaseKey("")
 	require.Error(t, err)
 }
-

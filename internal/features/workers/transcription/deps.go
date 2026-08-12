@@ -5,14 +5,14 @@
 // end-to-end.
 //
 // Pipeline per lesson:
-//   1. Resolve Bunny playback URL (HLS) from lesson.mediaUrl + tenant creds
-//   2. Extract audio to MP3 16 kHz mono (ffmpeg)
-//   3. Split audio into 10-min windows if total > Whisper 25 MB limit
-//   4. Transcribe each window via OpenAI Whisper API (whisper-1)
-//   5. Chunk transcript (~500 tokens, 50 overlap, aligned to Whisper segments)
-//   6. Embed chunks via OpenAI text-embedding-3-small (batched)
-//   7. UPSERT video + INSERT transcript + INSERT chunks (single tx, Railway pgvector)
-//   8. UPDATE lesson.transcriptionCompleted = true (memberclass DB)
+//  1. Resolve Bunny playback URL (HLS) from lesson.mediaUrl + tenant creds
+//  2. Extract audio to MP3 16 kHz mono (ffmpeg)
+//  3. Split audio into 10-min windows if total > Whisper 25 MB limit
+//  4. Transcribe each window via OpenAI Whisper API (whisper-1)
+//  5. Chunk transcript (~500 tokens, 50 overlap, aligned to Whisper segments)
+//  6. Embed chunks via OpenAI text-embedding-3-small (batched)
+//  7. UPSERT video + INSERT transcript + INSERT chunks (single tx, Railway pgvector)
+//  8. UPDATE lesson.transcriptionCompleted = true (memberclass DB)
 //
 // Storage: a dedicated Railway Postgres service created from the
 // "PostgreSQL pgvector" template. The vanilla Railway Postgres image
@@ -37,8 +37,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/domain/ports"
-	bunnyport "github.com/memberclass-backend-golang/internal/domain/ports/bunny"
+	"github.com/memberclass-backend-golang/internal/platform/bunny"
+	"github.com/memberclass-backend-golang/internal/platform/logger"
+
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 )
 
 // Tunables. Package-level so tests can read them; move into Feature if any
@@ -67,10 +69,10 @@ const (
 // (HTTP handlers, worker goroutines, cron callback). Wire it in
 // cmd/api/main.go via fx.Provide; start/stop it from startApplication.
 type Feature struct {
-	transcriptionDB *sql.DB                 // Railway pgvector (videos/transcripts/chunks/jobs/token_usage)
-	memberclassDB   *sql.DB                 // memberclass CockroachDB (Lesson/Tenant + transcriptionCompleted flag)
-	log             ports.Logger
-	bunny           bunnyport.BunnyService
+	transcriptionDB *sql.DB // Railway pgvector (videos/transcripts/chunks/jobs/token_usage)
+	memberclassDB   *sql.DB // memberclass CockroachDB (Lesson/Tenant + transcriptionCompleted flag)
+	log             logger.Logger
+	bunny           bunny.Service
 
 	openaiAPIKey       string
 	openaiBaseURL      string
@@ -120,8 +122,8 @@ type Feature struct {
 func New(
 	transcriptionDB *sql.DB,
 	memberclassDB *sql.DB,
-	log ports.Logger,
-	bunny bunnyport.BunnyService,
+	log logger.Logger,
+	bunny bunny.Service,
 ) *Feature {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		log.Warn("transcription: ffmpeg not found in PATH — pipeline will refuse to run jobs", "error", err.Error())
@@ -157,20 +159,20 @@ func New(
 	}
 
 	return &Feature{
-		transcriptionDB: transcriptionDB,
-		memberclassDB:   memberclassDB,
-		log:             log,
-		bunny:           bunny,
-		openaiAPIKey:       apiKey,
-		openaiBaseURL:      defaultOpenAIBase,
-		bunnyBaseURL:       defaultBunnyBaseURL,
-		bunnyAccountAPIKey: os.Getenv("BUNNY_API_KEY"),
-		httpClient:         &http.Client{Timeout: 5 * time.Minute},
+		transcriptionDB:     transcriptionDB,
+		memberclassDB:       memberclassDB,
+		log:                 log,
+		bunny:               bunny,
+		openaiAPIKey:        apiKey,
+		openaiBaseURL:       defaultOpenAIBase,
+		bunnyBaseURL:        defaultBunnyBaseURL,
+		bunnyAccountAPIKey:  os.Getenv("BUNNY_API_KEY"),
+		httpClient:          telemetry.Client(5 * time.Minute),
 		pandaAPIKey:         pandaKey,
 		pandaBaseURL:        defaultPandaBaseURL,
 		pandaAllowedTenants: pandaTenants,
-		pollInterval:    poll,
-		workers:         workers,
+		pollInterval:        poll,
+		workers:             workers,
 	}
 }
 

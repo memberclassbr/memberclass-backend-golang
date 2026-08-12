@@ -38,11 +38,11 @@ var bunnyPlaybackCache sync.Map
 //
 // Resolution chain (both calls use the account-level BUNNY_API_KEY):
 //
-//	1. GET /videolibrary/{libraryID}  → PullZoneId
-//	2. GET /pullzone/{pullZoneId}     → Hostnames[] + ZoneSecurityKey + ZoneSecurityEnabled
-//	3. Pick the first IsSystemHostname entry (fallback: any *.b-cdn.net).
-//	   Custom domains attached to the pull zone are skipped — their TLS
-//	   cert may not be trusted by ffmpeg.
+//  1. GET /videolibrary/{libraryID}  → PullZoneId
+//  2. GET /pullzone/{pullZoneId}     → Hostnames[] + ZoneSecurityKey + ZoneSecurityEnabled
+//  3. Pick the first IsSystemHostname entry (fallback: any *.b-cdn.net).
+//     Custom domains attached to the pull zone are skipped — their TLS
+//     cert may not be trusted by ffmpeg.
 //
 // The per-tenant Stream API key (`Tenant.bunnyLibraryApiKey`) cannot
 // reach these endpoints; they live on a different host (api.bunny.net)

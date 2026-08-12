@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/domain/constants"
-	"github.com/memberclass-backend-golang/internal/domain/dto"
-	"github.com/memberclass-backend-golang/internal/domain/entities/tenant"
-	"github.com/memberclass-backend-golang/internal/domain/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/pagination"
+	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,7 +137,7 @@ func TestGetSummary_CacheHit(t *testing.T) {
 	lastAccess := "2024-01-15T10:30:00.000Z"
 	cached := activitySummaryResponse{
 		Users:      []userActivitySummary{{Email: "a@b.com", UltimoAcesso: &lastAccess}},
-		Pagination: dto.PaginationMeta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
+		Pagination: pagination.Meta{Page: 1, Limit: 10, TotalCount: 1, TotalPages: 1},
 	}
 	raw, _ := json.Marshal(cached)
 	cache.store[buildCacheKey(tenantID, req, time.Time{}, time.Time{})] = string(raw)
@@ -323,7 +322,7 @@ func TestGetActivitySummary_Success(t *testing.T) {
 
 func withTenant(r *http.Request) *http.Request {
 	t := &tenant.Tenant{ID: "tenant-123"}
-	ctx := context.WithValue(r.Context(), constants.TenantContextKey, t)
+	ctx := context.WithValue(r.Context(), tenant.ContextKey, t)
 	return r.WithContext(ctx)
 }
 
@@ -331,3 +330,18 @@ func ptr[T any](v T) *T { return &v }
 
 // Ensure we compile against *sql.DB (sanity check for New signature).
 var _ = func() *Feature { return New((*sql.DB)(nil), (*fakeCache)(nil), fakeLogger{}) }
+
+// The three endpoints with a date window share one policy. This asserts this
+// slice is on it: the default used to be an offset from the current instant,
+// which left the oldest day of the range half covered.
+func TestResolveDateRange_DefaultIsWholeCalendarDays(t *testing.T) {
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+
+	start, end := resolveDateRange(getActivitySummaryRequest{}, now)
+
+	assert.Equal(t, time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC), start,
+		"oldest day must start at midnight, not at the hour of the call")
+	assert.Equal(t, time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC), end)
+	assert.LessOrEqual(t, end.Sub(start), time.Duration(31)*24*time.Hour,
+		"default must not exceed the window a caller may request")
+}
