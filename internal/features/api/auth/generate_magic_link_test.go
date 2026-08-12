@@ -155,9 +155,14 @@ func expectMint(mock sqlmock.Sqlmock, email, tenantID string, customDomain, subD
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("u1"))
 	mock.ExpectExec(`UPDATE "User"`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery(`FROM "Tenant"`).
+	// The column list is pinned on purpose. Prisma names the Tenant columns
+	// "customDomain" (camelCase) and subdomain (not), and a quoted "subDomain"
+	// is a runtime-only failure: sqlmock does not know the schema, so a casing
+	// slip used to reach production as a 500. Matching the identifiers here is
+	// the only place a unit test can catch it.
+	mock.ExpectQuery(`SELECT "customDomain", subdomain FROM "Tenant"`).
 		WithArgs(tenantID).
-		WillReturnRows(sqlmock.NewRows([]string{"customDomain", "subDomain"}).
+		WillReturnRows(sqlmock.NewRows([]string{"customDomain", "subdomain"}).
 			AddRow(customDomain, subDomain))
 }
 
@@ -270,8 +275,8 @@ func TestGenerateMagicLink_StoresOnlyTheHash(t *testing.T) {
 			"u1",
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery(`FROM "Tenant"`).
-		WillReturnRows(sqlmock.NewRows([]string{"customDomain", "subDomain"}).AddRow("escola.com.br", nil))
+	mock.ExpectQuery(`SELECT "customDomain", subdomain FROM "Tenant"`).
+		WillReturnRows(sqlmock.NewRows([]string{"customDomain", "subdomain"}).AddRow("escola.com.br", nil))
 
 	w := httptest.NewRecorder()
 	f.GenerateMagicLink(w, postRequest("t1", `{"email":"a@example.com"}`))

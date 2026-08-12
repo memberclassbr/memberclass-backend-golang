@@ -16,7 +16,14 @@ func (f *Feature) Register(r chi.Router, mw MiddlewareSet) {
 
 // RegisterUsers mounts the routes under `/api/v1/users`, the plural prefix the
 // purchases endpoint has always used.
+//
+// /purchases is deprecated in favour of /payment-events and stays mounted: the
+// frontends calling it have not moved yet, and removing it would break them.
+// It advertises its own replacement through the Deprecation and Link headers.
 func (f *Feature) RegisterUsers(r chi.Router, mw MiddlewareSet) {
 	r.With(mw.AuthExternal, mw.RateLimitTenant).
 		Get("/purchases", f.GetUserPurchases)
+
+	r.With(mw.AuthExternal, mw.RateLimitTenant).
+		Get("/payment-events", f.GetPaymentEvents)
 }

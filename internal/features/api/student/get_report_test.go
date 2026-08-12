@@ -96,8 +96,11 @@ func expectEnrichment(mock sqlmock.Sqlmock, tenantID string) {
 		WillReturnRows(sqlmock.NewRows([]string{"userId", "lessonId", "lesson_name", "createdAt"}).
 			AddRow("u1", "l1", "Aula 1", time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)))
 
-	mock.ExpectQuery(`FROM "UserEvent"`).
-		WillReturnRows(sqlmock.NewRows([]string{"usersOnTenantsUserId", "createdAt"}).
+	// Pinned to LoginEvent. This read UserEvent with type = 'login', the legacy
+	// table the analytics backfill drains, so ultimo_acesso came back null for
+	// every student.
+	mock.ExpectQuery(`FROM "LoginEvent" le`).
+		WillReturnRows(sqlmock.NewRows([]string{"userId", "createdAt"}).
 			AddRow("u1", time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC)))
 }
 
@@ -369,9 +372,9 @@ func TestQueries_AreTenantScoped(t *testing.T) {
 	mock.ExpectQuery(`v\."tenantId" = \$2`).
 		WithArgs(sqlmock.AnyArg(), "t1").
 		WillReturnRows(sqlmock.NewRows([]string{"userId", "lessonId", "lesson_name", "createdAt"}))
-	mock.ExpectQuery(`"usersOnTenantsTenantId" = \$2`).
+	mock.ExpectQuery(`le\."tenantId" = \$2`).
 		WithArgs(sqlmock.AnyArg(), "t1").
-		WillReturnRows(sqlmock.NewRows([]string{"usersOnTenantsUserId", "createdAt"}))
+		WillReturnRows(sqlmock.NewRows([]string{"userId", "createdAt"}))
 
 	ctx := context.Background()
 	_, err := f.queryDeliveryNames(ctx, "t1")

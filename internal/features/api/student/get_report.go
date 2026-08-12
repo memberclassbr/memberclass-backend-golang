@@ -17,6 +17,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
+
+	"github.com/memberclass-backend-golang/internal/shared/datefilter"
 )
 
 // reportCacheTTL matches the previous implementation. The report fans out to
@@ -39,7 +41,7 @@ type lessonWatched struct {
 }
 
 type studentReport struct {
-	AlunoIDMemberClass        string          `json:"aluno_id_member_class"`
+	AlunoIDMemberClass        string          `json:"aluno_id"`
 	Email                     string          `json:"email"`
 	Cpf                       string          `json:"cpf"`
 	DataCadastro              string          `json:"data_cadastro"`
@@ -116,7 +118,7 @@ func parseRequest(query url.Values) (*getStudentReportRequest, error) {
 	}
 
 	if v := query.Get("startDate"); v != "" {
-		startDate, err := time.Parse(time.RFC3339, v)
+		startDate, err := datefilter.Parse(v, datefilter.StartOfDay)
 		if err != nil {
 			return nil, errors.New(errInvalidStartDate)
 		}
@@ -124,7 +126,7 @@ func parseRequest(query url.Values) (*getStudentReportRequest, error) {
 	}
 
 	if v := query.Get("endDate"); v != "" {
-		endDate, err := time.Parse(time.RFC3339, v)
+		endDate, err := datefilter.Parse(v, datefilter.EndOfDay)
 		if err != nil {
 			return nil, errors.New(errInvalidEndDate)
 		}
@@ -135,8 +137,8 @@ func parseRequest(query url.Values) (*getStudentReportRequest, error) {
 }
 
 const (
-	errInvalidStartDate = "formato de data inválido para startDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
-	errInvalidEndDate   = "formato de data inválido para endDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+	errInvalidStartDate = "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+	errInvalidEndDate   = "formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
 	errPageRange        = "page deve ser >= 1"
 	errLimitRange       = "limit deve ser entre 1 e 100"
 	errStartAfterEnd    = "a data de início não pode ser maior que a data de fim"
@@ -179,9 +181,9 @@ func validationErrorResponse(err error) (message, code string) {
 	case errPageRange, errLimitRange:
 		return "Parâmetros de paginação inválidos. page >= 1, limit entre 1 e 100", "INVALID_PAGINATION"
 	case errInvalidStartDate:
-		return "Formato de data inválido para startDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)", "INVALID_DATE_FORMAT"
+		return "Formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)", "INVALID_DATE_FORMAT"
 	case errInvalidEndDate:
-		return "Formato de data inválido para endDate. Use ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)", "INVALID_DATE_FORMAT"
+		return "Formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)", "INVALID_DATE_FORMAT"
 	case errStartAfterEnd:
 		return "startDate não pode ser maior que endDate", "INVALID_DATE_RANGE"
 	default:
@@ -355,15 +357,23 @@ const (
 		ORDER BY r."createdAt" DESC
 	`
 
+	// sqlLastAccesses reads "LoginEvent", the entity that records logins.
+	//
+	// It used to read "UserEvent" with type = 'login'. That table is the legacy
+	// source the analytics backfill drains into LoginEvent — see migrateRow in
+	// internal/features/workers/analytics/backfill.go, which moves both 'login'
+	// and 'user-login' rows across. New logins land in LoginEvent, so this
+	// query reported ultimo_acesso as null for every student. It also matched
+	// only 'login' and never 'user-login', so it missed rows even before the
+	// move.
 	sqlLastAccesses = `
-		SELECT DISTINCT ON ("usersOnTenantsUserId")
-			"usersOnTenantsUserId",
-			"createdAt"
-		FROM "UserEvent"
-		WHERE "usersOnTenantsUserId" = ANY($1)
-		  AND "usersOnTenantsTenantId" = $2
-		  AND type = 'login'
-		ORDER BY "usersOnTenantsUserId", "createdAt" DESC
+		SELECT DISTINCT ON (le."userId")
+			le."userId",
+			le."createdAt"
+		FROM "LoginEvent" le
+		WHERE le."userId" = ANY($1)
+		  AND le."tenantId" = $2
+		ORDER BY le."userId", le."createdAt" DESC
 	`
 )
 

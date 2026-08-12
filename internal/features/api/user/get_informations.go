@@ -16,10 +16,25 @@ import (
 
 // ---------- DTOs ----------
 
+// deliveryInfo is one access grant. Beyond the identity of the delivery it
+// carries the payment lifecycle MemberOnDelivery records, so a caller can tell
+// a live grant from one that expired, was refunded or was cancelled without a
+// second request.
+//
+// Every field after Status is nullable in the schema and stays nullable here:
+// expiresAt is null for a lifetime (one-off) purchase, and the platform fields
+// are empty for grants created by hand rather than by a gateway webhook.
+// Collapsing those to "" would make a manual grant look like a broken one.
 type deliveryInfo struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	AccessDate string `json:"accessDate"`
+	ID                     string  `json:"id"`
+	Name                   string  `json:"name"`
+	AccessDate             string  `json:"accessDate"`
+	Status                 string  `json:"status"`
+	ExpiresAt              *string `json:"expiresAt"`
+	Platform               *string `json:"platform"`
+	ExternalSubscriptionID *string `json:"externalSubscriptionId"`
+	CanceledAt             *string `json:"canceledAt"`
+	LastEventAt            *string `json:"lastEventAt"`
 }
 
 type userInformation struct {
@@ -89,7 +104,11 @@ func (f *Feature) getInformations(ctx context.Context, tenantID, email string, p
 		}
 	}
 
-	cacheKey := fmt.Sprintf("user:informations:%s:%s:%d:%d", tenantID, email, page, limit)
+	// The v2 in the key is deliberate. Entries written by the previous shape
+	// still unmarshal cleanly into the new one — they simply lack the delivery
+	// lifecycle fields — so without a new key the endpoint would serve grants
+	// with an empty status for a whole TTL after the deploy.
+	cacheKey := fmt.Sprintf("user:informations:v2:%s:%s:%d:%d", tenantID, email, page, limit)
 
 	if cached, err := f.cache.Get(ctx, cacheKey); err == nil && cached != "" {
 		var hit userInformationsResponse
@@ -142,7 +161,13 @@ func (f *Feature) getInformations(ctx context.Context, tenantID, email string, p
 const (
 	// sqlMembers pages the tenant's members and, in the same round trip,
 	// derives two flags per member: whether they ever recorded a non-negative
-	// purchase event, and when they last appeared in the system log.
+	// purchase event, and when they last logged in.
+	//
+	// last_access reads "LoginEvent", the entity that now records logins. It
+	// used to read "SystemLog", the audit table, which stopped receiving logins
+	// and left lastAccess null for every member. LoginEvent carries tenantId, so
+	// unlike the old query this one filters by it directly rather than relying
+	// on users_base having already narrowed the ids.
 	//
 	// $4 is the optional email filter; emailClause below wires it in.
 	sqlMembers = `
@@ -168,10 +193,11 @@ const (
 			  AND value >= 0
 		),
 		last_access AS (
-			SELECT DISTINCT ON (sl.user_id) sl.user_id as "userId", sl."createdAt" as "updatedAt"
-			FROM "SystemLog" sl
-			WHERE sl.user_id IN (SELECT "userId" FROM users_base)
-			ORDER BY sl.user_id, sl."createdAt" DESC
+			SELECT DISTINCT ON (le."userId") le."userId", le."createdAt" as "updatedAt"
+			FROM "LoginEvent" le
+			WHERE le."userId" IN (SELECT "userId" FROM users_base)
+			  AND le."tenantId" = $1
+			ORDER BY le."userId", le."createdAt" DESC
 		)
 		SELECT
 			ub."userId",
@@ -192,7 +218,9 @@ const (
 	`
 
 	sqlMemberDeliveries = `
-		SELECT mod."memberId", mod."deliveryId", mod."assignedAt", d.name as delivery_name
+		SELECT mod."memberId", mod."deliveryId", mod."assignedAt", d.name as delivery_name,
+		       mod.status, mod."expiresAt", mod.platform,
+		       mod."externalSubscriptionId", mod."canceledAt", mod."lastEventAt"
 		FROM "MemberOnDelivery" mod
 		JOIN "Delivery" d ON d.id = mod."deliveryId"
 		WHERE mod."memberId" = ANY($1) AND mod."tenantId" = $2
@@ -268,19 +296,31 @@ func (f *Feature) queryDeliveries(ctx context.Context, userIDs []string, tenantI
 
 	byUser := make(map[string][]deliveryInfo)
 	for rows.Next() {
-		var userID, deliveryID, deliveryName string
+		var userID, deliveryID, deliveryName, status string
 		var accessDate time.Time
+		var expiresAt, canceledAt, lastEventAt sql.NullTime
+		var platform, externalSubscriptionID sql.NullString
 
 		// A malformed delivery row is skipped rather than failing the page.
-		if err := rows.Scan(&userID, &deliveryID, &accessDate, &deliveryName); err != nil {
+		if err := rows.Scan(
+			&userID, &deliveryID, &accessDate, &deliveryName,
+			&status, &expiresAt, &platform,
+			&externalSubscriptionID, &canceledAt, &lastEventAt,
+		); err != nil {
 			f.log.Error("Error scanning delivery: " + err.Error())
 			continue
 		}
 
 		byUser[userID] = append(byUser[userID], deliveryInfo{
-			ID:         deliveryID,
-			Name:       deliveryName,
-			AccessDate: accessDate.Format(timestampLayout),
+			ID:                     deliveryID,
+			Name:                   deliveryName,
+			AccessDate:             accessDate.Format(timestampLayout),
+			Status:                 status,
+			ExpiresAt:              timePtr(expiresAt),
+			Platform:               stringPtr(platform),
+			ExternalSubscriptionID: stringPtr(externalSubscriptionID),
+			CanceledAt:             timePtr(canceledAt),
+			LastEventAt:            timePtr(lastEventAt),
 		})
 	}
 	return byUser, nil

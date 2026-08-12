@@ -275,3 +275,95 @@ func TestGetAuthUser_NilWithoutMiddleware(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	assert.Nil(t, GetAuthUser(req.Context()))
 }
+
+// ---------- x-api-key ----------
+
+func TestAuthExternal_AcceptsTheCurrentHeader(t *testing.T) {
+	plaintext := "tenant-key"
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	sum := sha256.Sum256([]byte(plaintext))
+	mock.ExpectQuery(`FROM "Tenant"`).
+		WithArgs(hex.EncodeToString(sum[:])).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("x-api-key", plaintext)
+
+	rec := httptest.NewRecorder()
+	var reached bool
+	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }),
+	).ServeHTTP(rec, req)
+
+	assert.True(t, reached, "x-api-key is the header we are asking callers to move to")
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+// The legacy name stays accepted and unadvertised. Dropping it would log out
+// every integration in a single deploy.
+func TestAuthExternal_StillAcceptsTheLegacyHeader(t *testing.T) {
+	plaintext := "tenant-key"
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	sum := sha256.Sum256([]byte(plaintext))
+	mock.ExpectQuery(`FROM "Tenant"`).
+		WithArgs(hex.EncodeToString(sum[:])).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("mc-api-key", plaintext)
+
+	rec := httptest.NewRecorder()
+	var reached bool
+	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }),
+	).ServeHTTP(rec, req)
+
+	assert.True(t, reached)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+// During a migration a caller may send both. They carry the same key, so the
+// request is served rather than rejected for the ambiguity.
+func TestAuthExternal_PrefersTheCurrentHeaderWhenBothAreSent(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	sum := sha256.Sum256([]byte("current"))
+	mock.ExpectQuery(`FROM "Tenant"`).
+		WithArgs(hex.EncodeToString(sum[:])).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("x-api-key", "current")
+	req.Header.Set("mc-api-key", "legacy")
+
+	rec := httptest.NewRecorder()
+	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+	).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.NoError(t, mock.ExpectationsWereMet(), "the lookup must use x-api-key")
+}
+
+func TestAuthExternal_RejectsWhenNeitherHeaderIsPresent(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	rec := httptest.NewRecorder()
+	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("handler must not run without a credential")
+		}),
+	).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}

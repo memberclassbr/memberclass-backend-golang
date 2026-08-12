@@ -28,9 +28,27 @@ type userPurchasesResponse struct {
 
 // ---------- 1. HTTP handler ----------
 
+// successorPath is where callers of this endpoint should go instead.
+const successorPath = "/api/v1/users/payment-events"
+
 // GetUserPurchases handles `GET /api/v1/users/purchases`: the purchase and
 // refund events recorded for one member of the tenant.
+//
+// Deprecated: use GetPaymentEvents. This reads the older UserEvent table, which
+// records that something happened and when, and nothing else — its updatedAt is
+// a copy of createdAt rather than a second timestamp. The replacement reads
+// PaymentEvent and can say what was paid, on which platform and until when the
+// access runs.
+//
+// It stays mounted and unchanged because the frontends calling it have not
+// moved. The response is identical; only the advisory headers are new.
 func (f *Feature) GetUserPurchases(w http.ResponseWriter, r *http.Request) {
+	// RFC 8594 style: the header marks the endpoint deprecated and the link
+	// names its replacement, so a client sees the notice without anyone having
+	// to read the changelog.
+	w.Header().Set("Deprecation", "true")
+	w.Header().Set("Link", `<`+successorPath+`>; rel="successor-version"`)
+
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return

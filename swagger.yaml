@@ -46,7 +46,9 @@ paths:
       description: |
         Retorna uma lista paginada de comentários do tenant com filtros opcionais.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Filtros disponíveis:**
         - `email`: Filtra por email do usuário (busca parcial, case insensitive)
@@ -57,7 +59,7 @@ paths:
         **Paginação:** Suporta parâmetros `page` e `limit` via query string.
       operationId: getComments
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -192,7 +194,9 @@ paths:
         Retorna uma lista paginada de informações dos usuários do tenant, incluindo
         entregas (deliveries) associadas e último acesso.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Filtros disponíveis:**
         - `email`: Filtra por email do usuário (busca parcial)
@@ -204,7 +208,7 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           schema:
@@ -250,12 +254,26 @@ paths:
                     email: "usuario@exemplo.com"
                     isPaid: true
                     deliveries:
+                      # Assinatura vinda de gateway, ativa.
                       - id: "delivery-1"
                         name: "Curso de Programação"
                         accessDate: "2024-01-15T10:30:00Z"
+                        status: "active"
+                        expiresAt: "2027-04-01T00:00:00.000Z"
+                        platform: "hotmart"
+                        externalSubscriptionId: "sub_123"
+                        canceledAt: null
+                        lastEventAt: "2026-04-02T12:00:00.000Z"
+                      # Compra única/concessão manual: vitalícia e sem gateway.
                       - id: "delivery-2"
                         name: "Curso de Design"
                         accessDate: "2024-02-20T14:00:00Z"
+                        status: "active"
+                        expiresAt: null
+                        platform: null
+                        externalSubscriptionId: null
+                        canceledAt: null
+                        lastEventAt: null
                     lastAccess: "2024-03-10T09:15:00Z"
                   - userId: "user-456"
                     email: "outro@exemplo.com"
@@ -336,7 +354,7 @@ paths:
         | `quiz` | `StudentQuiz` (não deletado) |
         | `certificate` | `UserCertificates` |
 
-        **Autenticação:** header `mc-api-key`.
+        **Autenticação:** header `x-api-key`.
 
         **Cache:** em produção, respostas são cacheadas por 5 minutos no Redis e
         trazem o bloco `cache: {cachedAt, refreshAt}`. Em desenvolvimento
@@ -344,14 +362,21 @@ paths:
         é omitido.
 
         **Regras de Data:**
-        - Sem `startDate` e `endDate` → últimos 31 dias
-        - Apenas `startDate` → dia inteiro de `startDate` (00:00 a 23:59)
+        - Sem `startDate` e `endDate` → últimos **31 dias-calendário em UTC**,
+          contando hoje: de 00:00:00Z do dia mais antigo até 23:59:59.999Z de hoje
+        - Apenas `startDate` → daquele instante até 23:59:59.999Z do mesmo dia.
+          Uma data pura (`YYYY-MM-DD`) chega em 00:00, então cobre o dia inteiro;
+          um ISO 8601 com hora preserva a hora informada
         - `endDate` sem `startDate` → erro
         - `startDate > endDate` → erro
         - Período máximo: **31 dias**
+        - Formato: `YYYY-MM-DD` ou ISO 8601 completo. Uma data pura em `endDate`
+          fecha no fim do dia, então `startDate=2026-08-10&endDate=2026-08-13`
+          cobre os quatro dias inteiros. Com ISO 8601 completo o instante é
+          usado literalmente — `2026-08-13T00:00:00Z` exclui o dia 13.
       operationId: getUserActivities
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -386,7 +411,7 @@ paths:
         - name: startDate
           in: query
           required: false
-          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data início. Aceita YYYY-MM-DD (resolve para 00:00:00Z do dia) ou ISO 8601 completo (YYYY-MM-DDTHH:mm:ssZ, usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -394,7 +419,7 @@ paths:
         - name: endDate
           in: query
           required: false
-          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data fim. Aceita YYYY-MM-DD (resolve para 23:59:59.999Z do dia, então o intervalo inclui o dia inteiro) ou ISO 8601 completo (usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -481,7 +506,7 @@ paths:
                   summary: Formato de data inválido
                   value:
                     ok: false
-                    error: "formato de data inválido para startDate"
+                    error: "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
                     errorCode: "INVALID_DATE_FORMAT"
                 invalidDateRange:
                   summary: Período inválido
@@ -527,19 +552,28 @@ paths:
       description: |
         Retorna um resumo de atividade dos usuários de um tenant, mostrando o email e o último acesso de cada usuário.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Regras de Data:**
-        - Se `startDate` e `endDate` não informados → últimos 31 dias
-        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `startDate` e `endDate` não informados → últimos **31 dias-calendário
+          em UTC**, contando hoje: de 00:00:00Z do dia mais antigo até 23:59:59.999Z de hoje
+        - Se apenas `startDate` → daquele instante até 23:59:59.999Z do mesmo dia.
+          Uma data pura chega em 00:00 e cobre o dia inteiro; um ISO 8601 com hora
+          preserva a hora informada
         - Se `endDate` sem `startDate` → erro
         - Se `startDate > endDate` → erro
         - Período máximo: **31 dias**
+        - Formato: `YYYY-MM-DD` ou ISO 8601 completo. Uma data pura em `endDate`
+          fecha no fim do dia, então `startDate=2026-08-10&endDate=2026-08-13`
+          cobre os quatro dias inteiros. Com ISO 8601 completo o instante é
+          usado literalmente — `2026-08-13T00:00:00Z` exclui o dia 13.
         
         **noAccess:** Se `true`, retorna usuários SEM atividade no período. Se `false` (padrão), retorna usuários COM atividade.
       operationId: getActivitySummary
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -566,7 +600,7 @@ paths:
         - name: startDate
           in: query
           required: false
-          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data início. Aceita YYYY-MM-DD (resolve para 00:00:00Z do dia) ou ISO 8601 completo (YYYY-MM-DDTHH:mm:ssZ, usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -574,7 +608,7 @@ paths:
         - name: endDate
           in: query
           required: false
-          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data fim. Aceita YYYY-MM-DD (resolve para 23:59:59.999Z do dia, então o intervalo inclui o dia inteiro) ou ISO 8601 completo (usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -623,7 +657,7 @@ paths:
                   summary: Formato de data inválido
                   value:
                     ok: false
-                    error: "formato de data inválido para startDate"
+                    error: "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
                     errorCode: "INVALID_DATE_FORMAT"
                 invalidDateRange:
                   summary: Período inválido
@@ -659,19 +693,28 @@ paths:
       description: |
         Retorna as aulas concluídas por um usuário específico, com informações do curso e data de conclusão.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Regras de Data:**
-        - Se `startDate` e `endDate` não informados → últimos 31 dias
-        - Se apenas `startDate` → busca do início ao fim daquele dia
+        - Se `startDate` e `endDate` não informados → últimos **31 dias-calendário
+          em UTC**, contando hoje: de 00:00:00Z do dia mais antigo até 23:59:59.999Z de hoje
+        - Se apenas `startDate` → daquele instante até 23:59:59.999Z do mesmo dia.
+          Uma data pura chega em 00:00 e cobre o dia inteiro; um ISO 8601 com hora
+          preserva a hora informada
         - Se `endDate` sem `startDate` → erro
         - Se `startDate > endDate` → erro
         - Período máximo: **31 dias**
+        - Formato: `YYYY-MM-DD` ou ISO 8601 completo. Uma data pura em `endDate`
+          fecha no fim do dia, então `startDate=2026-08-10&endDate=2026-08-13`
+          cobre os quatro dias inteiros. Com ISO 8601 completo o instante é
+          usado literalmente — `2026-08-13T00:00:00Z` exclui o dia 13.
         
         **Cache:** Esta rota **NÃO usa cache** no Redis (dados em tempo real por usuário).
       operationId: getLessonsCompleted
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -706,7 +749,7 @@ paths:
         - name: startDate
           in: query
           required: false
-          description: "Data início (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data início. Aceita YYYY-MM-DD (resolve para 00:00:00Z do dia) ou ISO 8601 completo (YYYY-MM-DDTHH:mm:ssZ, usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -714,7 +757,7 @@ paths:
         - name: endDate
           in: query
           required: false
-          description: "Data fim (ISO 8601: YYYY-MM-DDTHH:mm:ssZ)"
+          description: "Data fim. Aceita YYYY-MM-DD (resolve para 23:59:59.999Z do dia, então o intervalo inclui o dia inteiro) ou ISO 8601 completo (usado literalmente)."
           schema:
             type: string
             format: date-time
@@ -773,7 +816,7 @@ paths:
                   summary: Formato de data inválido
                   value:
                     ok: false
-                    error: "formato de data inválido para startDate"
+                    error: "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
                     errorCode: "INVALID_DATE_FORMAT"
                 invalidDateRange:
                   summary: Período inválido
@@ -811,15 +854,146 @@ paths:
                 error: "Internal Server Error"
                 message: "Internal server error"
 
-  /api/v1/users/purchases:
+  /api/v1/users/payment-events:
     get:
       tags:
         - Users
-      summary: Listar compras e reembolsos do usuário
+      summary: Listar o histórico de pagamentos do usuário
       description: |
+        Ledger de pagamentos de um membro do tenant, lido de `PaymentEvent`.
+        Substitui `GET /api/v1/users/purchases`.
+
+        **Autenticação:** header `x-api-key`.
+
+        **Cache:** Redis, TTL de 300 segundos.
+
+        **Valores:** `amount` vem na menor unidade da moeda (centavos para BRL),
+        como os gateways reportam. `19700` com `currency: "BRL"` são R$ 197,00.
+        A formatação é do cliente — devolver decimal poria dinheiro em ponto
+        flutuante.
+
+        **Nulos têm significado:** o gateway nem sempre envia todos os campos.
+        `amount` nulo não é zero, é ausência de valor informado. `occurredAt`
+        nulo significa que o gateway não mandou a hora dele; a ordenação cai
+        para a hora de recebimento nesse caso.
+
+        **Campos internos não são expostos.** A chave primária do evento,
+        `tenantId`, `userId`, `deliveryId`, o `externalEventId` (deduplicação de
+        webhook) e o `createdAt` (quando o webhook chegou, não quando o
+        pagamento ocorreu) ficam de fora.
+      operationId: getUserPaymentEvents
+      parameters:
+        - name: x-api-key
+          in: header
+          required: true
+          description: Token de API do tenant
+          schema:
+            type: string
+        - name: email
+          in: query
+          required: true
+          description: E-mail do membro
+          schema:
+            type: string
+            format: email
+        - name: type
+          in: query
+          required: false
+          description: >-
+            Filtra por tipo de evento. Ausente traz o ledger inteiro, estornos e
+            cancelamentos incluídos. Um valor fora da lista responde 400
+            `INVALID_EVENT_TYPE` em vez de página vazia.
+          schema:
+            type: string
+            enum: [purchase, renewal, refund, chargeback, cancellation, expired]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Histórico de pagamentos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentEvent'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+              example:
+                events:
+                  - type: "purchase"
+                    platform: "hotmart"
+                    amount: 19700
+                    currency: "BRL"
+                    plan: "Anual"
+                    occurredAt: "2026-08-03T23:32:49.000Z"
+                    expiresAt: "2027-08-03T00:00:00.000Z"
+                    deliveryName: "Assinatura Anual"
+                    transactionId: "tx_123"
+                    subscriptionId: "sub_456"
+                  - type: "chargeback"
+                    platform: "hotmart"
+                    amount: null
+                    currency: null
+                    plan: null
+                    occurredAt: null
+                    expiresAt: null
+                    deliveryName: null
+                    transactionId: null
+                    subscriptionId: null
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 2
+                  totalPages: 1
+                  hasNextPage: false
+                  hasPrevPage: false
+        '400':
+          description: Parâmetro inválido
+        '401':
+          description: Token de API ausente ou inválido
+        '404':
+          description: Usuário não encontrado neste tenant
+  /api/v1/users/purchases:
+    get:
+      deprecated: true
+      tags:
+        - Users
+      summary: "[DEPRECADO] Listar compras e reembolsos do usuário"
+      description: |
+        **Depreciado — use `GET /api/v1/users/payment-events`.**
+
+        Lê a tabela antiga `UserEvent`, que registra apenas que algo aconteceu e
+        quando; o `updatedAt` da resposta é uma cópia do `createdAt`, não um
+        segundo carimbo. A rota sucessora lê `PaymentEvent` e informa quanto foi
+        pago, em qual plataforma, de qual plano e até quando o acesso concedido
+        vale.
+
+        Continua respondendo, sem mudança de contrato. A resposta agora carrega
+        os cabeçalhos `Deprecation: true` e
+        `Link: </api/v1/users/payment-events>; rel="successor-version"`.
+
         Retorna uma lista paginada de compras e reembolsos de um usuário específico.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos) para melhorar a performance.
         
@@ -828,7 +1002,7 @@ paths:
         **Filtro por tipo:** É possível filtrar as transações por tipo (purchase ou refund) usando o parâmetro `type`.
       operationId: getUserPurchases
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -959,7 +1133,9 @@ paths:
       description: |
         Cria um novo post em um tópico ou atualiza um post existente, com validação de tenant, usuário e permissões.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Fluxo:**
         1. Se `postId` for fornecido, atualiza o post existente (apenas owner ou dono do post)
@@ -971,7 +1147,7 @@ paths:
         - Owners podem postar em qualquer tópico
       operationId: createOrUpdatePost
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -1062,7 +1238,7 @@ paths:
                   summary: API key não informada
                   value:
                     ok: false
-                    error: "Header mc-api-key é obrigatório"
+                    error: "Header x-api-key é obrigatório"
                     errorCode: "MISSING_API_KEY"
                 invalidApiKey:
                   summary: API key inválida
@@ -1132,7 +1308,9 @@ paths:
       description: |
         Atualiza parcialmente a resposta e o status de publicação de um comentário específico.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: updateCommentPartial
       parameters:
         - name: commentID
@@ -1142,7 +1320,7 @@ paths:
           schema:
             type: string
           example: "comment-123"
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1202,7 +1380,9 @@ paths:
       description: |
         Retorna um relatório detalhado dos alunos de um tenant, incluindo informações de cadastro, entregas vinculadas, acessos e aulas assistidas.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos). A chave de cache é gerada usando MD5 hash dos parâmetros.
         
@@ -1214,7 +1394,7 @@ paths:
         **Formato de Data:** ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)
       operationId: getStudentReport
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -1263,7 +1443,7 @@ paths:
                 $ref: '#/components/schemas/StudentReportResponse'
               example:
                 alunos:
-                  - aluno_id_member_class: "user-123"
+                  - aluno_id: "user-123"
                     email: "aluno@example.com"
                     cpf: "12345678900"
                     data_cadastro: "2024-01-15T10:30:00.000Z"
@@ -1322,7 +1502,7 @@ paths:
                   summary: API key não informada
                   value:
                     ok: false
-                    error: "Header mc-api-key é obrigatório"
+                    error: "Header x-api-key é obrigatório"
                     errorCode: "MISSING_API_KEY"
                 invalidApiKey:
                   summary: API key inválida
@@ -1349,12 +1529,14 @@ paths:
       description: |
         Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > seções > módulos > aulas.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         O tenant é identificado automaticamente pelo token de API.
       operationId: getVitrines
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1389,10 +1571,12 @@ paths:
       description: |
         Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, seções, módulos e aulas) através do parâmetro `includeChildren`.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getVitrine
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1442,10 +1626,12 @@ paths:
       description: |
         Retorna um curso específico pelo ID. Pode incluir ou não os filhos (seções, módulos e aulas) através do parâmetro `includeChildren`.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getCourse
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1495,10 +1681,12 @@ paths:
       description: |
         Retorna um módulo específico pelo ID. Pode incluir ou não os filhos (aulas) através do parâmetro `includeChildren`.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getModule
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1548,10 +1736,12 @@ paths:
       description: |
         Retorna uma aula específica pelo ID. Aulas não possuem filhos.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getLesson
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1593,10 +1783,12 @@ paths:
       description: |
         Gera um link de login (magic link) para o usuário autenticado no tenant.
 
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       parameters:
         - in: header
-          name: mc-api-key
+          name: x-api-key
           required: true
           schema:
             type: string
@@ -1680,10 +1872,12 @@ paths:
       description: |
         Valida um token SSO e retorna os dados do usuário e tenant associados.
 
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       parameters:
         - in: header
-          name: mc-api-key
+          name: x-api-key
           required: true
           schema:
             type: string
@@ -2062,11 +2256,84 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Data do último acesso
+          description: >-
+            Data do último login, lida da entidade LoginEvent. Null quando o
+            usuário nunca logou.
           example: "2024-03-10T09:15:00Z"
+
+    PaymentEvent:
+      type: object
+      description: >-
+        Um evento do ledger de pagamentos. Carrega dez das quatorze colunas de
+        PaymentEvent; as quatro restantes são identificadores internos ou hora
+        de infraestrutura, não fatos de pagamento.
+      properties:
+        type:
+          type: string
+          description: Tipo do evento.
+          enum: [purchase, renewal, refund, chargeback, cancellation, expired]
+          example: "purchase"
+        platform:
+          type: string
+          description: Gateway de origem do evento.
+          example: "hotmart"
+        amount:
+          type: integer
+          nullable: true
+          description: >-
+            Valor na menor unidade da moeda (centavos para BRL). Null significa
+            que o gateway não informou valor — não é zero.
+          example: 19700
+        currency:
+          type: string
+          nullable: true
+          example: "BRL"
+        plan:
+          type: string
+          nullable: true
+          description: Rótulo do plano, para exibição.
+          example: "Anual"
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Hora do evento no gateway. Null quando o gateway não a envia; nesse
+            caso a ordenação do ledger usa a hora de recebimento.
+          example: "2026-08-03T23:32:49.000Z"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Até quando vale o acesso concedido por este evento.
+          example: "2027-08-03T00:00:00.000Z"
+        deliveryName:
+          type: string
+          nullable: true
+          description: >-
+            Nome da entrega associada. Null quando o evento não aponta para uma
+            — um chargeback que chega antes da concessão resolver, por exemplo.
+          example: "Assinatura Anual"
+        transactionId:
+          type: string
+          nullable: true
+          description: ID da transação no gateway. Use para conciliar com o extrato.
+          example: "tx_123"
+        subscriptionId:
+          type: string
+          nullable: true
+          description: >-
+            ID da assinatura no gateway. Correlaciona renovações da mesma
+            assinatura; sem ele, duas renovações são indistinguíveis de duas
+            compras.
+          example: "sub_456"
 
     DeliveryInfo:
       type: object
+      description: >-
+        Uma concessão de acesso (MemberOnDelivery). Além da identidade da
+        entrega, carrega o ciclo de vida do pagamento, para distinguir um acesso
+        vivo de um expirado, reembolsado ou cancelado sem uma segunda chamada.
       properties:
         id:
           type: string
@@ -2081,6 +2348,47 @@ components:
           format: date-time
           description: Data de acesso à entrega
           example: "2024-01-15T10:30:00Z"
+        status:
+          type: string
+          description: Estado do acesso.
+          enum: [active, expired, refunded, canceled]
+          example: "active"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Data de expiração enviada pelo gateway. Null significa vitalício
+            (compra única), não "sem informação".
+          example: "2027-04-01T00:00:00.000Z"
+        platform:
+          type: string
+          nullable: true
+          description: >-
+            Origem do acesso. Null em concessões feitas à mão, sem webhook de
+            gateway.
+          example: "hotmart"
+        externalSubscriptionId:
+          type: string
+          nullable: true
+          description: >-
+            ID da assinatura no gateway. Correlaciona renovações do mesmo
+            acesso.
+          example: "sub_123"
+        canceledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Quando a assinatura foi cancelada. O acesso segue válido até
+            expiresAt.
+          example: null
+        lastEventAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Último evento de pagamento que tocou esta concessão.
+          example: "2026-04-02T12:00:00.000Z"
 
     CreateSocialCommentRequest:
       type: object
@@ -2221,7 +2529,7 @@ components:
     StudentReport:
       type: object
       properties:
-        aluno_id_member_class:
+        aluno_id:
           type: string
           description: ID do aluno no MemberClass
           example: "user-123"

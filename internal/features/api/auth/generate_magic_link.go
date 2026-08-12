@@ -174,7 +174,12 @@ const (
 		WHERE id = $3
 	`
 
-	sqlTenantDomains = `SELECT "customDomain", "subDomain" FROM "Tenant" WHERE id = $1`
+	// Mind the casing: "customDomain" is camelCase but subdomain is not. Prisma
+	// creates the column with the exact case of the field name, and the Tenant
+	// model declares `subdomain`, so a quoted "subDomain" fails with
+	// `column "subDomain" does not exist` at runtime — quoted identifiers are
+	// matched exactly. member_import's tenant query has always had it right.
+	sqlTenantDomains = `SELECT "customDomain", subdomain FROM "Tenant" WHERE id = $1`
 )
 
 func (f *Feature) memberID(ctx context.Context, email, tenantID string) (string, error) {

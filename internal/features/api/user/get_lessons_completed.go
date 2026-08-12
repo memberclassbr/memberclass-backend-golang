@@ -11,6 +11,8 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
+
+	"github.com/memberclass-backend-golang/internal/shared/datefilter"
 )
 
 // ---------- DTOs ----------
@@ -48,8 +50,8 @@ const (
 	errLimitNumber      = "limit deve ser um número"
 	errPageRange        = "page deve ser >= 1"
 	errLimitRange       = "limit deve ser entre 1 e 100"
-	errStartDateFormat  = "formato de data inválido para startDate"
-	errEndDateFormat    = "formato de data inválido para endDate"
+	errStartDateFormat  = "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
+	errEndDateFormat    = "formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)"
 	errStartRequired    = "data de início é obrigatória quando data final é fornecida"
 	errStartAfterEnd    = "a data de início não pode ser maior que a data de fim"
 	errWindowTooWide    = "período máximo de 31 dias"
@@ -121,7 +123,7 @@ func parseLessonsCompleted(query url.Values) (*lessonsCompletedRequest, error) {
 	}
 
 	if v := query.Get("startDate"); v != "" {
-		startDate, err := time.Parse(time.RFC3339, v)
+		startDate, err := datefilter.Parse(v, datefilter.StartOfDay)
 		if err != nil {
 			return nil, errors.New(errStartDateFormat)
 		}
@@ -129,7 +131,7 @@ func parseLessonsCompleted(query url.Values) (*lessonsCompletedRequest, error) {
 	}
 
 	if v := query.Get("endDate"); v != "" {
-		endDate, err := time.Parse(time.RFC3339, v)
+		endDate, err := datefilter.Parse(v, datefilter.EndOfDay)
 		if err != nil {
 			return nil, errors.New(errEndDateFormat)
 		}
@@ -211,28 +213,30 @@ func (f *Feature) getLessonsCompleted(ctx context.Context, tenantID string, req 
 	}, nil
 }
 
-// resolveWindow turns the optional date parameters into a concrete range:
-// no dates means the last 31 days; a lone startDate means that whole calendar
-// day; both dates are used as given.
+// resolveWindow applies the slice's date policy. The policy itself lives in
+// datefilter, shared with /user/activities and /user/activity/summary: all
+// three advertise "last 31 days" and used to measure it two different ways.
 func resolveWindow(req lessonsCompletedRequest, now time.Time) (start, end time.Time) {
-	switch {
-	case req.StartDate == nil && req.EndDate == nil:
-		return now.AddDate(0, 0, -defaultWindowInDays), now
-	case req.StartDate != nil && req.EndDate == nil:
-		d := *req.StartDate
-		return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location()),
-			time.Date(d.Year(), d.Month(), d.Day(), 23, 59, 59, 999999999, d.Location())
-	default:
-		return *req.StartDate, *req.EndDate
-	}
+	return datefilter.ResolveWindow(req.StartDate, req.EndDate, now, defaultWindowInDays)
 }
 
 // ---------- 3. SQL ----------
 
 const (
 	// sqlCompletedLessons resolves the member's reads to lessons, then keeps
-	// only those reachable from a Delivery owned by the tenant — that join
-	// chain is where the tenant scope lives. %s is the optional course filter.
+	// only those belonging to the tenant. %s is the optional course filter.
+	//
+	// The tenant scope walks lesson → module → section → course → vitrine,
+	// because Vitrine is what a Tenant owns. It used to walk through
+	// CourseOnDelivery → Delivery instead, which asks a different question: not
+	// "does this lesson belong to the tenant" but "is this lesson's course
+	// bundled into one of its offers". A course with no CourseOnDelivery row —
+	// or one granted at vitrine, module or lesson level, since deliveries can
+	// bind at any of those — matched nothing, and the endpoint returned an
+	// empty page for a member who had genuinely completed lessons.
+	//
+	// /api/v1/user/activities has always used the vitrine chain for the same
+	// reads, which is why it listed a completion this endpoint could not see.
 	sqlCompletedLessons = `
 		WITH completed_reads AS (
 			SELECT r."createdAt", r."lessonId"
@@ -253,10 +257,9 @@ const (
 			JOIN "Module" m ON m.id = l."moduleId"
 			JOIN "Section" s ON s.id = m."sectionId"
 			JOIN "Course" c ON c.id = s."courseId"
-			JOIN "CourseOnDelivery" cod ON cod."courseId" = c.id
-			JOIN "Delivery" d ON d.id = cod."deliveryId"
+			JOIN "Vitrine" v ON v.id = c."vitrineId"
 			WHERE l.id IN (SELECT "lessonId" FROM completed_reads)
-			  AND d."tenantId" = $4%s
+			  AND v."tenantId" = $4%s
 		)
 		SELECT
 			cr."createdAt" as completed_at,
@@ -275,14 +278,13 @@ const (
 		JOIN "Module" m ON m.id = l."moduleId"
 		JOIN "Section" s ON s.id = m."sectionId"
 		JOIN "Course" c ON c.id = s."courseId"
-		JOIN "CourseOnDelivery" cod ON cod."courseId" = c.id
-		JOIN "Delivery" d ON d.id = cod."deliveryId"
+		JOIN "Vitrine" v ON v.id = c."vitrineId"
 		WHERE r."userId" = $1
 		  AND r.read = true
 		  AND r."lessonId" IS NOT NULL
 		  AND r."createdAt" >= $2
 		  AND r."createdAt" <= $3
-		  AND d."tenantId" = $4
+		  AND v."tenantId" = $4
 	`
 )
 

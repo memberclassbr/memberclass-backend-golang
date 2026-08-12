@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -179,16 +180,25 @@ func TestGetUserInformations_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
 
 	lastAccess := time.Date(2026, 5, 1, 8, 30, 0, 0, time.UTC)
-	mock.ExpectQuery(`WITH users_base AS`).
+	// Pinning "LoginEvent" here is the point of the expectation. lastAccess used
+	// to read "SystemLog", which stopped receiving logins and returned null for
+	// every member — a swap sqlmock cannot notice unless the table is matched.
+	mock.ExpectQuery(`FROM "LoginEvent" le`).
 		WithArgs("t1", 10, 0).
 		WillReturnRows(sqlmock.NewRows([]string{"userId", "email", "name", "is_paid", "last_access"}).
 			AddRow("u1", "a@example.com", "Aluno", true, lastAccess))
 
 	assignedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	expiresAt := time.Date(2027, 4, 1, 0, 0, 0, 0, time.UTC)
+	lastEventAt := time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC)
 	mock.ExpectQuery(`FROM "MemberOnDelivery"`).
 		WithArgs(sqlmock.AnyArg(), "t1").
-		WillReturnRows(sqlmock.NewRows([]string{"memberId", "deliveryId", "assignedAt", "delivery_name"}).
-			AddRow("u1", "d1", assignedAt, "Curso Base"))
+		WillReturnRows(sqlmock.NewRows([]string{
+			"memberId", "deliveryId", "assignedAt", "delivery_name",
+			"status", "expiresAt", "platform",
+			"externalSubscriptionId", "canceledAt", "lastEventAt",
+		}).AddRow("u1", "d1", assignedAt, "Curso Base",
+			"active", expiresAt, "hotmart", "sub_123", nil, lastEventAt))
 
 	w := httptest.NewRecorder()
 	f.GetUserInformations(w, requestWithTenant("/informations", "t1"))
@@ -204,8 +214,66 @@ func TestGetUserInformations_Success(t *testing.T) {
 	// The layout is not RFC3339: clients parse the fixed .000Z suffix.
 	assert.Equal(t, "2026-05-01T08:30:00.000Z", *resp.Users[0].LastAccess)
 	require.Len(t, resp.Users[0].Deliveries, 1)
-	assert.Equal(t, "Curso Base", resp.Users[0].Deliveries[0].Name)
+	d := resp.Users[0].Deliveries[0]
+	assert.Equal(t, "Curso Base", d.Name)
+	assert.Equal(t, "active", d.Status)
+	require.NotNil(t, d.ExpiresAt)
+	assert.Equal(t, "2027-04-01T00:00:00.000Z", *d.ExpiresAt)
+	require.NotNil(t, d.Platform)
+	assert.Equal(t, "hotmart", *d.Platform)
+	require.NotNil(t, d.ExternalSubscriptionID)
+	assert.Equal(t, "sub_123", *d.ExternalSubscriptionID)
+	require.NotNil(t, d.LastEventAt)
+	// Not cancelled: the field stays null rather than becoming a zero time.
+	assert.Nil(t, d.CanceledAt)
 	assert.Equal(t, int64(1), resp.Pagination.TotalCount)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// A lifetime purchase has no expiry and a hand-made grant has no gateway
+// origin. Both must stay null in the response: flattening them to "" would make
+// a manual grant indistinguishable from one that lost its platform.
+func TestGetUserInformations_LifetimeGrantKeepsNulls(t *testing.T) {
+	f, mock, _, done := newTestFeature(t)
+	defer done()
+
+	mock.ExpectQuery(`SELECT COUNT\(\*\)`).
+		WithArgs("t1").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+
+	mock.ExpectQuery(`FROM "LoginEvent" le`).
+		WithArgs("t1", 10, 0).
+		WillReturnRows(sqlmock.NewRows([]string{"userId", "email", "name", "is_paid", "last_access"}).
+			AddRow("u1", "a@example.com", "Aluno", false, nil))
+
+	assignedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`FROM "MemberOnDelivery"`).
+		WithArgs(sqlmock.AnyArg(), "t1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"memberId", "deliveryId", "assignedAt", "delivery_name",
+			"status", "expiresAt", "platform",
+			"externalSubscriptionId", "canceledAt", "lastEventAt",
+		}).AddRow("u1", "d1", assignedAt, "Curso Vitalício",
+			"active", nil, nil, nil, nil, nil))
+
+	w := httptest.NewRecorder()
+	f.GetUserInformations(w, requestWithTenant("/informations", "t1"))
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp userInformationsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Users, 1)
+	assert.Nil(t, resp.Users[0].LastAccess)
+	require.Len(t, resp.Users[0].Deliveries, 1)
+
+	d := resp.Users[0].Deliveries[0]
+	assert.Equal(t, "active", d.Status)
+	assert.Nil(t, d.ExpiresAt)
+	assert.Nil(t, d.Platform)
+	assert.Nil(t, d.ExternalSubscriptionID)
+	assert.Nil(t, d.CanceledAt)
+	assert.Nil(t, d.LastEventAt)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -358,6 +426,42 @@ func TestGetUserPurchases_UnknownEmailIsNotFound(t *testing.T) {
 
 // ---------- 5. GET /user/lessons/completed ----------
 
+// The date filters accept a bare calendar date, not only full RFC3339. A caller
+// filtering by day sends 2026-08-10, and rejecting that with "formato de data
+// inválido" while the message named no accepted format is how this endpoint
+// first looked broken.
+func TestParseLessonsCompleted_AcceptsBareDates(t *testing.T) {
+	req, err := parseLessonsCompleted(map[string][]string{
+		"email":     {"a@example.com"},
+		"startDate": {"2026-08-10"},
+		"endDate":   {"2026-08-13"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, req.StartDate)
+	require.NotNil(t, req.EndDate)
+
+	assert.Equal(t, "2026-08-10T00:00:00Z", req.StartDate.UTC().Format(time.RFC3339))
+
+	// The end bound closes at the end of the named day. Resolved to midnight it
+	// would drop almost all of the 13th, and the caller asked for the 13th.
+	lateOnTheLastDay := time.Date(2026, 8, 13, 22, 15, 0, 0, time.UTC)
+	assert.False(t, lateOnTheLastDay.After(*req.EndDate),
+		"endDate %s excludes %s", req.EndDate, lateOnTheLastDay)
+}
+
+// RFC3339 keeps meaning exactly what it says: a caller who spells out a time is
+// not rounded to a day boundary.
+func TestParseLessonsCompleted_RFC3339IsNotWidened(t *testing.T) {
+	req, err := parseLessonsCompleted(map[string][]string{
+		"email":     {"a@example.com"},
+		"startDate": {"2026-08-10T14:32:05Z"},
+		"endDate":   {"2026-08-13T09:00:00Z"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "2026-08-10T14:32:05Z", req.StartDate.UTC().Format(time.RFC3339))
+	assert.Equal(t, "2026-08-13T09:00:00Z", req.EndDate.UTC().Format(time.RFC3339))
+}
+
 func TestGetLessonsCompleted_ValidationCodes(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -394,10 +498,14 @@ func TestGetLessonsCompleted_Success(t *testing.T) {
 	expectMemberLookup(mock, "a@example.com", "t1", "u1")
 
 	completedAt := time.Date(2026, 6, 1, 14, 0, 0, 0, time.UTC)
-	mock.ExpectQuery(`WITH completed_reads AS`).
+	// The Vitrine join is pinned in both expectations. Scoping through
+	// CourseOnDelivery instead asks whether the course is bundled into an offer
+	// rather than whether it belongs to the tenant, and returned an empty page
+	// for members who had completed lessons.
+	mock.ExpectQuery(`JOIN "Vitrine" v ON v\.id = c\."vitrineId"`).
 		WillReturnRows(sqlmock.NewRows([]string{"completed_at", "lesson_name", "course_name"}).
 			AddRow(completedAt, "Aula 1", "Curso 1"))
-	mock.ExpectQuery(`SELECT COUNT\(DISTINCT`).
+	mock.ExpectQuery(`SELECT COUNT\(DISTINCT.*JOIN "Vitrine" v`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
 
 	w := httptest.NewRecorder()
@@ -412,6 +520,31 @@ func TestGetLessonsCompleted_Success(t *testing.T) {
 	assert.Equal(t, "Aula 1", resp.Data.CompletedLessons[0].LessonName)
 	assert.Equal(t, "2026-06-01T14:00:00.000Z", resp.Data.CompletedLessons[0].CompletedAt)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Tenant scope belongs to the ownership chain, not the entitlement one.
+// Delivery describes what a member bought; Vitrine describes what the tenant
+// owns. Asking the first question returned nothing for lessons whose course is
+// not bound to a Delivery through CourseOnDelivery — including every course
+// granted at vitrine, module or lesson level, since deliveries bind at any of
+// those. /api/v1/user/activities always used the ownership chain, which is how
+// the two endpoints came to disagree about the same Read row.
+func TestCompletedLessonsSQL_ScopesByOwnershipNotEntitlement(t *testing.T) {
+	for name, query := range map[string]string{
+		"page":  sqlCompletedLessons,
+		"count": sqlCountCompletedLessons,
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, query, `JOIN "Vitrine" v`,
+				"tenant scope must walk course -> vitrine")
+			assert.Contains(t, query, `v."tenantId"`,
+				"the tenant filter belongs on Vitrine")
+			assert.NotContains(t, query, "CourseOnDelivery",
+				"entitlement tables hide lessons the member has genuinely completed")
+			assert.NotContains(t, query, `JOIN "Delivery"`,
+				"entitlement tables hide lessons the member has genuinely completed")
+		})
+	}
 }
 
 // The optional course filter takes $5, pushing LIMIT/OFFSET to $6/$7.
@@ -437,15 +570,59 @@ func TestQueryCompletedLessons_CourseFilterShiftsPlaceholders(t *testing.T) {
 func TestResolveWindow(t *testing.T) {
 	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
 
-	t.Run("no dates defaults to the last 31 days", func(t *testing.T) {
+	t.Run("no dates defaults to the last 31 whole days", func(t *testing.T) {
 		start, end := resolveWindow(lessonsCompletedRequest{}, now)
-		assert.Equal(t, now, end)
-		assert.Equal(t, now.AddDate(0, 0, -31), start)
+		// 2026-05-16 through 2026-06-15 inclusive is 31 calendar days.
+		assert.Equal(t, time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC), start)
+		assert.Equal(t, time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC), end)
 	})
 
-	t.Run("start only covers that whole day", func(t *testing.T) {
+	t.Run("the default window covers the whole first day", func(t *testing.T) {
+		// The old offset-from-now default cut at 12:00 on the oldest day and
+		// hid anything completed before it.
+		start, _ := resolveWindow(lessonsCompletedRequest{}, now)
+		assert.Equal(t, 0, start.Hour(), "oldest day must start at midnight")
+	})
+
+	t.Run("the default window fits inside the caller-facing maximum", func(t *testing.T) {
+		start, end := resolveWindow(lessonsCompletedRequest{}, now)
+		assert.LessOrEqual(t, end.Sub(start), maxCompletedWindow,
+			"default must not be wider than a caller is allowed to request")
+	})
+
+	t.Run("the default resolves in UTC whatever zone now carries", func(t *testing.T) {
+		// datefilter.Parse resolves an explicit date-only bound in UTC. A
+		// default read in the process zone would measure a different day.
+		saoPaulo := time.FixedZone("BRT", -3*60*60)
+		start, end := resolveWindow(lessonsCompletedRequest{}, now.In(saoPaulo))
+		assert.Equal(t, time.Date(2026, 5, 16, 0, 0, 0, 0, time.UTC), start)
+		assert.Equal(t, time.Date(2026, 6, 15, 23, 59, 59, 999999999, time.UTC), end)
+	})
+
+	t.Run("start only keeps the spelled-out time and closes that day", func(t *testing.T) {
+		// datefilter.Parse takes RFC3339 literally; rounding the start down
+		// here would override the time the caller meant.
 		day := time.Date(2026, 3, 10, 17, 45, 0, 0, time.UTC)
 		start, end := resolveWindow(lessonsCompletedRequest{StartDate: &day}, now)
+		assert.Equal(t, day, start)
+		assert.Equal(t, time.Date(2026, 3, 10, 23, 59, 59, 999999999, time.UTC), end)
+	})
+
+	t.Run("start only never spills into the next day", func(t *testing.T) {
+		day := time.Date(2026, 3, 10, 23, 59, 0, 0, time.UTC)
+		_, end := resolveWindow(lessonsCompletedRequest{StartDate: &day}, now)
+		assert.Equal(t, 10, end.Day())
+	})
+
+	t.Run("a date-only startDate still covers its whole day", func(t *testing.T) {
+		// The date-only form arrives already at midnight from datefilter.Parse,
+		// so dropping the widening here must not narrow it.
+		req, err := parseLessonsCompleted(url.Values{
+			"email":     []string{"a@example.com"},
+			"startDate": []string{"2026-03-10"},
+		})
+		require.NoError(t, err)
+		start, end := resolveWindow(*req, now)
 		assert.Equal(t, time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC), start)
 		assert.Equal(t, time.Date(2026, 3, 10, 23, 59, 59, 999999999, time.UTC), end)
 	})

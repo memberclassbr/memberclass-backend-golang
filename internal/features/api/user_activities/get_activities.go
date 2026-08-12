@@ -14,6 +14,8 @@ import (
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/shared/pagination"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
+
+	"github.com/memberclass-backend-golang/internal/shared/datefilter"
 )
 
 // errUserNotFoundOrNotInTenant is the slice's sentinel: the email does not
@@ -111,7 +113,7 @@ func (f *Feature) getActivities(ctx context.Context, req getActivitiesRequest, t
 		return nil, err
 	}
 
-	startDate, endDate := resolveDateRange(req)
+	startDate, endDate := resolveDateRange(req, time.Now())
 
 	// Cache is bypassed in development mode so local testing always hits fresh
 	// data. In production we read-through the cache and, on miss, compute +
@@ -177,23 +179,16 @@ func (f *Feature) resolveUserID(ctx context.Context, email, tenantID string) (st
 	return userID, nil
 }
 
-// resolveDateRange applies the date-default policy. Mirrors activity_summary.
-//   - no dates provided → last 31 days ending now
-//   - only startDate    → single-day window [00:00, 23:59:59.999999999]
-//   - both provided     → used as-is
-func resolveDateRange(req getActivitiesRequest) (time.Time, time.Time) {
-	now := time.Now()
+// defaultWindowDays is the span applied when the caller supplies no dates. It
+// matches the 31-day ceiling validate() enforces on an explicit range, so the
+// default never returns a window wider than a caller may ask for.
+const defaultWindowDays = 31
 
-	if req.StartDate == nil && req.EndDate == nil {
-		return now.AddDate(0, 0, -31), now
-	}
-	if req.StartDate != nil && req.EndDate == nil {
-		s := *req.StartDate
-		start := time.Date(s.Year(), s.Month(), s.Day(), 0, 0, 0, 0, s.Location())
-		end := time.Date(s.Year(), s.Month(), s.Day(), 23, 59, 59, 999999999, s.Location())
-		return start, end
-	}
-	return *req.StartDate, *req.EndDate
+// resolveDateRange applies the date policy shared by the three endpoints with
+// a date window. `now` is a parameter so the default range can be asserted:
+// reading the clock inside made the only interesting case untestable.
+func resolveDateRange(req getActivitiesRequest, now time.Time) (time.Time, time.Time) {
+	return datefilter.ResolveWindow(req.StartDate, req.EndDate, now, defaultWindowDays)
 }
 
 func buildPaginationMeta(page, limit int, total int64) pagination.Meta {
@@ -246,16 +241,16 @@ func parseRequest(q url.Values) (*getActivitiesRequest, error) {
 		req.Limit = l
 	}
 	if v := q.Get("startDate"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
+		t, err := datefilter.Parse(v, datefilter.StartOfDay)
 		if err != nil {
-			return nil, errors.New("formato de data inválido para startDate")
+			return nil, errors.New("formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)")
 		}
 		req.StartDate = &t
 	}
 	if v := q.Get("endDate"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
+		t, err := datefilter.Parse(v, datefilter.EndOfDay)
 		if err != nil {
-			return nil, errors.New("formato de data inválido para endDate")
+			return nil, errors.New("formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)")
 		}
 		req.EndDate = &t
 	}
@@ -290,7 +285,8 @@ func classifyParseError(err error) string {
 	switch err.Error() {
 	case "page deve ser um número", "limit deve ser um número":
 		return "INVALID_PAGINATION"
-	case "formato de data inválido para startDate", "formato de data inválido para endDate":
+	case "formato de data inválido para startDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)",
+		"formato de data inválido para endDate. Use YYYY-MM-DD ou ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)":
 		return "INVALID_DATE_FORMAT"
 	default:
 		return "INVALID_REQUEST"
@@ -403,16 +399,21 @@ const sqlEventsUnion = `
 	SELECT id, type, date, details FROM (
 		-- Login events omit details: the timestamp and type are the
 		-- whole story. NULL::jsonb keeps the UNION ALL column shape.
+		--
+		-- Read from "LoginEvent", the entity that records logins. This used to
+		-- read "UserEvent" with type = 'login', the legacy table the analytics
+		-- backfill drains into LoginEvent (see migrateRow, which moves both
+		-- 'login' and 'user-login' rows). New logins land in LoginEvent, so the
+		-- timeline had stopped listing them.
 		SELECT
-			ue.id::text AS id,
+			le.id::text AS id,
 			'login' AS type,
-			ue."createdAt" AS date,
+			le."createdAt" AS date,
 			NULL::jsonb AS details
-		FROM "UserEvent" ue
-		WHERE ue."usersOnTenantsUserId" = $1
-		  AND ue."usersOnTenantsTenantId" = $2
-		  AND ue.type = 'login'
-		  AND ue."createdAt" BETWEEN $3 AND $4
+		FROM "LoginEvent" le
+		WHERE le."userId" = $1
+		  AND le."tenantId" = $2
+		  AND le."createdAt" BETWEEN $3 AND $4
 
 		UNION ALL
 
@@ -538,9 +539,9 @@ const sqlEventsUnion = `
 // Params: $1 userId, $2 tenantId, $3 startDate, $4 endDate.
 const sqlEventsCount = `
 	SELECT COUNT(*) FROM (
-		SELECT 1 FROM "UserEvent" ue
-		WHERE ue."usersOnTenantsUserId" = $1 AND ue."usersOnTenantsTenantId" = $2
-		  AND ue.type = 'login' AND ue."createdAt" BETWEEN $3 AND $4
+		SELECT 1 FROM "LoginEvent" le
+		WHERE le."userId" = $1 AND le."tenantId" = $2
+		  AND le."createdAt" BETWEEN $3 AND $4
 
 		UNION ALL
 		SELECT 1 FROM "UserEvent" ue

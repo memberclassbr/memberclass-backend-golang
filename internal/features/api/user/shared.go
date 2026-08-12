@@ -93,6 +93,17 @@ func timePtr(v sql.NullTime) *string {
 	return &formatted
 }
 
+// stringPtr keeps a NULL column null in the response instead of flattening it
+// to "". For the payment fields on a delivery the difference carries meaning: a
+// grant created by hand has no platform, and reporting one as an empty string
+// makes it indistinguishable from a gateway grant that lost its origin.
+func stringPtr(v sql.NullString) *string {
+	if !v.Valid {
+		return nil
+	}
+	return &v.String
+}
+
 // ---------- errors ----------
 
 // fail logs the driver error and returns the 500 the client sees.
