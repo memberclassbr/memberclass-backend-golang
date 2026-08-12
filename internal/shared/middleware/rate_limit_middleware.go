@@ -31,16 +31,39 @@ type rateLimitError struct {
 	ResetTime     int64 `json:"reset_time"`
 }
 
+// uploadQuotaKey is the context key under which CheckUploadLimit publishes the
+// identity and the byte count IncrementAfterUpload later charges. A typed key
+// keeps it from colliding with anything another middleware stores.
+type uploadQuotaKey struct{}
+
+// uploadQuota is what the two halves of the limiter pass between them.
+type uploadQuota struct {
+	userID   string
+	fileSize int64
+}
+
+// CheckUploadLimit charges the upload against the caller's byte quota.
+//
+// The identity comes from the verified go-token — `sub`, put on the context by
+// BearerMiddleware.RequireAuth — and from nowhere else. It used to be read off
+// a `user_id` request header, which the caller writes: a client that wanted an
+// empty quota only had to send a different value on every upload, and the
+// header was mandatory on a route where the token already names the user.
+//
+// So this middleware only works below RequireAuth. Mounted without it there is
+// no identity to key the quota on, and the request is rejected rather than
+// charged to some default bucket.
 func (m *RateLimitMiddleware) CheckUploadLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		userID := r.Header.Get("user_id")
-		if userID == "" {
-			m.logger.Error("user_id header is required")
-			httpx.WriteError(w, "user_id header is required", http.StatusBadRequest)
+		user := GetAuthUser(ctx)
+		if user == nil || user.UserID == "" {
+			m.logger.Error("upload limit: no authenticated user on the context; mount CheckUploadLimit below RequireAuth")
+			httpx.WriteError(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+		userID := user.UserID
 
 		fileSize := r.ContentLength
 		if fileSize <= 0 {
@@ -71,14 +94,16 @@ func (m *RateLimitMiddleware) CheckUploadLimit(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx = context.WithValue(ctx, "rate_limit_response", response)
-		ctx = context.WithValue(ctx, "user_id", userID)
-		ctx = context.WithValue(ctx, "file_size", fileSize)
+		ctx = context.WithValue(ctx, uploadQuotaKey{}, uploadQuota{userID: userID, fileSize: fileSize})
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
+// IncrementAfterUpload charges the quota once the handler below it has
+// answered 2xx, using the identity CheckUploadLimit resolved from the token.
+// Mount it directly under CheckUploadLimit; on its own it has nothing to
+// charge and quietly does nothing.
 func (m *RateLimitMiddleware) IncrementAfterUpload(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		responseWriter := &responseWriter{
@@ -91,22 +116,16 @@ func (m *RateLimitMiddleware) IncrementAfterUpload(next http.Handler) http.Handl
 		if responseWriter.statusCode >= 200 && responseWriter.statusCode < 300 {
 			ctx := r.Context()
 
-			userID, ok := ctx.Value("user_id").(string)
+			quota, ok := ctx.Value(uploadQuotaKey{}).(uploadQuota)
 			if !ok {
-				m.logger.Error("user_id not found in context")
+				m.logger.Error("upload quota not found in context; mount IncrementAfterUpload below CheckUploadLimit")
 				return
 			}
 
-			fileSize, ok := ctx.Value("file_size").(int64)
-			if !ok {
-				m.logger.Error("file_size not found in context")
-				return
-			}
-
-			if err := m.rateLimiter.IncrementUploadSize(ctx, userID, fileSize); err != nil {
+			if err := m.rateLimiter.IncrementUploadSize(ctx, quota.userID, quota.fileSize); err != nil {
 				m.logger.Error("Error incrementing upload size: " + err.Error())
 			} else {
-				m.logger.Info(fmt.Sprintf("Incremented upload size for user %s by %d bytes", userID, fileSize))
+				m.logger.Info(fmt.Sprintf("Incremented upload size for user %s by %d bytes", quota.userID, quota.fileSize))
 			}
 		}
 	})
