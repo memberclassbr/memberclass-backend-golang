@@ -129,7 +129,7 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 
 	authSession := mw.NewAuthMiddleware(db, cfg, log)
 	authExternal := mw.NewAuthExternalMiddleware(db, log)
-	authBearer := mw.NewBearerMiddleware(cfg, log)
+	authBearer := mw.NewBearerMiddleware(cfg, redis, log)
 
 	// ---------- slices ----------
 

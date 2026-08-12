@@ -37,7 +37,10 @@ func (discardLogger) Error(string, ...any) {}
 
 func createTestRouter(t *testing.T) *Router {
 	log := discardLogger{}
-	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "test-secret"}}
+	cfg := &config.Config{Auth: config.Auth{
+		NextAuthSecret: "test-secret",
+		GoAPIJWTSecret: "go-api-test-secret-at-least-32-bytes",
+	}}
 
 	mockVideo := videofeat.New(nil, nil, log)
 	mockLessonPDF := lessonpdf.New(nil, nil, nil, cfg, log)
@@ -58,7 +61,7 @@ func createTestRouter(t *testing.T) *Router {
 	rateLimitIPMiddleware := mw.NewRateLimitIPMiddleware(nil, log)
 	authMiddleware := mw.NewAuthMiddleware(nil, cfg, log)
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
-	bearerMiddleware := mw.NewBearerMiddleware(cfg, log)
+	bearerMiddleware := mw.NewBearerMiddleware(cfg, nil, log)
 
 	return newRouter(log, mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, healthfeat.New(nil, nil, log), rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
 }

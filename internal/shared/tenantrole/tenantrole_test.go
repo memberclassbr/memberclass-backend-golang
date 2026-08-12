@@ -23,11 +23,12 @@ func newChecker(t *testing.T) (*Checker, sqlmock.Sqlmock, func()) {
 // ctxAs builds the context the Bearer middleware would have produced. The role
 // on the token is set to something generous on purpose: no test here may pass
 // because of it.
-func ctxAs(userID string) context.Context {
+func ctxAs(userID, tenantID string) context.Context {
 	return middleware.ContextWithAuthUser(context.Background(), &middleware.AuthUser{
-		UserID: userID,
-		Email:  userID + "@example.com",
-		Role:   Owner,
+		UserID:   userID,
+		Email:    userID + "@example.com",
+		TenantID: tenantID,
+		Role:     Owner,
 	})
 }
 
@@ -43,18 +44,20 @@ func TestAuthorize_WithoutIdentity(t *testing.T) {
 	c, mock, done := newChecker(t)
 	defer done()
 
-	_, err := c.Authorize(context.Background(), "t1", AnyRole...)
+	_, err := c.Authorize(context.Background(), AnyRole...)
 
 	assert.ErrorIs(t, err, ErrNoIdentity)
 	// The database was never touched.
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+// A token with no tenantId never leaves the middleware, so reaching this is a
+// request that skipped it entirely.
 func TestAuthorize_WithEmptyTenant(t *testing.T) {
 	c, mock, done := newChecker(t)
 	defer done()
 
-	_, err := c.Authorize(ctxAs("u1"), "", AnyRole...)
+	_, err := c.Authorize(ctxAs("u1", ""), AnyRole...)
 
 	assert.ErrorIs(t, err, ErrNotMember)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -70,14 +73,14 @@ func TestAuthorize_IgnoresTheRoleClaimOnTheToken(t *testing.T) {
 
 	expectRole(mock, "u1", "t1", Member)
 
-	_, err := c.Authorize(ctxAs("u1"), "t1", OwnerOrAdmin...)
+	_, err := c.Authorize(ctxAs("u1", "t1"), OwnerOrAdmin...)
 
 	assert.ErrorIs(t, err, ErrForbiddenRole)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// The lookup is scoped by tenant, so being an owner elsewhere buys nothing
-// here.
+// The lookup is scoped by the token's tenant, so being an owner elsewhere buys
+// nothing here.
 func TestAuthorize_ScopesTheLookupByTenant(t *testing.T) {
 	c, mock, done := newChecker(t)
 	defer done()
@@ -86,7 +89,7 @@ func TestAuthorize_ScopesTheLookupByTenant(t *testing.T) {
 		WithArgs("u1", "other-tenant").
 		WillReturnError(sql.ErrNoRows)
 
-	_, err := c.Authorize(ctxAs("u1"), "other-tenant", AnyRole...)
+	_, err := c.Authorize(ctxAs("u1", "other-tenant"), AnyRole...)
 
 	assert.ErrorIs(t, err, ErrNotMember)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -110,7 +113,7 @@ func TestAuthorize_OwnerOrAdmin(t *testing.T) {
 
 			expectRole(mock, "u1", "t1", role)
 
-			grant, err := c.Authorize(ctxAs("u1"), "t1", OwnerOrAdmin...)
+			grant, err := c.Authorize(ctxAs("u1", "t1"), OwnerOrAdmin...)
 
 			if want != nil {
 				assert.ErrorIs(t, err, want)
@@ -132,7 +135,7 @@ func TestAuthorize_AnyRoleAcceptsEveryRole(t *testing.T) {
 
 			expectRole(mock, "u1", "t1", role)
 
-			grant, err := c.Authorize(ctxAs("u1"), "t1", AnyRole...)
+			grant, err := c.Authorize(ctxAs("u1", "t1"), AnyRole...)
 
 			require.NoError(t, err)
 			assert.Equal(t, role, grant.Role)
@@ -148,7 +151,7 @@ func TestAuthorize_EmptyRoleIsNotAWildcard(t *testing.T) {
 
 	expectRole(mock, "u1", "t1", "")
 
-	_, err := c.Authorize(ctxAs("u1"), "t1", AnyRole...)
+	_, err := c.Authorize(ctxAs("u1", "t1"), AnyRole...)
 
 	assert.ErrorIs(t, err, ErrForbiddenRole)
 }
@@ -164,7 +167,7 @@ func TestAuthorize_DatabaseFailurePropagates(t *testing.T) {
 	boom := errors.New("connection reset")
 	mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).WillReturnError(boom)
 
-	_, err := c.Authorize(ctxAs("u1"), "t1", AnyRole...)
+	_, err := c.Authorize(ctxAs("u1", "t1"), AnyRole...)
 
 	assert.ErrorIs(t, err, boom)
 	assert.Equal(t, http.StatusInternalServerError, Status(err))
@@ -174,5 +177,39 @@ func TestStatus(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, Status(ErrNoIdentity))
 	assert.Equal(t, http.StatusForbidden, Status(ErrNotMember))
 	assert.Equal(t, http.StatusForbidden, Status(ErrForbiddenRole))
+	assert.Equal(t, http.StatusForbidden, Status(ErrTenantMismatch))
 	assert.Equal(t, http.StatusInternalServerError, Status(errors.New("anything else")))
+}
+
+// ---------- The tenant comes from the token, not the request ----------
+
+// Authorize takes no tenant argument, so the only way a request can name one is
+// as data — and Confirm is what stops that data being trusted.
+func TestGrantConfirm(t *testing.T) {
+	grant := &Grant{UserID: "u1", TenantID: "t1", Role: Owner}
+
+	t.Run("no tenant named passes", func(t *testing.T) {
+		assert.NoError(t, grant.Confirm(""))
+	})
+	t.Run("the token's own tenant passes", func(t *testing.T) {
+		assert.NoError(t, grant.Confirm("t1"))
+	})
+	t.Run("another tenant is refused", func(t *testing.T) {
+		assert.ErrorIs(t, grant.Confirm("t2"), ErrTenantMismatch)
+	})
+}
+
+// The scope of the token is the whole point: an owner of t1 who names t2 in the
+// body gets 403, not a write into t2.
+func TestAuthorize_TenantComesFromTheTokenNotTheRequest(t *testing.T) {
+	c, mock, done := newChecker(t)
+	defer done()
+
+	expectRole(mock, "u1", "t1", Owner)
+
+	grant, err := c.Authorize(ctxAs("u1", "t1"), OwnerOrAdmin...)
+	require.NoError(t, err)
+	assert.Equal(t, "t1", grant.TenantID)
+	assert.ErrorIs(t, grant.Confirm("t2"), ErrTenantMismatch)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

@@ -30,6 +30,9 @@ type importUserInput struct {
 }
 
 type importRequest struct {
+	// TenantID is redundant: the tenant comes off the Bearer token's claim.
+	// Still accepted, and still checked — a caller that sends the wrong one is
+	// told rather than having the field quietly ignored.
 	TenantID    string            `json:"tenantId"`
 	FileName    string            `json:"fileName"`
 	Users       []importUserInput `json:"users"`
@@ -64,14 +67,12 @@ type tenantRow struct {
 //
 // Flow:
 //  1. Decode body, basic shape validation.
-//  2. Resolve the Bearer identity from context (put there by the auth
-//     middleware).
-//  3. Read the caller's role in tenantId out of "UsersOnTenants" and require
-//     owner or admin.
-//  4. Load the tenant row (needed to build email links + batch emails).
-//  5. INSERT a "UserImport" header with status="processing" and respond 202
+//  2. Read the caller's role in the token's tenant out of "UsersOnTenants" and
+//     require owner or admin.
+//  3. Load the tenant row (needed to build email links + batch emails).
+//  4. INSERT a "UserImport" header with status="processing" and respond 202
 //     immediately with { importId }.
-//  6. Spawn a goroutine (panic-recovered) that processes the full job.
+//  5. Spawn a goroutine (panic-recovered) that processes the full job.
 func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 	var req importRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -86,11 +87,19 @@ func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 
 	// Bulk import writes to every member of the tenant, so it is the one route
 	// of the three that is not open to every role.
-	grant, err := f.roles.Authorize(r.Context(), req.TenantID, tenantrole.OwnerOrAdmin...)
+	grant, err := f.roles.Authorize(r.Context(), tenantrole.OwnerOrAdmin...)
 	if err != nil {
 		f.writeAuthError(w, err)
 		return
 	}
+	if err := grant.Confirm(req.TenantID); err != nil {
+		f.writeAuthError(w, err)
+		return
+	}
+	// From here on the tenant is the token's, never the body's. Overwriting the
+	// field means the worker, the header row and the emails all read the same
+	// resolved value instead of each picking a source.
+	req.TenantID = grant.TenantID
 
 	tenant, err := f.loadTenant(r.Context(), req.TenantID)
 	if err != nil {
@@ -142,9 +151,6 @@ const (
 )
 
 func validateRequest(req *importRequest) error {
-	if req.TenantID == "" {
-		return errors.New("tenantId is required")
-	}
 	if len(req.Users) == 0 {
 		return errors.New("users is empty")
 	}
@@ -176,6 +182,8 @@ func (f *Feature) writeAuthError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "user does not belong to tenant")
 	case errors.Is(err, tenantrole.ErrForbiddenRole):
 		writeError(w, http.StatusForbidden, "insufficient role")
+	case errors.Is(err, tenantrole.ErrTenantMismatch):
+		writeError(w, http.StatusForbidden, "tenantId does not match the authenticated tenant")
 	default:
 		f.log.Error("import: role lookup failed", "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "failed to validate tenant access")

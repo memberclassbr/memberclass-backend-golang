@@ -1,18 +1,21 @@
 package middleware
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +28,31 @@ func (fakeLogger) Debug(string, ...any) {}
 func (fakeLogger) Info(string, ...any)  {}
 func (fakeLogger) Warn(string, ...any)  {}
 func (fakeLogger) Error(string, ...any) {}
+
+// fakeCache stands in for Redis. Only Exists matters here — it is the one call
+// the revocation denylist makes.
+type fakeCache struct {
+	exists    map[string]bool
+	existsErr error
+}
+
+func newFakeCache() *fakeCache { return &fakeCache{exists: map[string]bool{}} }
+
+func (c *fakeCache) Exists(_ context.Context, key string) (bool, error) {
+	if c.existsErr != nil {
+		return false, c.existsErr
+	}
+	return c.exists[key], nil
+}
+
+func (c *fakeCache) Get(context.Context, string) (string, error)              { return "", nil }
+func (c *fakeCache) Set(context.Context, string, string, time.Duration) error { return nil }
+func (c *fakeCache) Increment(context.Context, string, int64) (int64, error)  { return 0, nil }
+func (c *fakeCache) Delete(context.Context, string) error                     { return nil }
+func (c *fakeCache) TTL(context.Context, string) (time.Duration, error)       { return 0, nil }
+func (c *fakeCache) Close() error                                             { return nil }
+
+var _ cache.Cache = (*fakeCache)(nil)
 
 // okHandler records whether the middleware let the request through.
 func okHandler(reached *bool) http.Handler {
@@ -208,18 +236,32 @@ func signJWT(t *testing.T, secret string, claims map[string]any) string {
 	return signingInput + "." + enc.EncodeToString(mac.Sum(nil))
 }
 
-func TestBearer_AcceptsValidToken(t *testing.T) {
-	const secret = "shared-with-nextjs"
-	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: secret}}
-	m := NewBearerMiddleware(cfg, fakeLogger{})
+// bearerSecret is long enough to pass the floor config.Load enforces, so a
+// test never accidentally exercises a configuration production cannot have.
+const bearerSecret = "go-api-secret-at-least-32-bytes-long"
 
-	token := signJWT(t, secret, map[string]any{
-		"sub":   "u1",
-		"email": "admin@example.com",
-		"role":  "owner",
-		"exp":   time.Now().Add(time.Hour).Unix(),
-	})
+// validClaims is the full claim set the frontend mints today. Tests that check
+// a rejection start from this and remove or corrupt exactly one thing.
+func validClaims() map[string]any {
+	return map[string]any{
+		"sub":      "u1",
+		"email":    "admin@example.com",
+		"tenantId": "t1",
+		"role":     "owner",
+		"aud":      Audience,
+		"jti":      "token-1",
+		"exp":      time.Now().Add(time.Hour).Unix(),
+	}
+}
 
+func newBearer(c cache.Cache) *BearerMiddleware {
+	cfg := &config.Config{Auth: config.Auth{GoAPIJWTSecret: bearerSecret}}
+	return NewBearerMiddleware(cfg, c, fakeLogger{})
+}
+
+// serveBearer runs one request through the middleware and reports the recorder
+// plus the identity the handler saw (nil when it never ran).
+func serveBearer(m *BearerMiddleware, header string) (*httptest.ResponseRecorder, *AuthUser) {
 	var got *AuthUser
 	handler := m.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = GetAuthUser(r.Context())
@@ -227,45 +269,168 @@ func TestBearer_AcceptsValidToken(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	if header != "" {
+		req.Header.Set("Authorization", header)
+	}
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
+	return w, got
+}
+
+func TestBearer_AcceptsValidToken(t *testing.T) {
+	m := newBearer(nil)
+
+	w, got := serveBearer(m, "Bearer "+signJWT(t, bearerSecret, validClaims()))
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, got)
 	assert.Equal(t, "u1", got.UserID)
 	assert.Equal(t, "owner", got.Role)
+	assert.Equal(t, "t1", got.TenantID)
+	assert.Equal(t, "token-1", got.ID)
+}
+
+// The tenant is the token's whole scope, so it has to survive verification
+// intact — everything downstream reads it instead of the request body.
+func TestBearer_CarriesTheTenantClaim(t *testing.T) {
+	m := newBearer(nil)
+
+	claims := validClaims()
+	claims["tenantId"] = "tenant-from-the-token"
+
+	_, got := serveBearer(m, "Bearer "+signJWT(t, bearerSecret, claims))
+
+	require.NotNil(t, got)
+	assert.Equal(t, "tenant-from-the-token", got.TenantID)
+}
+
+// RFC 7519 allows `aud` to be a string or an array; Node's jsonwebtoken emits
+// whichever fits, so both have to verify.
+func TestBearer_AcceptsAudienceAsStringOrArray(t *testing.T) {
+	m := newBearer(nil)
+
+	for name, aud := range map[string]any{
+		"string":                   Audience,
+		"array":                    []string{Audience},
+		"array with other entries": []string{"some-other-service", Audience},
+	} {
+		t.Run(name, func(t *testing.T) {
+			claims := validClaims()
+			claims["aud"] = aud
+
+			w, _ := serveBearer(m, "Bearer "+signJWT(t, bearerSecret, claims))
+			assert.Equal(t, http.StatusOK, w.Code)
+		})
+	}
 }
 
 func TestBearer_Rejects(t *testing.T) {
-	const secret = "shared-with-nextjs"
-	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: secret}}
-	m := NewBearerMiddleware(cfg, fakeLogger{})
+	m := newBearer(nil)
+
+	// Each of these is the valid claim set minus (or with a corrupted) one
+	// thing. Verification defaults nothing: a claim that is merely absent is
+	// the shape a forged or stale token takes.
+	withoutClaim := func(key string) string {
+		claims := validClaims()
+		delete(claims, key)
+		return "Bearer " + signJWT(t, bearerSecret, claims)
+	}
+	withClaim := func(key string, value any) string {
+		claims := validClaims()
+		claims[key] = value
+		return "Bearer " + signJWT(t, bearerSecret, claims)
+	}
 
 	cases := map[string]string{
-		"no header":         "",
-		"not bearer":        "Basic abc",
-		"garbage token":     "Bearer not-a-jwt",
-		"wrong signature":   "Bearer " + signJWT(t, "other-secret", map[string]any{"sub": "u1", "exp": time.Now().Add(time.Hour).Unix()}),
-		"expired token":     "Bearer " + signJWT(t, secret, map[string]any{"sub": "u1", "exp": time.Now().Add(-time.Hour).Unix()}),
-		"none-alg attempt":  "Bearer " + signJWT(t, "", map[string]any{"sub": "u1", "exp": time.Now().Add(time.Hour).Unix()}),
-		"empty bearer body": "Bearer ",
+		"no header":            "",
+		"not bearer":           "Basic abc",
+		"garbage token":        "Bearer not-a-jwt",
+		"empty bearer body":    "Bearer ",
+		"wrong signature":      "Bearer " + signJWT(t, "another-secret-at-least-32-bytes!!", validClaims()),
+		"none-alg attempt":     "Bearer " + signJWT(t, "", validClaims()),
+		"expired token":        withClaim("exp", time.Now().Add(-time.Hour).Unix()),
+		"no exp":               withoutClaim("exp"),
+		"no sub":               withoutClaim("sub"),
+		"no tenantId":          withoutClaim("tenantId"),
+		"empty tenantId":       withClaim("tenantId", ""),
+		"no aud":               withoutClaim("aud"),
+		"another service aud":  withClaim("aud", "some-other-service"),
+		"aud array without us": withClaim("aud", []string{"some-other-service"}),
 	}
 
 	for name, header := range cases {
 		t.Run(name, func(t *testing.T) {
-			reached := false
-			req := httptest.NewRequest(http.MethodPost, "/", nil)
-			if header != "" {
-				req.Header.Set("Authorization", header)
-			}
-			w := httptest.NewRecorder()
-			m.RequireAuth(okHandler(&reached)).ServeHTTP(w, req)
-
+			w, got := serveBearer(m, header)
 			assert.Equal(t, http.StatusUnauthorized, w.Code)
-			assert.False(t, reached)
+			assert.Nil(t, got)
 		})
 	}
+}
+
+// ---------- Bearer revocation ----------
+
+// A jti the frontend published to the denylist is refused even though the
+// signature and the expiry are both fine.
+func TestBearer_RejectsRevokedToken(t *testing.T) {
+	c := newFakeCache()
+	c.exists[RevocationKey("token-1")] = true
+
+	w, got := serveBearer(newBearer(c), "Bearer "+signJWT(t, bearerSecret, validClaims()))
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Nil(t, got)
+}
+
+// A token whose jti is not on the list passes, and one that carries no jti at
+// all is not rejected for lacking it — the claim is the frontend's to emit, and
+// refusing tokens without it would break the first deploy that lands out of
+// step.
+func TestBearer_AllowsUnrevokedAndJTILessTokens(t *testing.T) {
+	c := newFakeCache()
+	c.exists[RevocationKey("some-other-token")] = true
+
+	t.Run("different jti", func(t *testing.T) {
+		w, _ := serveBearer(newBearer(c), "Bearer "+signJWT(t, bearerSecret, validClaims()))
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("no jti at all", func(t *testing.T) {
+		claims := validClaims()
+		delete(claims, "jti")
+		w, _ := serveBearer(newBearer(c), "Bearer "+signJWT(t, bearerSecret, claims))
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+}
+
+// Redis being down must not take every admin route with it. The window the
+// denylist shortens is already bounded by exp, and role changes never depend on
+// this path — tenantrole re-reads the row on every request.
+func TestBearer_RevocationLookupFailureFailsOpen(t *testing.T) {
+	c := newFakeCache()
+	c.existsErr = errors.New("redis unreachable")
+
+	w, got := serveBearer(newBearer(c), "Bearer "+signJWT(t, bearerSecret, validClaims()))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, got)
+	assert.Equal(t, "u1", got.UserID)
+}
+
+// ---------- The two secrets are not the same secret ----------
+
+// GO_API_JWT_SECRET replaced NEXTAUTH_SECRET here so that leaking one does not
+// leak the other. A token signed with the session secret must not verify.
+func TestBearer_DoesNotAcceptTheNextAuthSecret(t *testing.T) {
+	const sessionSecret = "nextauth-secret-at-least-32-bytes!!"
+	cfg := &config.Config{Auth: config.Auth{
+		NextAuthSecret: sessionSecret,
+		GoAPIJWTSecret: bearerSecret,
+	}}
+	m := NewBearerMiddleware(cfg, nil, fakeLogger{})
+
+	w, _ := serveBearer(m, "Bearer "+signJWT(t, sessionSecret, validClaims()))
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // GetAuthUser must return nil for a request that never went through the

@@ -18,6 +18,8 @@ var requiredEnv = map[string]string{
 	"INTERNAL_AI_API_KEY": "internal-key",
 	"NEXTAUTH_SECRET":     "nextauth-secret",
 	"PUBLIC_DOMAIN_URL":   "customer.com.br",
+	// Long enough to clear minJWTSecretBytes; Load rejects anything shorter.
+	"GO_API_JWT_SECRET": "go-api-jwt-secret-at-least-32-bytes",
 }
 
 // setEnv applies the required set plus any overrides. An empty override value
@@ -70,7 +72,7 @@ func TestLoad_MissingRequiredAreReportedTogether(t *testing.T) {
 // An empty INTERNAL_AI_API_KEY used to make the admin endpoints compare a
 // missing header against an empty string and pass. Boot must fail instead.
 func TestLoad_RejectsEmptyAuthSecrets(t *testing.T) {
-	for _, key := range []string{"INTERNAL_AI_API_KEY", "NEXTAUTH_SECRET"} {
+	for _, key := range []string{"INTERNAL_AI_API_KEY", "NEXTAUTH_SECRET", "GO_API_JWT_SECRET"} {
 		t.Run(key, func(t *testing.T) {
 			setEnv(t, map[string]string{key: ""})
 
@@ -271,5 +273,41 @@ func TestApp_IsDevelopment(t *testing.T) {
 		if got := (App{Env: env}).IsDevelopment(); got != want {
 			t.Errorf("IsDevelopment(%q) = %v, want %v", env, got, want)
 		}
+	}
+}
+
+// A short HMAC key is brute-forceable offline from a single captured token, and
+// that token carries tenant-scoped admin access. Load refuses to start rather
+// than run with one.
+func TestLoad_RejectsAShortGoAPISecret(t *testing.T) {
+	setEnv(t, map[string]string{"GO_API_JWT_SECRET": "too-short"})
+
+	_, err := Load()
+
+	if err == nil {
+		t.Fatal("Load accepted a GO_API_JWT_SECRET below the length floor")
+	}
+	if !strings.Contains(err.Error(), "GO_API_JWT_SECRET") {
+		t.Errorf("error does not name the offending variable: %v", err)
+	}
+}
+
+// The go-token secret is its own variable so that leaking it does not also leak
+// the key the session cookie is derived from.
+func TestLoad_KeepsTheTwoAuthSecretsSeparate(t *testing.T) {
+	setEnv(t, map[string]string{
+		"NEXTAUTH_SECRET":   "nextauth-secret-value",
+		"GO_API_JWT_SECRET": "go-api-jwt-secret-at-least-32-bytes",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Auth.NextAuthSecret == cfg.Auth.GoAPIJWTSecret {
+		t.Error("the two secrets resolved to the same value")
+	}
+	if cfg.Auth.GoAPIJWTSecret != "go-api-jwt-secret-at-least-32-bytes" {
+		t.Errorf("Auth.GoAPIJWTSecret = %q", cfg.Auth.GoAPIJWTSecret)
 	}
 }

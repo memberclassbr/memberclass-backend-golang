@@ -39,13 +39,17 @@ type uploadVideoResponse struct {
 
 // ---------- 1. HTTP handler ----------
 
-// UploadVideo handles `POST /videos/upload`, a multipart form carrying the
-// file, the tenantId and an optional title.
+// UploadVideo handles `POST /videos/upload`, a multipart form carrying the file
+// and an optional title.
 //
-// The Bearer middleware has already established who the caller is; what this
-// handler adds is that they hold a role — any role — in the tenantId they put
-// in the form. Without that check the token would be a licence to upload into
-// every tenant on the deployment.
+// The Bearer middleware has already established who the caller is and which
+// tenant their token is scoped to; what this handler adds is that they hold a
+// role — any role — in that tenant. Without the check the token would be a
+// licence to upload into every tenant on the deployment.
+//
+// The form's `tenantId` field is vestigial: it is confirmed against the claim
+// if present and never used as the source. Reading it as the source would hand
+// the scope back to the caller, since the form is theirs to write.
 func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(0); err != nil {
 		f.log.Error("Failed to parse multipart form", "error", err)
@@ -61,17 +65,17 @@ func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	tenantID := r.FormValue("tenantId")
-	if tenantID == "" {
-		httpx.WriteError(w, "tenantId is required", http.StatusBadRequest)
-		return
-	}
-
 	// Any role may upload; belonging to the tenant is the whole requirement.
-	if _, err := f.roles.Authorize(r.Context(), tenantID, tenantrole.AnyRole...); err != nil {
+	grant, err := f.roles.Authorize(r.Context(), tenantrole.AnyRole...)
+	if err != nil {
 		f.writeAuthError(w, err)
 		return
 	}
+	if err := grant.Confirm(r.FormValue("tenantId")); err != nil {
+		f.writeAuthError(w, err)
+		return
+	}
+	tenantID := grant.TenantID
 
 	title := r.FormValue("title")
 	if title == "" {

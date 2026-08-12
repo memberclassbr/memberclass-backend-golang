@@ -89,13 +89,22 @@ func newTestFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, *fakeBunny, func()
 const testUserID = "u1"
 
 // uploadRequest builds the multipart POST the endpoint expects, already
-// carrying the identity the Bearer middleware would have attached.
+// carrying the identity the Bearer middleware would have attached, scoped to
+// tenant t1.
 func uploadRequest(t *testing.T, fields map[string]string, filename string, content []byte) *http.Request {
+	t.Helper()
+	return uploadRequestIn(t, "t1", fields, filename, content)
+}
+
+// uploadRequestIn is uploadRequest with the token's tenant spelled out, for the
+// tests that turn on which tenant the token names.
+func uploadRequestIn(t *testing.T, tenantID string, fields map[string]string, filename string, content []byte) *http.Request {
 	t.Helper()
 	return anonymousUploadRequest(t, fields, filename, content).WithContext(
 		middleware.ContextWithAuthUser(context.Background(), &middleware.AuthUser{
-			UserID: testUserID,
-			Email:  "admin@example.com",
+			UserID:   testUserID,
+			Email:    "admin@example.com",
+			TenantID: tenantID,
 			// Deliberately a role the endpoint would refuse if it trusted the
 			// token. It does not: the role comes from the database.
 			Role: "member",
@@ -154,14 +163,22 @@ func TestUploadVideo_RequiresFile(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUploadVideo_RequiresTenantID(t *testing.T) {
-	f, mock, _, done := newTestFeature(t)
+// The form no longer has to carry a tenantId — the token names one. Omitting it
+// is the ordinary request now.
+func TestUploadVideo_TenantIDIsOptionalInTheForm(t *testing.T) {
+	f, mock, svc, done := newTestFeature(t)
 	defer done()
+
+	expectRole(mock, "t1", "member")
+	expectCredentials(mock, "t1", "lib-1", "key-1")
+	svc.collections = &bunny.CollectionsResponse{
+		Items: []bunny.Collection{{Name: socialCollection, GUID: "coll-1"}},
+	}
 
 	w := httptest.NewRecorder()
 	f.UploadVideo(w, uploadRequest(t, nil, "aula.mp4", []byte("data")))
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -196,7 +213,7 @@ func TestUploadVideo_UnknownTenant(t *testing.T) {
 	mock.ExpectQuery(`FROM "Tenant"`).WillReturnError(sql.ErrNoRows)
 
 	w := httptest.NewRecorder()
-	f.UploadVideo(w, uploadRequest(t, map[string]string{"tenantId": "missing"}, "aula.mp4", []byte("data")))
+	f.UploadVideo(w, uploadRequestIn(t, "missing", nil, "aula.mp4", []byte("data")))
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	// Nothing was sent to Bunny.
@@ -217,11 +234,28 @@ func TestUploadVideo_RejectsTenantTheCallerDoesNotBelongTo(t *testing.T) {
 		WillReturnError(sql.ErrNoRows)
 
 	w := httptest.NewRecorder()
-	f.UploadVideo(w, uploadRequest(t, map[string]string{"tenantId": "other-tenant"}, "aula.mp4", []byte("data")))
+	f.UploadVideo(w, uploadRequestIn(t, "other-tenant", nil, "aula.mp4", []byte("data")))
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	// The Bunny credentials were never even read.
 	assert.Equal(t, 0, svc.uploadCalls)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The form field is vestigial and checked, not trusted: a caller who belongs to
+// t1 and writes another tenant into the form gets 403, not an upload into it.
+func TestUploadVideo_RejectsATenantTheTokenDoesNotName(t *testing.T) {
+	f, mock, svc, done := newTestFeature(t)
+	defer done()
+
+	expectRole(mock, "t1", "owner")
+
+	w := httptest.NewRecorder()
+	f.UploadVideo(w, uploadRequest(t, map[string]string{"tenantId": "someone-elses-tenant"}, "aula.mp4", []byte("data")))
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, 0, svc.uploadCalls)
+	// No credentials were read for either tenant.
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -318,7 +352,7 @@ func TestUploadVideo_CollectionFailureDoesNotBlockUpload(t *testing.T) {
 		defer done()
 
 		expectRole(mock, "t1", "member")
-	expectCredentials(mock, "t1", "lib-1", "key-1")
+		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collErr = errors.New("bunny down")
 
 		w := httptest.NewRecorder()
@@ -334,7 +368,7 @@ func TestUploadVideo_CollectionFailureDoesNotBlockUpload(t *testing.T) {
 		defer done()
 
 		expectRole(mock, "t1", "member")
-	expectCredentials(mock, "t1", "lib-1", "key-1")
+		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collections = &bunny.CollectionsResponse{}
 		svc.createCollErr = errors.New("bunny down")
 
@@ -371,7 +405,7 @@ func TestUploadVideo_BunnyFailures(t *testing.T) {
 		defer done()
 
 		expectRole(mock, "t1", "member")
-	expectCredentials(mock, "t1", "lib-1", "key-1")
+		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collections = &bunny.CollectionsResponse{}
 		svc.createVideoErr = errors.New("bunny rejected")
 
@@ -388,7 +422,7 @@ func TestUploadVideo_BunnyFailures(t *testing.T) {
 		defer done()
 
 		expectRole(mock, "t1", "member")
-	expectCredentials(mock, "t1", "lib-1", "key-1")
+		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collections = &bunny.CollectionsResponse{}
 		svc.uploadErr = errors.New("bunny rejected")
 

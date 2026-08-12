@@ -32,9 +32,10 @@ type generateTokenRequest struct {
 	// caller themselves, which is the ordinary case. Naming somebody else is
 	// an administrative act — see authorizeMint.
 	UserID string `json:"userId"`
-	// TenantID is the tenant the hand-off happens inside. Optional when the
-	// caller belongs to exactly one — see resolveTenant for why it cannot
-	// simply be dropped.
+	// TenantID is redundant: the hand-off happens inside the tenant the
+	// caller's token is scoped to. Still accepted, and still checked against
+	// the claim — a caller that names a different one is told rather than
+	// having the field quietly ignored.
 	TenantID string `json:"tenantId"`
 }
 
@@ -99,22 +100,21 @@ func (f *Feature) GenerateSSOToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fill in what the caller left out before anything is judged, so the
-	// permission check and the mint both work on the same resolved pair.
+	// A hand-off with no userId is one for the caller themselves, which is the
+	// ordinary case. Fill it in before anything is judged so the permission
+	// check and the mint work on the same pair.
 	if req.UserID == "" {
 		req.UserID = caller.UserID
 	}
-	tenantID, err := f.resolveTenant(r.Context(), caller.UserID, req.TenantID)
-	if err != nil {
-		f.writeUseCaseError(w, err)
-		return
-	}
-	req.TenantID = tenantID
 
-	if err := f.authorizeMint(r.Context(), caller, req); err != nil {
+	grant, err := f.authorizeMint(r.Context(), caller, req)
+	if err != nil {
 		f.writeAuthError(w, err)
 		return
 	}
+	// The tenant is the token's. The body's field, if it carried one, was only
+	// ever checked against this.
+	req.TenantID = grant.TenantID
 
 	resp, err := f.generateToken(r.Context(), req, externalURL)
 	if err != nil {
@@ -166,42 +166,8 @@ func clientIP(r *http.Request) string {
 
 // ---------- Auth: which tenant, and who may mint for whom ----------
 
-// resolveTenant fills in the tenant when the caller did not name one.
-//
-// It cannot come off the token: the go-token JWT carries sub, email and role,
-// and nothing that names a tenant — it identifies an account, not a
-// membership. Nor is there always one answer to read, since "UsersOnTenants"
-// is many-to-many and the same account can hold a different role in each.
-//
-// So: one membership means there is nothing to choose and the field is
-// redundant; several means guessing would mint a hand-off into the wrong
-// tenant, and the request is refused until it says which.
-func (f *Feature) resolveTenant(ctx context.Context, callerID, requested string) (string, error) {
-	if requested != "" {
-		return requested, nil
-	}
-
-	ids, err := f.tenantsOf(ctx, callerID)
-	if err != nil {
-		f.log.Error("Error listing tenants for caller: " + err.Error())
-		return "", &memberclasserrors.MemberClassError{Code: 500, Message: "erro ao resolver tenant"}
-	}
-
-	switch len(ids) {
-	case 0:
-		return "", &memberclasserrors.MemberClassError{Code: 403, Message: "usuário não pertence a nenhum tenant"}
-	case 1:
-		return ids[0], nil
-	default:
-		return "", &memberclasserrors.MemberClassError{
-			Code:    400,
-			Message: "tenantId é obrigatório: o usuário pertence a mais de um tenant",
-		}
-	}
-}
-
 // authorizeMint decides whether the caller may mint an SSO hand-off for
-// req.UserID inside req.TenantID.
+// req.UserID, and returns their standing in the tenant their token names.
 //
 // The endpoint is open to every role, but only for the caller's own account.
 // The token this mints is redeemed at validate-token for the target user's
@@ -214,13 +180,19 @@ func (f *Feature) resolveTenant(ctx context.Context, callerID, requested string)
 // Before this route moved to the Bearer, the whole endpoint sat behind
 // x-internal-api-key and an arbitrary userId was safe because only the
 // platform's own backend could reach it. That is no longer true.
-func (f *Feature) authorizeMint(ctx context.Context, caller *middleware.AuthUser, req generateTokenRequest) error {
+func (f *Feature) authorizeMint(ctx context.Context, caller *middleware.AuthUser, req generateTokenRequest) (*tenantrole.Grant, error) {
 	allowed := tenantrole.AnyRole
 	if caller.UserID != req.UserID {
 		allowed = tenantrole.OwnerOrAdmin
 	}
-	_, err := f.roles.Authorize(ctx, req.TenantID, allowed...)
-	return err
+	grant, err := f.roles.Authorize(ctx, allowed...)
+	if err != nil {
+		return nil, err
+	}
+	if err := grant.Confirm(req.TenantID); err != nil {
+		return nil, err
+	}
+	return grant, nil
 }
 
 // writeAuthError maps a tenantrole failure onto this slice's error envelope,
@@ -321,16 +293,6 @@ const (
 		)
 	`
 
-	// sqlTenantsOfUser backs the tenantId default. LIMIT 2 is the whole query:
-	// the caller only needs to know "exactly one" from "more than one", and
-	// listing every membership to then count them would be work nobody reads.
-	sqlTenantsOfUser = `
-		SELECT "tenantId"
-		FROM "UsersOnTenants"
-		WHERE "userId" = $1
-		LIMIT 2
-	`
-
 	sqlStoreSSOToken = `
 		UPDATE "UsersOnTenants"
 		SET "ssoToken" = $1, "ssoTokenValidUntil" = $2, "ssoTokenUsedAt" = NULL, "ssoTokenIP" = NULL
@@ -384,26 +346,6 @@ func (f *Feature) userBelongsToTenant(ctx context.Context, userID, tenantID stri
 		return false, f.fail("Error checking user tenant membership: ", err, "error checking user tenant membership")
 	}
 	return belongs, nil
-}
-
-// tenantsOf returns up to two of the caller's tenant memberships — enough to
-// tell "exactly one" from "more than one", which is all resolveTenant asks.
-func (f *Feature) tenantsOf(ctx context.Context, userID string) ([]string, error) {
-	rows, err := f.db.QueryContext(ctx, sqlTenantsOfUser, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
 }
 
 func (f *Feature) storeToken(ctx context.Context, userID, tenantID, tokenHash string, validUntil time.Time) error {

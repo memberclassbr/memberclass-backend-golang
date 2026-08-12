@@ -11,7 +11,7 @@
 #   BASE_URL=https://api.example.com \
 #   MC_API_KEY=...            # tenant API key, sent as x-api-key
 #   INTERNAL_API_KEY=...      # x-internal-api-key
-#   BEARER_TOKEN=...          # NextAuth go-token JWT
+#   BEARER_TOKEN=...          # go-token JWT from /api/auth/go-token?tenantId=X
 #   TENANT_ID=...             # a tenant id, for the AI endpoints
 #   EMAIL=...                 # a member's email, for the member endpoints
 #   ./scripts/smoke.sh
@@ -166,7 +166,9 @@ if [[ -z "$BEARER_TOKEN" ]]; then
   skip "POST /videos/upload"        "set BEARER_TOKEN"
 else
   # An empty member list is rejected with 400 — enough to prove auth passes
-  # without importing anyone.
+  # without importing anyone. None of the three bodies below carries a
+  # tenantId: it comes off the token's claim now, so a smoke run only needs a
+  # token minted for the tenant under test.
   check 400 "POST /imports/members (empty body)" \
     -H "Authorization: Bearer $BEARER_TOKEN" -H 'Content-Type: application/json' \
     -X POST -d '{}' "$BASE_URL/imports/members"

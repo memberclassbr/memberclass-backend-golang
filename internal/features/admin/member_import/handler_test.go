@@ -41,12 +41,15 @@ func newFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, func()) {
 	return New(db, fakeLogger{}, nil, cfg), mock, func() { _ = db.Close() }
 }
 
+// withUserSession builds the context the Bearer middleware would have produced.
+// The role on the token is generous on purpose: no test may pass because of it.
 func withUserSession(r *http.Request, userID string) *http.Request {
 	u := &middleware.AuthUser{
-		UserID: userID,
-		Email:  "admin@example.com",
-		Role:   "owner",
-		Exp:    time.Now().Add(time.Hour).Unix(),
+		UserID:   userID,
+		Email:    "admin@example.com",
+		TenantID: "t-1",
+		Role:     "owner",
+		Exp:      time.Now().Add(time.Hour).Unix(),
 	}
 	return r.WithContext(middleware.ContextWithAuthUser(r.Context(), u))
 }
@@ -78,13 +81,44 @@ func TestImportMembers_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestImportMembers_MissingTenantID(t *testing.T) {
-	f, _, done := newFeature(t)
+// The body no longer has to carry a tenantId — the token names one. Omitting it
+// is the ordinary request now, not a validation failure.
+func TestImportMembers_TenantIDIsOptionalInTheBody(t *testing.T) {
+	f, mock, done := newFeature(t)
 	defer done()
+
+	mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).
+		WithArgs("u-1", "t-1").
+		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
+	// Passing the gate is proved by failing the very next query rather than by
+	// reaching 202, which would spawn the worker against a closing mock.
+	mock.ExpectQuery(`FROM "Tenant"`).WillReturnError(sql.ErrConnDone)
 
 	w := doImport(f, importRequest{Users: []importUserInput{{Name: "x", Email: "x@y.com"}}}, "u-1")
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// A body naming a tenant the token was not minted for is refused, not silently
+// redirected into the token's tenant. The claim is the source either way; this
+// is what tells a caller its field was wrong.
+func TestImportMembers_RejectsATenantTheTokenDoesNotName(t *testing.T) {
+	f, mock, done := newFeature(t)
+	defer done()
+
+	mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).
+		WithArgs("u-1", "t-1").
+		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
+
+	w := doImport(f, importRequest{
+		TenantID: "someone-elses-tenant",
+		Users:    []importUserInput{{Name: "x", Email: "x@y.com"}},
+	}, "u-1")
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	// Nothing was loaded or written for the tenant the body named.
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestImportMembers_EmptyUsers(t *testing.T) {
@@ -191,8 +225,9 @@ func TestImportMembers_IgnoresTheRoleClaimOnTheToken(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/imports/members", bytes.NewReader(raw))
 	req = req.WithContext(middleware.ContextWithAuthUser(req.Context(), &middleware.AuthUser{
-		UserID: "u-1",
-		Role:   "owner", // the claim says owner; the database says member
+		UserID:   "u-1",
+		TenantID: "t-1",
+		Role:     "owner", // the claim says owner; the database says member
 	}))
 
 	w := httptest.NewRecorder()

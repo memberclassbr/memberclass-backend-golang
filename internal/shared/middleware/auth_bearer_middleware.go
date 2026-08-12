@@ -1,23 +1,34 @@
 // Bearer JWT auth for frontend-origin routes.
 //
-// The Next.js frontend mints a short-lived HS256 JWT at `/api/auth/go-token`
-// using NEXTAUTH_SECRET and sends it on `Authorization: Bearer <jwt>`. This
-// middleware verifies the signature + expiry with the same secret and makes
-// the caller's identity available to downstream handlers via GetAuthUser.
+// The Next.js frontend mints a short-lived HS256 JWT at
+// `/api/auth/go-token?tenantId=X` and sends it on `Authorization: Bearer <jwt>`.
+// Before minting, it checks that the session's user holds a row in
+// "UsersOnTenants" for X and refuses with 403 if not. This middleware verifies
+// the signature, audience and expiry, then makes the caller's identity
+// available to downstream handlers via GetAuthUser.
 //
 // Expected JWT claims:
 //
 //	{
-//	  "sub":   "<userId>",
-//	  "email": "<email>",
-//	  "role":  "<session role>",
-//	  "exp":   <unix>,
-//	  "iat":   <unix>
+//	  "sub":      "<userId>",
+//	  "email":    "<email>",
+//	  "tenantId": "<the tenant this token is scoped to>",
+//	  "role":     "<the caller's role IN THAT TENANT, read from the database>",
+//	  "aud":      "memberclass-go-api",
+//	  "jti":      "<opaque id, optional, for revocation>",
+//	  "exp":      <unix>,
+//	  "iat":      <unix>
 //	}
 //
-// No tenant is carried on the token — per-tenant authorization is the
-// responsibility of each slice (query `UsersOnTenants` for the target
-// tenantId and enforce the required role).
+// The token is scoped to one tenant. `tenantId` is required and it is the only
+// tenant a request carrying this token may act on — a handler that read the
+// tenant out of a request body instead would give the scope away, since the
+// body is chosen by the caller and the claim is not.
+//
+// `role` is now trustworthy in a way it was not before: it is read from
+// "UsersOnTenants" at mint time for the tenant the token names. It is still a
+// snapshot up to the token's lifetime old, so authorization re-reads the row —
+// see internal/shared/tenantrole.
 package middleware
 
 import (
@@ -28,22 +39,61 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 )
+
+// Audience is the `aud` claim this service accepts, and the only one.
+//
+// Without it, any service that verifies HS256 against the same secret would
+// take a go-token as its own. It is cheap to check and it is what stops one
+// token from being replayed at a second audience.
+const Audience = "memberclass-go-api"
 
 // AuthUser is the payload every RequireAuth-protected handler gets from the
 // request context via GetAuthUser.
 type AuthUser struct {
 	UserID string `json:"sub"`
 	Email  string `json:"email"`
-	Role   string `json:"role"`
-	Exp    int64  `json:"exp"`
-	Iat    int64  `json:"iat"`
+	// TenantID is the tenant this token was minted for, and the only one the
+	// request may act on.
+	TenantID string `json:"tenantId"`
+	// Role is the caller's role in TenantID as the frontend read it at mint
+	// time. Treat it as a hint; tenantrole re-reads the row.
+	Role     string   `json:"role"`
+	Audience audience `json:"aud"`
+	// ID is the `jti` claim. Optional — see BearerMiddleware.revoked.
+	ID  string `json:"jti"`
+	Exp int64  `json:"exp"`
+	Iat int64  `json:"iat"`
 }
+
+// audience decodes the `aud` claim, which RFC 7519 allows to be either a single
+// string or an array of them. Node's `jsonwebtoken` emits a bare string for one
+// audience and an array for several, so accept both rather than depend on which
+// shape the frontend happens to produce.
+type audience []string
+
+func (a *audience) UnmarshalJSON(raw []byte) error {
+	var single string
+	if err := json.Unmarshal(raw, &single); err == nil {
+		*a = audience{single}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(raw, &many); err != nil {
+		return errors.New("aud claim is neither a string nor an array of strings")
+	}
+	*a = many
+	return nil
+}
+
+func (a audience) contains(want string) bool { return slices.Contains(a, want) }
 
 // authUserKey is the unexported context key under which *AuthUser is stored.
 // Using a typed-struct key (not a string) avoids accidental collisions with
@@ -69,16 +119,21 @@ func ContextWithAuthUser(ctx context.Context, user *AuthUser) context.Context {
 type BearerMiddleware struct {
 	logger logger.Logger
 	secret []byte
+	cache  cache.Cache
 	now    func() time.Time // overridable for tests
 }
 
 // NewBearerMiddleware builds the middleware from the validated config. The
 // secret MUST match the Next.js frontend's byte-for-byte; config refuses to
-// start without it, so it is never empty here.
-func NewBearerMiddleware(cfg *config.Config, log logger.Logger) *BearerMiddleware {
+// start without it and enforces a length floor, so it is never empty or short
+// here.
+//
+// `c` backs the revocation denylist and may be nil, which disables that check.
+func NewBearerMiddleware(cfg *config.Config, c cache.Cache, log logger.Logger) *BearerMiddleware {
 	return &BearerMiddleware{
 		logger: log,
-		secret: []byte(cfg.Auth.NextAuthSecret),
+		secret: []byte(cfg.Auth.GoAPIJWTSecret),
+		cache:  c,
 		now:    time.Now,
 	}
 }
@@ -102,22 +157,57 @@ func (m *BearerMiddleware) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
+		if m.revoked(r.Context(), user) {
+			m.logger.Debug("bearer auth rejected: token is on the revocation denylist")
+			m.reject(w, "invalid or expired token")
+			return
+		}
+
 		ctx := context.WithValue(r.Context(), authUserKey{}, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// verify parses a compact JWT, checks the HS256 signature with the shared
-// secret, then validates the `exp` claim. Returns the decoded AuthUser on
-// success.
+// RevocationKey is where the frontend publishes a `jti` it wants dead before
+// the token's own exp — a logout, or an access revoked mid-window. Give the key
+// a TTL at least as long as the token's remaining lifetime; anything longer is
+// only wasted memory.
+func RevocationKey(jti string) string { return "go-token:revoked:" + jti }
+
+// revoked reports whether this token's jti has been published to the denylist.
 //
-// Rolled by hand rather than via go-jose so secrets shorter than 32 bytes
-// are accepted (Node's `jsonwebtoken` — the library the Next.js frontend
-// uses to mint this token — has no length check; enforcing one here would
-// reject every real NEXTAUTH_SECRET in production today).
+// A token with no `jti` cannot be revoked and is not rejected for it: the claim
+// is the frontend's to emit, and refusing tokens that lack it would turn a
+// defence-in-depth check into an outage the first time the two sides deploy out
+// of step.
+//
+// A Redis failure fails OPEN, logged. What the denylist shortens is a window
+// already bounded by `exp` — minutes — while failing closed would take every
+// admin route down whenever Redis blinks. Role changes do not depend on this
+// path at all: tenantrole re-reads "UsersOnTenants" on every request, so a
+// demotion lands immediately whatever Redis is doing.
+func (m *BearerMiddleware) revoked(ctx context.Context, user *AuthUser) bool {
+	if m.cache == nil || user.ID == "" {
+		return false
+	}
+	found, err := m.cache.Exists(ctx, RevocationKey(user.ID))
+	if err != nil {
+		m.logger.Error("bearer auth: revocation lookup failed, allowing the request", "error", err.Error())
+		return false
+	}
+	return found
+}
+
+// verify parses a compact JWT, checks the HS256 signature with the shared
+// secret, then validates the claims this service requires. Returns the decoded
+// AuthUser on success.
+//
+// Every check below rejects rather than defaults. A claim that is merely
+// absent is the shape a forged or a stale token takes, and defaulting any of
+// them — no audience, no tenant, no expiry — widens what the token grants.
 func (m *BearerMiddleware) verify(raw string) (*AuthUser, error) {
 	if len(m.secret) == 0 {
-		return nil, errors.New("server is not configured with NEXTAUTH_SECRET")
+		return nil, errors.New("server is not configured with GO_API_JWT_SECRET")
 	}
 
 	payload, err := verifyHS256(raw, m.secret)
@@ -133,9 +223,19 @@ func (m *BearerMiddleware) verify(raw string) (*AuthUser, error) {
 	if user.UserID == "" {
 		return nil, errors.New("token payload missing sub claim")
 	}
+	// Without `aud` any service verifying HS256 against this secret would
+	// accept a go-token as its own.
+	if !user.Audience.contains(Audience) {
+		return nil, errors.New("token audience is not " + Audience)
+	}
+	// `tenantId` is the token's whole scope. A token without one would have to
+	// fall back on a tenant named somewhere the caller controls, which is the
+	// scoping bug this claim exists to close.
+	if user.TenantID == "" {
+		return nil, errors.New("token payload missing tenantId claim")
+	}
 	// `exp` is REQUIRED. A token without exp (or exp==0) would be valid
-	// forever — combined with a leaked NEXTAUTH_SECRET that's permanent
-	// admin access. Reject rather than let the lifetime float.
+	// forever — combined with a leaked secret that is permanent admin access.
 	if user.Exp == 0 {
 		return nil, errors.New("token payload missing exp claim")
 	}

@@ -197,6 +197,8 @@ ILOVEPDF_API_KEYS=
 
 # Auth Configuration
 INTERNAL_AI_API_KEY=
+NEXTAUTH_SECRET=
+GO_API_JWT_SECRET=
 PUBLIC_DOMAIN_URL=memberclass.com.br
 
 # Memberclass Transcription (Railway pgvector + OpenAI)
@@ -265,6 +267,8 @@ The application uses the following environment variables:
 **Authentication:**
 
 - `INTERNAL_AI_API_KEY` - Internal API key for AI endpoints validation
+- `NEXTAUTH_SECRET` - Decrypts the NextAuth session cookie on `/api/comments`. Must match the frontend byte-for-byte
+- `GO_API_JWT_SECRET` - Verifies the go-token Bearer JWTs on `/imports/*`, `/sso/*` and `/videos/*`. Must match the frontend byte-for-byte, and be **at least 32 bytes** — boot fails otherwise. Not the same value as `NEXTAUTH_SECRET`: sharing one meant leaking the go-token key also leaked the session key
 - `PUBLIC_DOMAIN_URL` - Customer-facing frontend root domain (bare host). Builds the `From` address of transactional email and the magic-link host for tenants without a `customDomain`. Falls back to `NEXT_PUBLIC_DOMAIN_URL`. Replaced `PUBLIC_ROOT_DOMAIN`, which is no longer read
 
 **Memberclass Transcription (Railway pgvector + OpenAI):**

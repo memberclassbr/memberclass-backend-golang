@@ -34,8 +34,15 @@ func newTestFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, func()) {
 }
 
 // generateRequest builds the POST already carrying the identity the Bearer
-// middleware would have attached. An empty callerID means no identity at all.
+// middleware would have attached, scoped to tenant t1. An empty callerID means
+// no identity at all.
 func generateRequest(body, externalURL, callerID string) *http.Request {
+	return generateRequestIn(body, externalURL, callerID, "t1")
+}
+
+// generateRequestIn is generateRequest with the token's tenant spelled out, for
+// the tests that turn on which tenant the token names.
+func generateRequestIn(body, externalURL, callerID, tenantID string) *http.Request {
 	target := "/generate-token"
 	if externalURL != "" {
 		target += "?externalUrl=" + url.QueryEscape(externalURL)
@@ -45,8 +52,9 @@ func generateRequest(body, externalURL, callerID string) *http.Request {
 		return req
 	}
 	return req.WithContext(middleware.ContextWithAuthUser(req.Context(), &middleware.AuthUser{
-		UserID: callerID,
-		Email:  callerID + "@example.com",
+		UserID:   callerID,
+		Email:    callerID + "@example.com",
+		TenantID: tenantID,
 		// Claimed on the token and ignored by the handler — every test below
 		// gets the role it is really judged by from the mocked query.
 		Role: "owner",
@@ -159,8 +167,8 @@ func TestGenerateSSOToken_OwnerAndAdminMayMintForAnotherUser(t *testing.T) {
 	}
 }
 
-// The role is read for the tenant named in the body. A caller who is an owner
-// somewhere else holds nothing here.
+// The role is read for the tenant the token names. A token minted before the
+// caller lost their row buys nothing once the row is gone.
 func TestGenerateSSOToken_RejectsTenantTheCallerDoesNotBelongTo(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
@@ -170,7 +178,7 @@ func TestGenerateSSOToken_RejectsTenantTheCallerDoesNotBelongTo(t *testing.T) {
 		WillReturnError(sql.ErrNoRows)
 
 	w := httptest.NewRecorder()
-	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"other-tenant"}`, "https://escola.com.br", "u1"))
+	f.GenerateSSOToken(w, generateRequestIn(`{"userId":"u1"}`, "https://escola.com.br", "u1", "other-tenant"))
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -203,27 +211,15 @@ func TestGenerateSSOToken_RequiredFields(t *testing.T) {
 	}
 }
 
-// ---------- 1b. Defaults for userId and tenantId ----------
+// ---------- 1b. The tenant comes from the token ----------
 
-// expectTenantsOf queues the membership listing that backs the tenantId
-// default.
-func expectTenantsOf(mock sqlmock.Sqlmock, callerID string, tenantIDs ...string) {
-	rows := sqlmock.NewRows([]string{"tenantId"})
-	for _, id := range tenantIDs {
-		rows.AddRow(id)
-	}
-	mock.ExpectQuery(`SELECT "tenantId" FROM "UsersOnTenants"`).
-		WithArgs(callerID).
-		WillReturnRows(rows)
-}
-
-// An empty body is a complete request: it means "a hand-off for me, in my
-// tenant". Both fields come off the caller.
-func TestGenerateSSOToken_DefaultsBothFieldsToTheCaller(t *testing.T) {
+// An empty body is a complete request: it means "a hand-off for me, in the
+// tenant my token is scoped to". Neither field has to be sent, and no query
+// runs to work the tenant out — the claim already names it.
+func TestGenerateSSOToken_DefaultsBothFieldsToTheCallersToken(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
 
-	expectTenantsOf(mock, "u1", "t1")
 	expectRole(mock, "u1", "t1", "member")
 	mock.ExpectQuery(`FROM "User" WHERE id`).
 		WithArgs("u1").
@@ -242,8 +238,8 @@ func TestGenerateSSOToken_DefaultsBothFieldsToTheCaller(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// A tenantId in the body is used as given — no listing query runs.
-func TestGenerateSSOToken_ExplicitTenantSkipsTheLookup(t *testing.T) {
+// A body may still carry the tenant; it just has to be the one the token names.
+func TestGenerateSSOToken_AcceptsTheTokensOwnTenantInTheBody(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
 
@@ -262,45 +258,30 @@ func TestGenerateSSOToken_ExplicitTenantSkipsTheLookup(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// "UsersOnTenants" is many-to-many, so a caller can hold a different role in
-// each of several tenants. Picking one would mint a hand-off into the wrong
-// one, so the request is refused until it says which.
-func TestGenerateSSOToken_AmbiguousTenantIsRejected(t *testing.T) {
+// The scope of the token is the whole point. A body naming another tenant is
+// refused outright — an owner of t1 does not get to mint a hand-off in t2 by
+// asking, and the role lookup that ran was for t1 either way.
+func TestGenerateSSOToken_RejectsATenantTheTokenDoesNotName(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
 
-	expectTenantsOf(mock, "u1", "t1", "t2")
+	expectRole(mock, "u1", "t1", "owner")
 
 	w := httptest.NewRecorder()
-	f.GenerateSSOToken(w, generateRequest(`{}`, "https://escola.com.br", "u1"))
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Equal(t, "INVALID_REQUEST", bodyOf(t, w)["errorCode"])
-	assert.Contains(t, bodyOf(t, w)["error"], "mais de um tenant")
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestGenerateSSOToken_CallerWithNoTenantIsForbidden(t *testing.T) {
-	f, mock, done := newTestFeature(t)
-	defer done()
-
-	expectTenantsOf(mock, "u1")
-
-	w := httptest.NewRecorder()
-	f.GenerateSSOToken(w, generateRequest(`{}`, "https://escola.com.br", "u1"))
+	f.GenerateSSOToken(w, generateRequest(`{"tenantId":"t2"}`, "https://escola.com.br", "u1"))
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "FORBIDDEN", bodyOf(t, w)["errorCode"])
+	// Nothing was minted or written into either tenant.
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// The default is the *caller*, never the userId in the body: an owner naming
-// somebody else still has their own memberships listed, so a target who
-// belongs elsewhere cannot drag the hand-off into another tenant.
-func TestGenerateSSOToken_TenantDefaultFollowsTheCallerNotTheTarget(t *testing.T) {
+// The tenant follows the *caller's token*, never the userId in the body: a
+// target who belongs elsewhere cannot drag the hand-off into another tenant.
+func TestGenerateSSOToken_TenantFollowsTheTokenNotTheTarget(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
 
-	expectTenantsOf(mock, "boss", "t1")
 	expectRole(mock, "boss", "t1", "owner")
 	mock.ExpectQuery(`FROM "User" WHERE id`).
 		WithArgs("someone").

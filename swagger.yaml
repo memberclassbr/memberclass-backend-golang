@@ -1904,14 +1904,15 @@ paths:
         Valida um token SSO e retorna os dados do usuário e tenant associados.
 
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
 
         A outra metade do fluxo, `POST /sso/generate-token`, mudou de lugar: era
         `/api/v1/sso/generate-token` com `x-internal-api-key` e passou a ficar na
-        raiz, com JWT Bearer do frontend admin. Não é documentada aqui porque só
-        o frontend da plataforma a chama; este endpoint continua sendo o que o
-        site do tenant usa, e não mudou.
+        raiz, com JWT Bearer do frontend admin — cujo `tenantId` sai da claim do
+        token, não do corpo. Não é documentada aqui porque só o frontend da
+        plataforma a chama; este endpoint continua sendo o que o site do tenant
+        usa, e não mudou.
       parameters:
         - in: header
           name: x-api-key

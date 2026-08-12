@@ -125,7 +125,7 @@ Four credentials, each guarding a different surface:
 | Tenant external API key | `x-api-key` (legacy: `mc-api-key`) | most of `/api/v1/*` |
 | Internal API key | `x-internal-api-key` | `/api/v1/ai/*`, `/api/lessons/*` |
 | NextAuth session | `next-auth.session-token` cookie | `/api/comments` |
-| NextAuth Bearer JWT | `Authorization: Bearer` | `/imports/*`, `/sso/*`, `/videos/*` |
+| go-token Bearer JWT | `Authorization: Bearer` | `/imports/*`, `/sso/*`, `/videos/*` |
 
 The middlewares live in [internal/shared/middleware](internal/shared/middleware).
 
@@ -142,16 +142,49 @@ middleware; those checks reject an empty incoming key so an unset
 
 These three sit at the root, without the `/api` prefix, because the same thing
 is true of all of them: they are called by the Next.js admin frontend with a
-short-lived Bearer JWT minted at `/api/auth/go-token` on the Next side, using
-`NEXTAUTH_SECRET`.
+short-lived Bearer JWT minted at `/api/auth/go-token?tenantId=X` on the Next
+side, using `GO_API_JWT_SECRET`.
 
-The Bearer establishes *who* is calling and nothing more. It carries a `role`
-claim, and every one of these handlers ignores it: the claim is copied from a
-NextAuth session that may predate a demotion, and it names no tenant, so
-trusting it would let one token pass as the same role in every tenant the
-holder can name in a request body. The role is read from `"UsersOnTenants"` for
-the tenant in the request on every call, through
-[internal/shared/tenantrole](internal/shared/tenantrole).
+**The token is scoped to one tenant.** Before minting, the frontend checks that
+the session's user holds a row in `"UsersOnTenants"` for X and refuses with 403
+if not; the token then carries `tenantId` and the `role` read from that row:
+
+```json
+{ "sub": "...", "email": "...", "tenantId": "...", "role": "...",
+  "aud": "memberclass-go-api", "jti": "...", "iat": 0, "exp": 0 }
+```
+
+`tenantId` is where every one of these handlers gets its tenant, and the only
+place. The request bodies still accept the field, but it is *checked against the
+claim* and never read as the source — a body is chosen by the caller and a claim
+is not, so reading it would give the scope straight back. A body naming a
+different tenant is 403, not a silent redirect into the token's own.
+`tenantrole.Authorize` takes no tenant argument at all, so no call site can
+reintroduce this.
+
+`role` is now trustworthy in a way it was not before — it is read from the
+database for the tenant the token names — but it is still a snapshot up to the
+token's lifetime old, so [internal/shared/tenantrole](internal/shared/tenantrole)
+re-reads the row on every request. A demotion lands on the next call rather than
+whenever the token happens to expire.
+
+The middleware rejects, rather than defaults, on every claim it needs: no
+`aud`, no `tenantId`, no `exp`, wrong audience. A claim that is merely absent is
+the shape a forged or stale token takes.
+
+Two things follow from `aud`: it stops another service that verifies HS256 with
+the same secret from taking a go-token as its own, and it is why the secret is
+`GO_API_JWT_SECRET` and not `NEXTAUTH_SECRET`. The session cookie's key derives
+from the latter, so sharing one meant a leaked go-token key was also a forged
+session. `config.Load` requires the new variable and enforces a 32-byte floor —
+the Bearer verification is hand-rolled HMAC, so nothing in the crypto path would
+otherwise stop a short, offline-brute-forceable key.
+
+`jti` backs a Redis denylist (`go-token:revoked:<jti>`) for a logout or an
+access revoked inside the token's window. The check fails **open** on a Redis
+error and skips tokens with no `jti`: what it shortens is a window already
+bounded by `exp`, and failing closed would take every admin route down whenever
+Redis blinks. Role changes never depend on it.
 
 Which roles pass is declared per route, at the call site:
 

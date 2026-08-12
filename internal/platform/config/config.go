@@ -87,16 +87,33 @@ type Storage struct {
 	URL       string
 }
 
-// Auth holds the two shared secrets that gate privileged endpoints.
+// Auth holds the shared secrets that gate privileged endpoints.
 type Auth struct {
 	// InternalAPIKey is compared against the x-internal-api-key header by the
 	// admin-facing endpoints. Required: an empty expected key makes the
 	// comparison trivially satisfiable.
 	InternalAPIKey string
-	// NextAuthSecret verifies the HS256 JWTs minted by the Next.js frontend.
-	// Must match NEXTAUTH_SECRET on that side byte-for-byte.
+	// NextAuthSecret decrypts the NextAuth session cookie on `/api/comments`.
+	// Must match NEXTAUTH_SECRET on the frontend byte-for-byte.
 	NextAuthSecret string
+	// GoAPIJWTSecret verifies the go-token Bearer JWTs the frontend mints for
+	// the routes at the root. Must match GO_API_JWT_SECRET on that side.
+	//
+	// It is deliberately not NextAuthSecret, which this used to reuse. That
+	// secret also derives the session cookie's key, so one leak was two: a
+	// captured go-token could be brute-forced offline into the ability to
+	// forge sessions. Load enforces a length floor on this one for the same
+	// reason — see minJWTSecretBytes.
+	GoAPIJWTSecret string
 }
+
+// minJWTSecretBytes is the floor for GO_API_JWT_SECRET.
+//
+// The Bearer verification is hand-rolled HMAC rather than go-jose, so nothing
+// in the crypto path enforces a key length. A short secret is brute-forceable
+// offline from a single captured token, and that token carries tenant-scoped
+// admin access — 32 bytes is what go-jose would have required for HS256.
+const minJWTSecretBytes = 32
 
 // Public holds the customer-facing hostnames used to build links and email
 // addresses.
@@ -241,6 +258,7 @@ func Load() (*Config, error) {
 		Auth: Auth{
 			InternalAPIKey: required("INTERNAL_AI_API_KEY"),
 			NextAuthSecret: required("NEXTAUTH_SECRET"),
+			GoAPIJWTSecret: required("GO_API_JWT_SECRET"),
 		},
 		Public: Public{
 			DomainURL: required("PUBLIC_DOMAIN_URL", "NEXT_PUBLIC_DOMAIN_URL"),
@@ -258,6 +276,13 @@ func Load() (*Config, error) {
 
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+
+	if n := len(cfg.Auth.GoAPIJWTSecret); n < minJWTSecretBytes {
+		return nil, fmt.Errorf(
+			"GO_API_JWT_SECRET must be at least %d bytes, got %d — a shorter HMAC key is brute-forceable offline from one captured token",
+			minJWTSecretBytes, n,
+		)
 	}
 
 	cfg.loadIlovePDF()

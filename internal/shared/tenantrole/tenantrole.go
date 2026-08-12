@@ -1,18 +1,21 @@
 // Package tenantrole answers one question for the routes the admin frontend
-// calls with a go-token Bearer JWT: does the caller hold a role in the tenant
-// they are acting on, and is that role enough for what they are asking to do?
+// calls with a go-token Bearer JWT: is the caller's role in the tenant their
+// token is scoped to enough for what they are asking to do?
 //
-// The JWT carries a `role` claim and this package deliberately ignores it.
-// That claim is copied out of a NextAuth session that may predate a demotion,
-// and it names no tenant at all — trusting it would let one token pass as the
-// same role in every tenant the holder can name in a request body. The role is
-// read from "UsersOnTenants" on every request instead.
+// The tenant is taken from the token's `tenantId` claim and from nowhere else.
+// Authorize does not accept a tenant argument for exactly that reason: a call
+// site cannot pass one the caller chose. Requests that also name a tenant — the
+// imports body, the upload's form field — get it checked against the claim
+// through Grant.Confirm rather than trusted.
+//
+// The `role` claim is a different matter now. The frontend reads it from
+// "UsersOnTenants" for the tenant it is minting for, so it is no longer the
+// tenant-less session snapshot it used to be. This package still re-reads the
+// row: the token lives minutes, and a demotion inside that window has to take
+// effect on the next request, not when the token happens to expire.
 //
 // Authentication stays in middleware.BearerMiddleware; this package is only
-// authorization. It is a helper rather than a middleware because the tenant
-// being acted on arrives inside the request — JSON for the imports and the SSO
-// hand-off, a multipart field for the video upload — and a middleware that
-// read the body would have to hand it back unconsumed to the handler.
+// authorization.
 package tenantrole
 
 import (
@@ -56,6 +59,12 @@ var (
 	// ErrForbiddenRole means the caller belongs to the tenant, but their role
 	// is not in the whitelist the endpoint asked for.
 	ErrForbiddenRole = errors.New("tenantrole: caller's role is not allowed here")
+
+	// ErrTenantMismatch means the request named a tenant other than the one
+	// its token was minted for. It is a 403 rather than a 400 because the
+	// request is well-formed — it is asking to act somewhere the token does
+	// not reach.
+	ErrTenantMismatch = errors.New("tenantrole: request names a tenant the token was not minted for")
 )
 
 // Grant is the caller's verified standing inside one tenant.
@@ -65,6 +74,20 @@ type Grant struct {
 	TenantID string
 	// Role as the database holds it now, not as the token claimed it.
 	Role string
+}
+
+// Confirm checks a tenant the request also named against the one the token is
+// scoped to. An empty `requested` is the ordinary case — the frontend stopped
+// sending it — and passes.
+//
+// The claim always wins; this exists so a caller that sends the wrong tenant is
+// told, instead of having its field silently ignored and its import landing
+// somewhere else.
+func (g *Grant) Confirm(requested string) error {
+	if requested != "" && requested != g.TenantID {
+		return ErrTenantMismatch
+	}
+	return nil
 }
 
 // Checker reads roles out of the tenant database.
@@ -83,7 +106,8 @@ const sqlRoleInTenant = `
 	LIMIT 1
 `
 
-// Authorize checks the Bearer identity on ctx against tenantID.
+// Authorize checks the Bearer identity on ctx against the tenant its token was
+// minted for.
 //
 // `allowed` is a whitelist of role names; pass AnyRole (no arguments) when
 // membership alone is the requirement. A row whose role is empty counts as no
@@ -91,13 +115,15 @@ const sqlRoleInTenant = `
 //
 // The returned error is one of this package's sentinels, or the driver's error
 // when the lookup itself failed — map it with Status.
-func (c *Checker) Authorize(ctx context.Context, tenantID string, allowed ...string) (*Grant, error) {
+func (c *Checker) Authorize(ctx context.Context, allowed ...string) (*Grant, error) {
 	user := middleware.GetAuthUser(ctx)
 	if user == nil || user.UserID == "" {
 		return nil, ErrNoIdentity
 	}
-	// An absent tenant cannot be checked, and answering "not a member" is the
-	// truthful reading: there is no tenant the caller belongs to here.
+	// The middleware rejects a token without tenantId, so an empty one here
+	// means the request never passed through it. Answering "not a member" is
+	// the truthful reading: there is no tenant the caller belongs to here.
+	tenantID := user.TenantID
 	if tenantID == "" {
 		return nil, ErrNotMember
 	}
@@ -129,7 +155,7 @@ func Status(err error) int {
 	switch {
 	case errors.Is(err, ErrNoIdentity):
 		return http.StatusUnauthorized
-	case errors.Is(err, ErrNotMember), errors.Is(err, ErrForbiddenRole):
+	case errors.Is(err, ErrNotMember), errors.Is(err, ErrForbiddenRole), errors.Is(err, ErrTenantMismatch):
 		return http.StatusForbidden
 	default:
 		return http.StatusInternalServerError
