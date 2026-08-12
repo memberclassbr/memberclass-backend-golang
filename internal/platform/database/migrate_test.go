@@ -1,10 +1,30 @@
 package database
 
 import (
+	"context"
+	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 )
+
+type fakeLogger struct{ infos []string }
+
+func (l *fakeLogger) Debug(string, ...any)      {}
+func (l *fakeLogger) Info(msg string, _ ...any) { l.infos = append(l.infos, msg) }
+func (l *fakeLogger) Warn(string, ...any)       {}
+func (l *fakeLogger) Error(string, ...any)      {}
+func (l *fakeLogger) said(substr string) bool {
+	for _, m := range l.infos {
+		if strings.Contains(m, substr) {
+			return true
+		}
+	}
+	return false
+}
 
 // The embedded transcription migrations are handed to the server as SQL by
 // MigrateTranscription — they are never fed to psql, and they never own their
@@ -100,6 +120,143 @@ func TestMigrationNames_AreOrderedAndUniquelyPrefixed(t *testing.T) {
 			t.Errorf("%s and %s share the prefix %q", other, name, prefix)
 		}
 		seen[prefix] = name
+	}
+}
+
+// Every migration needs a probe, so that adding one forces the question "how
+// would I recognise this as already applied?" to be answered while the artefact
+// is fresh in mind rather than during an incident.
+func TestMigrationProbes_CoverEveryMigration(t *testing.T) {
+	names, err := migrationNames()
+	if err != nil {
+		t.Fatalf("listing embedded migrations: %v", err)
+	}
+
+	for _, name := range names {
+		probe, ok := migrationProbes[name]
+		if !ok {
+			t.Errorf("%s has no entry in migrationProbes", name)
+			continue
+		}
+		if strings.TrimSpace(probe) == "" {
+			t.Errorf("%s has an empty probe", name)
+		}
+		// `::regclass` raises on a database that does not have the table;
+		// to_regclass returns NULL. A probe that raises fails the boot.
+		if strings.Contains(probe, "::regclass") {
+			t.Errorf("%s probe uses ::regclass, which raises when the table is absent; use to_regclass", name)
+		}
+	}
+
+	for name := range migrationProbes {
+		if !slices.Contains(names, name) {
+			t.Errorf("migrationProbes has an entry for %q, which is not an embedded migration", name)
+		}
+	}
+}
+
+// expectBookkeeping sets up the two calls MigrateTranscription always makes
+// before it looks at any individual migration: create the table, read it.
+func expectBookkeeping(mock sqlmock.Sqlmock) {
+	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE IF NOT EXISTS schema_migrations_go")).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT name FROM schema_migrations_go")).
+		WillReturnRows(sqlmock.NewRows([]string{"name"}))
+}
+
+// This is the production case the probes exist for: the schema was applied by
+// hand with `psql -f` long before the runner embedded these files, so the
+// bookkeeping table is empty while every artefact is already there. Nothing may
+// run — 002 alone would delete every row in chunks, transcripts and videos.
+func TestMigrateTranscription_AdoptsAMigrationWhoseEffectIsAlreadyPresent(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("opening sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	names, err := migrationNames()
+	if err != nil {
+		t.Fatalf("listing embedded migrations: %v", err)
+	}
+
+	expectBookkeeping(mock)
+	for range names {
+		mock.ExpectQuery("SELECT").
+			WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(true))
+		mock.ExpectExec(regexp.QuoteMeta("INSERT INTO schema_migrations_go")).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+	}
+	// No ExpectBegin anywhere: an adopted migration is never executed, so it
+	// never opens a transaction. sqlmock fails the test if one is opened.
+
+	log := &fakeLogger{}
+	if err := MigrateTranscription(context.Background(), db, log); err != nil {
+		t.Fatalf("MigrateTranscription: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+	if !log.said("Adopted transcription migration") {
+		t.Errorf("adoption was not logged; the boot log is the only record that it happened: %v", log.infos)
+	}
+}
+
+// The fresh-database case: no artefact is present, so every file runs, each in
+// its own transaction, with the shared-memory settings applied first.
+func TestMigrateTranscription_AppliesWhenNothingIsPresent(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("opening sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	names, err := migrationNames()
+	if err != nil {
+		t.Fatalf("listing embedded migrations: %v", err)
+	}
+
+	expectBookkeeping(mock)
+	for range names {
+		mock.ExpectQuery("SELECT").
+			WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(false))
+		mock.ExpectBegin()
+		mock.ExpectExec(regexp.QuoteMeta("SET LOCAL max_parallel_maintenance_workers")).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec("").WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec(regexp.QuoteMeta("INSERT INTO schema_migrations_go")).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+	}
+
+	log := &fakeLogger{}
+	if err := MigrateTranscription(context.Background(), db, log); err != nil {
+		t.Fatalf("MigrateTranscription: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+// A probe that cannot answer must not be read as "not applied" — that would
+// rerun a destructive migration on the one database where the probe mattered.
+func TestMigrateTranscription_FailsWhenAProbeErrors(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("opening sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	expectBookkeeping(mock)
+	mock.ExpectQuery("SELECT").WillReturnError(errors.New("permission denied for schema pg_catalog"))
+
+	log := &fakeLogger{}
+	err = MigrateTranscription(context.Background(), db, log)
+	if err == nil {
+		t.Fatal("boot continued after a probe failed")
+	}
+	if !strings.Contains(err.Error(), "already applied") {
+		t.Errorf("error does not say the probe is what failed: %v", err)
 	}
 }
 
