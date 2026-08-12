@@ -122,12 +122,18 @@ Four credentials, each guarding a different surface:
 
 | Credential | Header / cookie | Guards |
 |---|---|---|
-| Tenant external API key | `mc-api-key` | most of `/api/v1/*` |
+| Tenant external API key | `x-api-key` (legacy: `mc-api-key`) | most of `/api/v1/*` |
 | Internal API key | `x-internal-api-key` | `/api/v1/ai/*`, `/api/v1/sso/generate-token`, `/api/lessons/*` |
 | NextAuth session | `next-auth.session-token` cookie | `/api/comments` |
 | NextAuth Bearer JWT | `Authorization: Bearer` | `/imports/*` |
 
 The middlewares live in [internal/shared/middleware](internal/shared/middleware).
+
+The tenant key moved from `mc-api-key` to `x-api-key`. Both are accepted and
+`x-api-key` wins when a caller sends both; only `x-api-key` is documented in
+[swagger.yaml](swagger.yaml). The legacy name goes when its callers do —
+dropping it earlier would log out every integration in one deploy.
+
 The internal API key is checked inside the handlers that use it, not by a
 middleware; those checks reject an empty incoming key so an unset
 `INTERNAL_AI_API_KEY` cannot leave an endpoint open.

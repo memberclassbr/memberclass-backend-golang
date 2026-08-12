@@ -2,7 +2,7 @@
  "info": {
   "_postman_id": "memberclass-backend-golang",
   "name": "MemberClass Backend API",
-  "description": "Coleção completa do backend MemberClass (Go, Vertical Slice Architecture).\n\nCobre **todas as 34 rotas** montadas em `internal/app/router.go`, incluindo as internas (36 requests: `pdf-process` aparece três vezes, uma por `action`).\nAs pastas são organizadas **por credencial**, porque é a divisão que importa ao validar um deploy:\n\n| Pasta | Credencial | Header / cookie |\n|---|---|---|\n| 00 · Docs & saúde | nenhuma | — |\n| 01 · API do tenant | chave externa do tenant | `mc-api-key` |\n| 02 · Interno | chave interna | `x-internal-api-key` |\n| 03 · Frontend admin | JWT NextAuth / sessão | `Authorization: Bearer` / cookie `next-auth.session-token` |\n| 04 · Sem autenticação | nenhuma (proposital) | — |\n\n## Como usar\n\n1. Preencher as variáveis da coleção (aba **Variables**). No mínimo: `baseUrl`, `apiKey`, `internalAiApiKey`, `tenantId`, `email`.\n2. Rodar a pasta **00 · Docs & saúde** primeiro — se `/health` der 503 ou `/docs/` não responder, o serviço não está pronto e nada mais adianta.\n3. Rodar cada pasta no **Collection Runner**. Toda request traz três testes automáticos:\n   - rota está montada (não 404)\n   - credencial aceita (não 401/403)\n   - sem erro de servidor (não 5xx)\n4. Repetir removendo a credencial: as pastas 01–03 **devem** dar 401. Se passar sem credencial, é falha de segurança.\n\n## Ordem sugerida para validar uma migração\n\n1. `00 · Docs & saúde` — `/health` em 200: processo vivo e dependências alcançáveis.\n2. `01` → `GET /api/v1/vitrine` com `includeChildren=true` — banco do tenant conectado e árvore íntegra.\n3. `02` → `GET /api/v1/ai/transcription-stats` — comparar `total`/`transcribed` com a origem.\n4. `02` → `POST /api/v1/ai/search` — se der `count: 0` com transcrições existentes, o pgvector não migrou.\n5. `04` → `POST /api/v1/videos/upload` — exercita Redis (rate limit) e Spaces (bucket) de uma vez.\n6. `03` → `POST /imports/members` — valida `NEXTAUTH_SECRET`.\n\n## Formatos de erro (são contrato, os dois)\n\n- `{error, message}` — 405 e códigos não mapeados.\n- `{ok, error, errorCode}` — as falhas em que o cliente faz switch.\n",
+  "description": "Coleção completa do backend MemberClass (Go, Vertical Slice Architecture).\n\nCobre **todas as 34 rotas** montadas em `internal/app/router.go`, incluindo as internas (36 requests: `pdf-process` aparece três vezes, uma por `action`).\nAs pastas são organizadas **por credencial**, porque é a divisão que importa ao validar um deploy:\n\n| Pasta | Credencial | Header / cookie |\n|---|---|---|\n| 00 · Docs & saúde | nenhuma | — |\n| 01 · API do tenant | chave de API do tenant | `x-api-key` |\n| 02 · Interno | chave interna | `x-internal-api-key` |\n| 03 · Frontend admin | JWT NextAuth / sessão | `Authorization: Bearer` / cookie `next-auth.session-token` |\n| 04 · Sem autenticação | nenhuma (proposital) | — |\n\n## Como usar\n\n1. Preencher as variáveis da coleção (aba **Variables**). No mínimo: `baseUrl`, `apiKey`, `internalAiApiKey`, `tenantId`, `email`.\n2. Rodar a pasta **00 · Docs & saúde** primeiro — se `/health` der 503 ou `/docs/` não responder, o serviço não está pronto e nada mais adianta.\n3. Rodar cada pasta no **Collection Runner**. Toda request traz três testes automáticos:\n   - rota está montada (não 404)\n   - credencial aceita (não 401/403)\n   - sem erro de servidor (não 5xx)\n4. Repetir removendo a credencial: as pastas 01–03 **devem** dar 401. Se passar sem credencial, é falha de segurança.\n\n## Ordem sugerida para validar uma migração\n\n1. `00 · Docs & saúde` — `/health` em 200: processo vivo e dependências alcançáveis.\n2. `01` → `GET /api/v1/vitrine` com `includeChildren=true` — banco do tenant conectado e árvore íntegra.\n3. `02` → `GET /api/v1/ai/transcription-stats` — comparar `total`/`transcribed` com a origem.\n4. `02` → `POST /api/v1/ai/search` — se der `count: 0` com transcrições existentes, o pgvector não migrou.\n5. `04` → `POST /api/v1/videos/upload` — exercita Redis (rate limit) e Spaces (bucket) de uma vez.\n6. `03` → `POST /imports/members` — valida `NEXTAUTH_SECRET`.\n\n## Formatos de erro (são contrato, os dois)\n\n- `{error, message}` — 405 e códigos não mapeados.\n- `{ok, error, errorCode}` — as falhas em que o cliente faz switch.\n",
   "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
  },
  "item": [
@@ -129,8 +129,8 @@
    ]
   },
   {
-   "name": "01 · API do tenant (mc-api-key)",
-   "description": "Superfície pública consumida pelo frontend/integrações do cliente. Todas exigem `mc-api-key`; o tenant sai da chave. Quase todas passam também pelo rate limit por tenant.",
+   "name": "01 · API do tenant (x-api-key)",
+   "description": "Superfície pública consumida pelo frontend/integrações do cliente. Todas exigem `x-api-key`; o tenant sai da chave. Quase todas passam também pelo rate limit por tenant.",
    "item": [
     {
      "name": "POST /api/v1/auth — gerar magic link",
@@ -138,7 +138,7 @@
       "method": "POST",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        },
        {
@@ -157,7 +157,7 @@
         "auth"
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nGera um magic link de login para o e-mail informado. Usa o domínio customizado do tenant quando ele existe, senão o domínio padrão.\n\n**Como testar**\n1. Setar `{{apiKey}}` e `{{email}}`.\n2. Enviar. Copiar o `link` da resposta e abrir no browser para validar o login ponta a ponta.\n\n**Esperado:** 200 `{ok:true, link:\"https://...\"}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nGera um magic link de login para o e-mail informado. Usa o domínio customizado do tenant quando ele existe, senão o domínio padrão.\n\n**Como testar**\n1. Setar `{{apiKey}}` e `{{email}}`.\n2. Enviar. Copiar o `link` da resposta e abrir no browser para validar o login ponta a ponta.\n\n**Esperado:** 200 `{ok:true, link:\"https://...\"}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
       "body": {
        "mode": "raw",
        "raw": "{\n    \"email\": \"{{email}}\"\n}",
@@ -175,7 +175,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -229,7 +229,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -275,7 +275,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -355,7 +355,7 @@
       "method": "POST",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        },
        {
@@ -375,7 +375,7 @@
         "validate-token"
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** nenhum.\n\nValida um token SSO emitido por `/api/v1/sso/generate-token` e devolve os dados do usuário + tenant. Chamada pelo site externo do parceiro.\n\n**Como testar**\n1. Rodar antes o `POST /api/v1/sso/generate-token` (pasta 02) e guardar o `token`.\n2. Colar em `{{ssoToken}}` e enviar.\n3. Reenviar o mesmo token depois do TTL para conferir a expiração.\n\n**Esperado:** 200 `{user:{id,email,name,phone,document}, tenant:{id,name}}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** nenhum.\n\nValida um token SSO emitido por `/api/v1/sso/generate-token` e devolve os dados do usuário + tenant. Chamada pelo site externo do parceiro.\n\n**Como testar**\n1. Rodar antes o `POST /api/v1/sso/generate-token` (pasta 02) e guardar o `token`.\n2. Colar em `{{ssoToken}}` e enviar.\n3. Reenviar o mesmo token depois do TTL para conferir a expiração.\n\n**Esperado:** 200 `{user:{id,email,name,phone,document}, tenant:{id,name}}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
       "body": {
        "mode": "raw",
        "raw": "{\n    \"token\": \"{{ssoToken}}\"\n}",
@@ -587,7 +587,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -634,7 +634,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLista comentários do tenant com filtros e paginação.\n\n**Como testar**\n1. Rodar sem filtro para ver o volume total.\n2. Repetir filtrando por `status`, `courseId` e `answered` e conferir se a contagem cai.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLista comentários do tenant com filtros e paginação.\n\n**Como testar**\n1. Rodar sem filtro para ver o volume total.\n2. Repetir filtrando por `status`, `courseId` e `answered` e conferir se a contagem cai.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -643,7 +643,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -722,7 +722,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "invalid-key"
          }
         ],
@@ -777,7 +777,7 @@
       "method": "PATCH",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        },
        {
@@ -797,7 +797,7 @@
         "{{commentId}}"
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nResponde e/ou publica/despublica um comentário.\n\n**Como testar**\n1. Pegar um `commentId` da listagem acima.\n2. Enviar só `answer` para responder; só `published` para alternar visibilidade; os dois juntos também funcionam.\n3. Reconferir na listagem.\n\n**Esperado:** 200 com o comentário atualizado.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nResponde e/ou publica/despublica um comentário.\n\n**Como testar**\n1. Pegar um `commentId` da listagem acima.\n2. Enviar só `answer` para responder; só `published` para alternar visibilidade; os dois juntos também funcionam.\n3. Reconferir na listagem.\n\n**Esperado:** 200 com o comentário atualizado.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
       "body": {
        "mode": "raw",
        "raw": "{\n    \"answer\": \"Resposta do instrutor\",\n    \"published\": true\n}",
@@ -815,7 +815,7 @@
         "method": "PATCH",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -895,7 +895,7 @@
         "method": "PATCH",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -937,7 +937,7 @@
         "method": "PATCH",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -1001,7 +1001,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -1034,7 +1034,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** NENHUM — esta rota não passa pelo rate limit por tenant (comportamento legado, ver routes.go)\n\nMembros do tenant com suas concessões de acesso. Sem `email` pagina o cadastro inteiro; com `email` devolve só aquele membro — e-mail de outro tenant responde 404, não página vazia.\n\n`lastAccess` vem da entidade `LoginEvent`. Cada item de `deliveries` traz o ciclo de vida do pagamento, vindo de `MemberOnDelivery`: `status` (`active` / `expired` / `refunded` / `canceled`), `expiresAt`, `platform`, `externalSubscriptionId`, `canceledAt` e `lastEventAt`.\n\n**Os nulos têm significado, não são dado faltando.**\n\n| Campo | Null significa |\n|---|---|\n| `expiresAt` | acesso **vitalício** (compra única), não sem-informação |\n| `platform` | concessão feita à mão, sem webhook de gateway |\n| `externalSubscriptionId` | não veio de assinatura |\n| `canceledAt` | não cancelada |\n| `lastAccess` | o usuário nunca logou |\n\n`canceledAt` preenchido junto de `status: active` é assinatura cancelada cujo acesso ainda vale até `expiresAt`.\n\n**Como testar**\n1. Informar `{{email}}` de um usuário existente.\n2. Conferir `lastAccess`. Se vier `null` para alguém que sabidamente logou, a tabela `LoginEvent` não está sendo populada neste deploy — era esse o sintoma antes da correção, quando a query ainda lia `SystemLog`.\n3. Comparar `status` e `expiresAt` com o gateway, para um aluno cuja assinatura você conhece.\n4. Rodar sem `email` para paginar o cadastro inteiro.\n5. Testar com e-mail inexistente ou de outro tenant ⇒ 404 `USER_NOT_FOUND`.\n\nA resposta fica 5 min em cache no Redis (chave `user:informations:v2:...`), então uma alteração feita agora no banco pode não aparecer de imediato.\n\n**Esperado:** 200 `{users:[{userId, email, isPaid, deliveries[], lastAccess}], pagination}`. Ver a aba **Examples** para a forma completa.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** NENHUM — esta rota não passa pelo rate limit por tenant (comportamento legado, ver routes.go)\n\nMembros do tenant com suas concessões de acesso. Sem `email` pagina o cadastro inteiro; com `email` devolve só aquele membro — e-mail de outro tenant responde 404, não página vazia.\n\n`lastAccess` vem da entidade `LoginEvent`. Cada item de `deliveries` traz o ciclo de vida do pagamento, vindo de `MemberOnDelivery`: `status` (`active` / `expired` / `refunded` / `canceled`), `expiresAt`, `platform`, `externalSubscriptionId`, `canceledAt` e `lastEventAt`.\n\n**Os nulos têm significado, não são dado faltando.**\n\n| Campo | Null significa |\n|---|---|\n| `expiresAt` | acesso **vitalício** (compra única), não sem-informação |\n| `platform` | concessão feita à mão, sem webhook de gateway |\n| `externalSubscriptionId` | não veio de assinatura |\n| `canceledAt` | não cancelada |\n| `lastAccess` | o usuário nunca logou |\n\n`canceledAt` preenchido junto de `status: active` é assinatura cancelada cujo acesso ainda vale até `expiresAt`.\n\n**Como testar**\n1. Informar `{{email}}` de um usuário existente.\n2. Conferir `lastAccess`. Se vier `null` para alguém que sabidamente logou, a tabela `LoginEvent` não está sendo populada neste deploy — era esse o sintoma antes da correção, quando a query ainda lia `SystemLog`.\n3. Comparar `status` e `expiresAt` com o gateway, para um aluno cuja assinatura você conhece.\n4. Rodar sem `email` para paginar o cadastro inteiro.\n5. Testar com e-mail inexistente ou de outro tenant ⇒ 404 `USER_NOT_FOUND`.\n\nA resposta fica 5 min em cache no Redis (chave `user:informations:v2:...`), então uma alteração feita agora no banco pode não aparecer de imediato.\n\n**Esperado:** 200 `{users:[{userId, email, isPaid, deliveries[], lastAccess}], pagination}`. Ver a aba **Examples** para a forma completa.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -1043,7 +1043,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "{{apiKey}}"
          }
         ],
@@ -1116,7 +1116,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -1165,7 +1165,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nAulas concluídas pelo usuário, com filtro por curso e janela de datas.\n\n**Como testar**\n1. Rodar com `email`.\n2. Estreitar com `startDate`/`endDate` (ISO-8601) e conferir a queda na contagem.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nAulas concluídas pelo usuário, com filtro por curso e janela de datas.\n\n**Como testar**\n1. Rodar com `email`.\n2. Estreitar com `startDate`/`endDate` (ISO-8601) e conferir a queda na contagem.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -1174,7 +1174,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1245,7 +1245,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -1288,7 +1288,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLog de acessos/atividades do usuário.\n\n**Como testar**\n1. Rodar com `email`.\n2. Comparar o total com o do resumo (`/user/activity/summary`) no mesmo período.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLog de acessos/atividades do usuário.\n\n**Como testar**\n1. Rodar com `email`.\n2. Comparar o total com o do resumo (`/user/activity/summary`) no mesmo período.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -1297,7 +1297,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1380,7 +1380,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1414,7 +1414,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1484,7 +1484,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -1528,7 +1528,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nResumo agregado de atividade por usuário do tenant. Lê as tabelas de rollup alimentadas pelo cron de analytics.\n\n**Como testar**\n1. Rodar sem filtro.\n2. `noAccess=true` lista quem não acessou na janela — bom teste de migração, porque depende do rollup ter rodado.\n3. Se vier vazio num deploy novo, o rollup diário ainda não executou.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nResumo agregado de atividade por usuário do tenant. Lê as tabelas de rollup alimentadas pelo cron de analytics.\n\n**Como testar**\n1. Rodar sem filtro.\n2. `noAccess=true` lista quem não acessou na janela — bom teste de migração, porque depende do rollup ter rodado.\n3. Se vier vazio num deploy novo, o rollup diário ainda não executou.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -1537,7 +1537,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1582,7 +1582,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1631,7 +1631,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1676,7 +1676,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1717,7 +1717,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -1784,7 +1784,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -1822,7 +1822,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLedger de pagamentos do membro, lido de `PaymentEvent`. Substitui `GET /api/v1/users/purchases`.\n\n**Valores em centavos.** `amount: 19700` com `currency: \"BRL\"` são R$ 197,00 — é a menor unidade da moeda, como os gateways reportam. A formatação é do cliente; devolver decimal poria dinheiro em ponto flutuante.\n\n**Nulos têm significado.** O gateway nem sempre manda tudo:\n\n| Campo | Null significa |\n|---|---|\n| `amount` | valor não informado — **não** é zero |\n| `occurredAt` | gateway não mandou a hora dele; a ordenação cai para a hora de recebimento |\n| `deliveryName` | evento não aponta para uma entrega (ex.: chargeback antes da concessão resolver) |\n| `expiresAt` | sem data de expiração no evento |\n| `transactionId` / `subscriptionId` | evento sem correlação no gateway |\n\n**Campos internos não saem:** chave primária do evento, `tenantId`, `userId`, `deliveryId`, `externalEventId` (dedup de webhook) e `createdAt` (quando o webhook chegou, não quando o pagamento ocorreu).\n\n**Como testar**\n1. Informar `{{email}}` de um membro que tenha compra registrada.\n2. Rodar sem `type` para ver o ledger inteiro, estornos e cancelamentos incluídos.\n3. Filtrar por `type=purchase` e conferir que a contagem cai.\n4. Mandar `type=purchases` (com s) ⇒ 400 `INVALID_EVENT_TYPE`, não página vazia.\n5. Conferir `transactionId` contra o extrato do gateway.\n6. Comparar com a rota depreciada `/users/purchases`: mesma origem de dinheiro, dados bem mais rasos.\n\nA resposta fica 5 min em cache no Redis (chave `payment-events:...`).\n\n**Esperado:** 200 `{events:[...], pagination}`. Ver a aba **Examples**.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLedger de pagamentos do membro, lido de `PaymentEvent`. Substitui `GET /api/v1/users/purchases`.\n\n**Valores em centavos.** `amount: 19700` com `currency: \"BRL\"` são R$ 197,00 — é a menor unidade da moeda, como os gateways reportam. A formatação é do cliente; devolver decimal poria dinheiro em ponto flutuante.\n\n**Nulos têm significado.** O gateway nem sempre manda tudo:\n\n| Campo | Null significa |\n|---|---|\n| `amount` | valor não informado — **não** é zero |\n| `occurredAt` | gateway não mandou a hora dele; a ordenação cai para a hora de recebimento |\n| `deliveryName` | evento não aponta para uma entrega (ex.: chargeback antes da concessão resolver) |\n| `expiresAt` | sem data de expiração no evento |\n| `transactionId` / `subscriptionId` | evento sem correlação no gateway |\n\n**Campos internos não saem:** chave primária do evento, `tenantId`, `userId`, `deliveryId`, `externalEventId` (dedup de webhook) e `createdAt` (quando o webhook chegou, não quando o pagamento ocorreu).\n\n**Como testar**\n1. Informar `{{email}}` de um membro que tenha compra registrada.\n2. Rodar sem `type` para ver o ledger inteiro, estornos e cancelamentos incluídos.\n3. Filtrar por `type=purchase` e conferir que a contagem cai.\n4. Mandar `type=purchases` (com s) ⇒ 400 `INVALID_EVENT_TYPE`, não página vazia.\n5. Conferir `transactionId` contra o extrato do gateway.\n6. Comparar com a rota depreciada `/users/purchases`: mesma origem de dinheiro, dados bem mais rasos.\n\nA resposta fica 5 min em cache no Redis (chave `payment-events:...`).\n\n**Esperado:** 200 `{events:[...], pagination}`. Ver a aba **Examples**.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -1831,7 +1831,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "{{apiKey}}"
          }
         ],
@@ -1908,7 +1908,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -1946,7 +1946,7 @@
         }
        ]
       },
-      "description": "**⚠️ DEPRECADO — use `GET /api/v1/users/payment-events`.**\n\nLê a tabela antiga `UserEvent`, que só registra que algo aconteceu e quando. O `updatedAt` da resposta é cópia do `createdAt`, não um segundo carimbo. A rota sucessora lê `PaymentEvent` e informa quanto foi pago, em qual plataforma, de qual plano e até quando o acesso vale.\n\nContinua respondendo sem mudança de contrato — a resposta agora traz os cabeçalhos `Deprecation: true` e `Link: </api/v1/users/payment-events>; rel=\"successor-version\"`.\n\n**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nCompras e reembolsos do usuário. Prefixo plural `/users` — é assim desde sempre, não confundir com `/user`.\n\n**Como testar**\n1. Rodar com `email`.\n2. Filtrar por `type` para separar compra de reembolso.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**⚠️ DEPRECADO — use `GET /api/v1/users/payment-events`.**\n\nLê a tabela antiga `UserEvent`, que só registra que algo aconteceu e quando. O `updatedAt` da resposta é cópia do `createdAt`, não um segundo carimbo. A rota sucessora lê `PaymentEvent` e informa quanto foi pago, em qual plataforma, de qual plano e até quando o acesso vale.\n\nContinua respondendo sem mudança de contrato — a resposta agora traz os cabeçalhos `Deprecation: true` e `Link: </api/v1/users/payment-events>; rel=\"successor-version\"`.\n\n**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nCompras e reembolsos do usuário. Prefixo plural `/users` — é assim desde sempre, não confundir com `/user`.\n\n**Como testar**\n1. Rodar com `email`.\n2. Filtrar por `type` para separar compra de reembolso.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -1955,7 +1955,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2003,7 +2003,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2090,7 +2090,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2124,7 +2124,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2172,7 +2172,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2242,7 +2242,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -2280,7 +2280,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nRelatório consolidado de alunos do tenant.\n\n**Como testar**\n1. Rodar sem filtro para o total.\n2. Aplicar a janela de datas e conferir a variação.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nRelatório consolidado de alunos do tenant.\n\n**Como testar**\n1. Rodar sem filtro para o total.\n2. Aplicar a janela de datas e conferir a variação.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -2289,7 +2289,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2372,7 +2372,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2416,7 +2416,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2464,7 +2464,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2538,7 +2538,7 @@
       "method": "POST",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        },
        {
@@ -2557,7 +2557,7 @@
         "social"
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nCria um post na comunidade, ou atualiza um existente quando `postId` vem preenchido.\n\n**Como testar**\n1. Enviar sem `postId` ⇒ cria; guardar o `id` da resposta.\n2. Reenviar com `postId` = aquele id ⇒ atualiza.\n3. Conferir no frontend do tenant.\n\n**Esperado:** 200 `{ok:true, id:\"...\"}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nCria um post na comunidade, ou atualiza um existente quando `postId` vem preenchido.\n\n**Como testar**\n1. Enviar sem `postId` ⇒ cria; guardar o `id` da resposta.\n2. Reenviar com `postId` = aquele id ⇒ atualiza.\n3. Conferir no frontend do tenant.\n\n**Esperado:** 200 `{ok:true, id:\"...\"}`.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
       "body": {
        "mode": "raw",
        "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"topicId\": \"\",\n    \"postId\": \"\",\n    \"title\": \"Post de teste\",\n    \"content\": \"Conteúdo do post\",\n    \"image\": null,\n    \"videoEmbed\": null\n}",
@@ -2575,7 +2575,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -2616,7 +2616,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -2657,7 +2657,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -2698,7 +2698,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -2739,7 +2739,7 @@
         "method": "POST",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          },
          {
@@ -2802,7 +2802,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -2817,7 +2817,7 @@
         "vitrine"
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLista as vitrines (catálogo) do tenant.\n\n**Como testar**\n1. Rodar e guardar um `id` em `{{vitrineId}}` para as próximas requests da pasta.\n\n**Esperado:** 200 com a lista de vitrines.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLista as vitrines (catálogo) do tenant.\n\n**Como testar**\n1. Rodar e guardar um `id` em `{{vitrineId}}` para as próximas requests da pasta.\n\n**Esperado:** 200 com a lista de vitrines.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -2826,7 +2826,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2909,7 +2909,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -2932,7 +2932,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUma vitrine. Com `includeChildren=true` desce a árvore (cursos → módulos → aulas).\n\n**Como testar**\n1. Rodar com `includeChildren=false` e depois `true`, comparando o tamanho do payload.\n2. É a request mais pesada do catálogo — boa para medir latência pós-migração.\n\n**Esperado:** 200 com a vitrine.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUma vitrine. Com `includeChildren=true` desce a árvore (cursos → módulos → aulas).\n\n**Como testar**\n1. Rodar com `includeChildren=false` e depois `true`, comparando o tamanho do payload.\n2. É a request mais pesada do catálogo — boa para medir latência pós-migração.\n\n**Esperado:** 200 com a vitrine.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -2941,7 +2941,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -2981,7 +2981,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -3037,7 +3037,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -3061,7 +3061,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUm curso do catálogo.\n\n**Como testar**\n1. Pegar um `courseId` da vitrine com `includeChildren=true`.\n\n**Esperado:** 200 com o curso.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUm curso do catálogo.\n\n**Como testar**\n1. Pegar um `courseId` da vitrine com `includeChildren=true`.\n\n**Esperado:** 200 com o curso.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -3070,7 +3070,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -3111,7 +3111,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -3168,7 +3168,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -3192,7 +3192,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUm módulo do catálogo.\n\n**Como testar**\n1. Pegar um `moduleId` do curso acima.\n\n**Esperado:** 200 com o módulo.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUm módulo do catálogo.\n\n**Como testar**\n1. Pegar um `moduleId` do curso acima.\n\n**Esperado:** 200 com o módulo.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -3201,7 +3201,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -3242,7 +3242,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -3299,7 +3299,7 @@
       "method": "GET",
       "header": [
        {
-        "key": "mc-api-key",
+        "key": "x-api-key",
         "value": "{{apiKey}}"
        }
       ],
@@ -3316,7 +3316,7 @@
         "{{lessonId}}"
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUma aula do catálogo. Não aceita `includeChildren` — a aula é a folha da árvore.\n\n**Como testar**\n1. Pegar um `lessonId` do módulo acima e guardar em `{{lessonId}}` — as rotas internas de PDF e transcrição usam o mesmo id.\n\n**Esperado:** 200 com a aula.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `x-api-key: {{apiKey}}` — chave de API do tenant (`AuthExternalMiddleware`). O nome antigo `mc-api-key` continua aceito para integrações que ainda não migraram, mas não é mais documentado — use `x-api-key` em código novo. O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nUma aula do catálogo. Não aceita `includeChildren` — a aula é a folha da árvore.\n\n**Como testar**\n1. Pegar um `lessonId` do módulo acima e guardar em `{{lessonId}}` — as rotas internas de PDF e transcrição usam o mesmo id.\n\n**Esperado:** 200 com a aula.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
@@ -3325,7 +3325,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -3360,7 +3360,7 @@
         "method": "GET",
         "header": [
          {
-          "key": "mc-api-key",
+          "key": "x-api-key",
           "value": "valid-api-key"
          }
         ],
@@ -3450,7 +3450,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `x-internal-api-key: {{internalAiApiKey}}` — deve bater com `INTERNAL_AI_API_KEY`. Validado dentro do handler, não por middleware. Chave vazia no servidor ⇒ 401 sempre.\n**Rate limit:** por tenant\n\nEmite um token SSO de curta duração para um usuário do tenant e devolve a URL de redirect. O par desta rota é o `validate-token` (pasta 01), que usa `mc-api-key`.\n\n**Como testar**\n1. Preencher `userId` e `tenantId`.\n2. `externalUrl` na query define o destino do redirect.\n3. Guardar o `token` em `{{ssoToken}}` e validar na pasta 01.\n\n**Esperado:** 200 `{token, redirectUrl, expiresInSecs}`.\n**Sem/errada a credencial:** 401 `{ok:false, errorCode:\"UNAUTHORIZED\"}`.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "description": "**Auth:** header `x-internal-api-key: {{internalAiApiKey}}` — deve bater com `INTERNAL_AI_API_KEY`. Validado dentro do handler, não por middleware. Chave vazia no servidor ⇒ 401 sempre.\n**Rate limit:** por tenant\n\nEmite um token SSO de curta duração para um usuário do tenant e devolve a URL de redirect. O par desta rota é o `validate-token` (pasta 01), que usa `x-api-key`.\n\n**Como testar**\n1. Preencher `userId` e `tenantId`.\n2. `externalUrl` na query define o destino do redirect.\n3. Guardar o `token` em `{{ssoToken}}` e validar na pasta 01.\n\n**Esperado:** 200 `{token, redirectUrl, expiresInSecs}`.\n**Sem/errada a credencial:** 401 `{ok:false, errorCode:\"UNAUTHORIZED\"}`.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
       "body": {
        "mode": "raw",
        "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"tenantId\": \"{{tenantId}}\"\n}",
@@ -5417,7 +5417,7 @@
   },
   {
    "name": "03 · Frontend admin (Bearer / cookie)",
-   "description": "Chamadas vindas do Next.js. Credenciais diferentes das outras pastas — se estas falharem mas as de `mc-api-key` passarem, o problema é `NEXTAUTH_SECRET`.",
+   "description": "Chamadas vindas do Next.js. Credenciais diferentes das outras pastas — se estas falharem mas as de `x-api-key` passarem, o problema é `NEXTAUTH_SECRET`.",
    "item": [
     {
      "name": "POST /imports/members — importar membros",
@@ -5528,7 +5528,7 @@
         }
        ]
       },
-      "description": "**Auth:** cookie `next-auth.session-token={{sessionToken}}` — sessão NextAuth (`AuthMiddleware`).\n**Rate limit:** nenhum.\n\nMesmo handler de `GET /api/v1/comments`, no prefixo antigo `/api/comments` e com credencial diferente: cookie de sessão NextAuth em vez de `mc-api-key`. Mantida para o frontend legado.\n\n**Como testar**\n1. Logar no painel, copiar o valor do cookie `next-auth.session-token` do DevTools para `{{sessionToken}}`.\n2. Comparar a resposta com a de `GET /api/v1/comments` — o corpo deve ser igual.\n3. Sem cookie ⇒ 401.\n\n**Esperado:** 200 com a mesma lista da rota v1.\n**Sem cookie:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** cookie `next-auth.session-token={{sessionToken}}` — sessão NextAuth (`AuthMiddleware`).\n**Rate limit:** nenhum.\n\nMesmo handler de `GET /api/v1/comments`, no prefixo antigo `/api/comments` e com credencial diferente: cookie de sessão NextAuth em vez de `x-api-key`. Mantida para o frontend legado.\n\n**Como testar**\n1. Logar no painel, copiar o valor do cookie `next-auth.session-token` do DevTools para `{{sessionToken}}`.\n2. Comparar a resposta com a de `GET /api/v1/comments` — o corpo deve ser igual.\n3. Sem cookie ⇒ 401.\n\n**Esperado:** 200 com a mesma lista da rota v1.\n**Sem cookie:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [],
      "event": [
@@ -5777,7 +5777,7 @@
   {
    "key": "apiKey",
    "value": "",
-   "description": "Chave externa do tenant → header mc-api-key. Pasta 01."
+   "description": "Chave de API do tenant → header x-api-key (o legado mc-api-key ainda é aceito). Pasta 01."
   },
   {
    "key": "internalAiApiKey",

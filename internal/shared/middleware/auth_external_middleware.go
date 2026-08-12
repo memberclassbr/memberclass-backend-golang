@@ -24,9 +24,21 @@ const sqlTenantByToken = `
 	LIMIT 1
 `
 
-// AuthExternalMiddleware authenticates a tenant by the `mc-api-key` header.
-// The header carries the plaintext key; the database stores its SHA-256, so
-// the middleware hashes before looking up.
+const (
+	// APIKeyHeader is the header a tenant authenticates with.
+	APIKeyHeader = "x-api-key"
+
+	// LegacyAPIKeyHeader is the name the same key used to be sent under. It is
+	// still accepted, and unadvertised: swagger documents only APIKeyHeader.
+	// Dropping it would log out every integration in one deploy, so it goes
+	// when the callers do, not before.
+	LegacyAPIKeyHeader = "mc-api-key"
+)
+
+// AuthExternalMiddleware authenticates a tenant by its API key, read from
+// x-api-key or, for callers that have not migrated, mc-api-key. The header
+// carries the plaintext key; the database stores its SHA-256, so the
+// middleware hashes before looking up.
 type AuthExternalMiddleware struct {
 	db  *sql.DB
 	log logger.Logger
@@ -40,7 +52,7 @@ func NewAuthExternalMiddleware(db *sql.DB, log logger.Logger) *AuthExternalMiddl
 // puts that tenant in the request context for downstream handlers.
 func (m *AuthExternalMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.Header.Get("mc-api-key")
+		key := apiKeyFrom(r)
 		if key == "" {
 			sendInvalidAPIKey(w)
 			return
@@ -57,6 +69,19 @@ func (m *AuthExternalMiddleware) Authenticate(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), tenant.ContextKey, found)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// apiKeyFrom reads the tenant key, preferring the current header name.
+//
+// A caller sending both wins with x-api-key rather than being rejected for the
+// ambiguity: during a migration the two are the same key, and failing a request
+// that carries a valid credential would be a worse answer than picking the
+// header we are asking everyone to move to.
+func apiKeyFrom(r *http.Request) string {
+	if key := r.Header.Get(APIKeyHeader); key != "" {
+		return key
+	}
+	return r.Header.Get(LegacyAPIKeyHeader)
 }
 
 func (m *AuthExternalMiddleware) tenantByKey(ctx context.Context, key string) (*tenant.Tenant, error) {

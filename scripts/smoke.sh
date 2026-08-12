@@ -9,7 +9,7 @@
 #
 # Usage:
 #   BASE_URL=https://api.example.com \
-#   MC_API_KEY=...            # tenant external API key
+#   MC_API_KEY=...            # tenant API key, sent as x-api-key
 #   INTERNAL_API_KEY=...      # x-internal-api-key
 #   BEARER_TOKEN=...          # NextAuth go-token JWT
 #   TENANT_ID=...             # a tenant id, for the AI endpoints
@@ -102,7 +102,7 @@ section "tenant endpoints (mc-api-key)"
 if [[ -z "$MC_API_KEY" ]]; then
   skip "tenant endpoints" "set MC_API_KEY"
 else
-  H=(-H "mc-api-key: $MC_API_KEY")
+  H=(-H "x-api-key: $MC_API_KEY")
 
   check 200 "GET  /api/v1/vitrine"                "${H[@]}" "$BASE_URL/api/v1/vitrine"
   check 200 "GET  /api/v1/comments"               "${H[@]}" "$BASE_URL/api/v1/comments"

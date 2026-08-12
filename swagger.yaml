@@ -46,7 +46,9 @@ paths:
       description: |
         Retorna uma lista paginada de comentários do tenant com filtros opcionais.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Filtros disponíveis:**
         - `email`: Filtra por email do usuário (busca parcial, case insensitive)
@@ -57,7 +59,7 @@ paths:
         **Paginação:** Suporta parâmetros `page` e `limit` via query string.
       operationId: getComments
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -192,7 +194,9 @@ paths:
         Retorna uma lista paginada de informações dos usuários do tenant, incluindo
         entregas (deliveries) associadas e último acesso.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Filtros disponíveis:**
         - `email`: Filtra por email do usuário (busca parcial)
@@ -204,7 +208,7 @@ paths:
       security:
         - ApiKeyAuth: []
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           schema:
@@ -350,7 +354,7 @@ paths:
         | `quiz` | `StudentQuiz` (não deletado) |
         | `certificate` | `UserCertificates` |
 
-        **Autenticação:** header `mc-api-key`.
+        **Autenticação:** header `x-api-key`.
 
         **Cache:** em produção, respostas são cacheadas por 5 minutos no Redis e
         trazem o bloco `cache: {cachedAt, refreshAt}`. Em desenvolvimento
@@ -372,7 +376,7 @@ paths:
           usado literalmente — `2026-08-13T00:00:00Z` exclui o dia 13.
       operationId: getUserActivities
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -548,7 +552,9 @@ paths:
       description: |
         Retorna um resumo de atividade dos usuários de um tenant, mostrando o email e o último acesso de cada usuário.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Regras de Data:**
         - Se `startDate` e `endDate` não informados → últimos **31 dias-calendário
@@ -567,7 +573,7 @@ paths:
         **noAccess:** Se `true`, retorna usuários SEM atividade no período. Se `false` (padrão), retorna usuários COM atividade.
       operationId: getActivitySummary
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -687,7 +693,9 @@ paths:
       description: |
         Retorna as aulas concluídas por um usuário específico, com informações do curso e data de conclusão.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Regras de Data:**
         - Se `startDate` e `endDate` não informados → últimos **31 dias-calendário
@@ -706,7 +714,7 @@ paths:
         **Cache:** Esta rota **NÃO usa cache** no Redis (dados em tempo real por usuário).
       operationId: getLessonsCompleted
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -855,7 +863,7 @@ paths:
         Ledger de pagamentos de um membro do tenant, lido de `PaymentEvent`.
         Substitui `GET /api/v1/users/purchases`.
 
-        **Autenticação:** header `mc-api-key`.
+        **Autenticação:** header `x-api-key`.
 
         **Cache:** Redis, TTL de 300 segundos.
 
@@ -875,7 +883,7 @@ paths:
         pagamento ocorreu) ficam de fora.
       operationId: getUserPaymentEvents
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API do tenant
@@ -983,7 +991,9 @@ paths:
 
         Retorna uma lista paginada de compras e reembolsos de um usuário específico.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos) para melhorar a performance.
         
@@ -992,7 +1002,7 @@ paths:
         **Filtro por tipo:** É possível filtrar as transações por tipo (purchase ou refund) usando o parâmetro `type`.
       operationId: getUserPurchases
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1123,7 +1133,9 @@ paths:
       description: |
         Cria um novo post em um tópico ou atualiza um post existente, com validação de tenant, usuário e permissões.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Fluxo:**
         1. Se `postId` for fornecido, atualiza o post existente (apenas owner ou dono do post)
@@ -1135,7 +1147,7 @@ paths:
         - Owners podem postar em qualquer tópico
       operationId: createOrUpdatePost
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -1226,7 +1238,7 @@ paths:
                   summary: API key não informada
                   value:
                     ok: false
-                    error: "Header mc-api-key é obrigatório"
+                    error: "Header x-api-key é obrigatório"
                     errorCode: "MISSING_API_KEY"
                 invalidApiKey:
                   summary: API key inválida
@@ -1296,7 +1308,9 @@ paths:
       description: |
         Atualiza parcialmente a resposta e o status de publicação de um comentário específico.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: updateCommentPartial
       parameters:
         - name: commentID
@@ -1306,7 +1320,7 @@ paths:
           schema:
             type: string
           example: "comment-123"
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1366,7 +1380,9 @@ paths:
       description: |
         Retorna um relatório detalhado dos alunos de um tenant, incluindo informações de cadastro, entregas vinculadas, acessos e aulas assistidas.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos). A chave de cache é gerada usando MD5 hash dos parâmetros.
         
@@ -1378,7 +1394,7 @@ paths:
         **Formato de Data:** ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)
       operationId: getStudentReport
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação (hash SHA256)
@@ -1486,7 +1502,7 @@ paths:
                   summary: API key não informada
                   value:
                     ok: false
-                    error: "Header mc-api-key é obrigatório"
+                    error: "Header x-api-key é obrigatório"
                     errorCode: "MISSING_API_KEY"
                 invalidApiKey:
                   summary: API key inválida
@@ -1513,12 +1529,14 @@ paths:
       description: |
         Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > seções > módulos > aulas.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         O tenant é identificado automaticamente pelo token de API.
       operationId: getVitrines
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1553,10 +1571,12 @@ paths:
       description: |
         Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, seções, módulos e aulas) através do parâmetro `includeChildren`.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getVitrine
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1606,10 +1626,12 @@ paths:
       description: |
         Retorna um curso específico pelo ID. Pode incluir ou não os filhos (seções, módulos e aulas) através do parâmetro `includeChildren`.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getCourse
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1659,10 +1681,12 @@ paths:
       description: |
         Retorna um módulo específico pelo ID. Pode incluir ou não os filhos (aulas) através do parâmetro `includeChildren`.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getModule
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1712,10 +1736,12 @@ paths:
       description: |
         Retorna uma aula específica pelo ID. Aulas não possuem filhos.
         
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getLesson
       parameters:
-        - name: mc-api-key
+        - name: x-api-key
           in: header
           required: true
           description: Token de API para autenticação
@@ -1757,10 +1783,12 @@ paths:
       description: |
         Gera um link de login (magic link) para o usuário autenticado no tenant.
 
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       parameters:
         - in: header
-          name: mc-api-key
+          name: x-api-key
           required: true
           schema:
             type: string
@@ -1844,10 +1872,12 @@ paths:
       description: |
         Valida um token SSO e retorna os dados do usuário e tenant associados.
 
-        **Autenticação:** Requer header `mc-api-key` com token de API válido.
+        **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
+        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        migraram, mas não é mais documentado — use `x-api-key` em código novo.
       parameters:
         - in: header
-          name: mc-api-key
+          name: x-api-key
           required: true
           schema:
             type: string
