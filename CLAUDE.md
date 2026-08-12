@@ -53,9 +53,9 @@ duplicate it until the duplication actually hurts, then extract to
 contract next to its implementation — there is no separate ports package.
 
 `internal/shared` is code several slices need but nothing outside the process
-cares about: `tenant` (the request's tenant + context key), `session` (the
-NextAuth payload), `middleware`, `httpx`, `memberclasserrors`, `pagination`,
-`constants`, `utils`.
+cares about: `tenant` (the request's tenant + context key), `middleware`,
+`tenantrole`, `magiclink`, `httpx`, `memberclasserrors`, `pagination`,
+`datefilter`, `constants`, `utils`.
 
 ### Rules for new work
 
@@ -118,16 +118,24 @@ Default port is `8181`.
 
 ## Authentication
 
-Four credentials, each guarding a different surface:
+Three credentials, each guarding a different surface, and **all three travel in
+a header**:
 
-| Credential | Header / cookie | Guards |
+| Credential | Header | Guards |
 |---|---|---|
 | Tenant external API key | `x-api-key` (legacy: `mc-api-key`) | most of `/api/v1/*` |
 | Internal API key | `x-internal-api-key` | `/api/v1/ai/*`, `/api/lessons/*` |
-| NextAuth session | `next-auth.session-token` cookie | `/api/comments` |
 | go-token Bearer JWT | `Authorization: Bearer` | `/imports/*`, `/sso/*`, `/videos/*` |
 
 The middlewares live in [internal/shared/middleware](internal/shared/middleware).
+
+There used to be a fourth: the NextAuth session cookie, on `GET /api/comments`.
+Both are gone. That route was a second mount of the `/api/v1/comments` listing
+with no callers left, and being cookie-authenticated it was the only thing here
+reachable with a credential a browser attaches by itself — which is what forced
+the CORS policy to allow credentials. Removing it is what lets that policy be a
+literal `*`. **No ambient credential reaches this service any more, so CSRF has
+nothing to work with.**
 
 The tenant key moved from `mc-api-key` to `x-api-key`. Both are accepted and
 `x-api-key` wins when a caller sends both; only `x-api-key` is documented in
@@ -269,23 +277,22 @@ One policy on the root router: a literal `*`, no Origin reflection, no
 The last two are the point. Reflecting the Origin *and* allowing credentials —
 which is what this sent until the go-token work — is the pair browsers read as
 "any site may make an authenticated cross-origin request here and read the
-reply". `GET /api/comments` authenticates with the `next-auth.session-token`
+reply". `GET /api/comments` authenticated with the `next-auth.session-token`
 cookie, so any page could have driven it with a visitor's session attached.
 
-A literal `*` forbids that rather than discouraging it: a browser will not send
-credentials to a wildcard origin at all. The wildcard is the enforcement, not a
-relaxation.
+Two changes closed that, and they belong together: the cookie route was removed,
+and the policy became a literal `*` with credentials off. Either alone would
+have been weaker — the wildcard is the enforcement, because a browser will not
+send credentials to a wildcard origin at all.
 
 It stays a wildcard rather than an allowlist because tenants bring their own
-custom domains and the set is not enumerable from a deployment. Every other
-credential travels in a header a browser will not attach on its own — `Bearer`,
-`x-api-key`, `x-internal-api-key` — so a cross-origin request from an attacker's
-page arrives unauthenticated.
+custom domains and the set is not enumerable from a deployment. Nothing is given
+away by that now: every credential this service accepts travels in a header a
+browser will not attach on its own, so a cross-origin request from an attacker's
+page arrives unauthenticated — a request from nobody.
 
-The cookie route is the exception, and it now cannot be called cross-origin from
-a browser by anyone. Same-origin and server-side callers are unaffected. If a
-browser on another origin ever needs it, move that route onto a header
-credential rather than widening this back.
+If a route ever needs to be callable cross-origin from a browser *with* a
+credential, give it a header credential. Do not widen this back.
 
 ## Rate limiting
 

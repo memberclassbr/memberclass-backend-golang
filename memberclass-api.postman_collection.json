@@ -2,7 +2,7 @@
  "info": {
   "_postman_id": "memberclass-backend-golang",
   "name": "MemberClass Backend API",
-  "description": "Coleção completa do backend MemberClass (Go, Vertical Slice Architecture).\n\nCobre **todas as 34 rotas** montadas em `internal/app/router.go`, incluindo as internas (36 requests: `pdf-process` aparece três vezes, uma por `action`).\nAs pastas são organizadas **por credencial**, porque é a divisão que importa ao validar um deploy:\n\n| Pasta | Credencial | Header / cookie |\n|---|---|---|\n| 00 · Docs & saúde | nenhuma | — |\n| 01 · API do tenant | chave de API do tenant | `x-api-key` |\n| 02 · Interno | chave interna | `x-internal-api-key` |\n| 03 · Frontend admin | JWT go-token / sessão | `Authorization: Bearer` / cookie `next-auth.session-token` |\n\nAs três rotas da pasta 03 que usam Bearer — `/imports/members`, `/sso/generate-token` e `/videos/upload` — ficam na raiz, sem o prefixo `/api`. O token é emitido em `/api/auth/go-token?tenantId=X`, assinado com `GO_API_JWT_SECRET`, e traz `tenantId` + `aud`. **O tenant de toda request sai dessa claim**, nunca do corpo; o corpo pode repeti-lo e é conferido (diferente ⇒ 403). A role é relida de `\"UsersOnTenants\"` a cada chamada, para que um rebaixamento valha antes do token expirar.\n| 04 · Sem autenticação | nenhuma | — (vazia: `videos/upload` migrou para a 03) |\n\n## Como usar\n\n1. Preencher as variáveis da coleção (aba **Variables**). No mínimo: `baseUrl`, `apiKey`, `internalAiApiKey`, `tenantId`, `email`.\n2. Rodar a pasta **00 · Docs & saúde** primeiro — se `/health` der 503 ou `/docs/` não responder, o serviço não está pronto e nada mais adianta.\n3. Rodar cada pasta no **Collection Runner**. Toda request traz três testes automáticos:\n   - rota está montada (não 404)\n   - credencial aceita (não 401/403)\n   - sem erro de servidor (não 5xx)\n4. Repetir removendo a credencial: as pastas 01–03 **devem** dar 401. Se passar sem credencial, é falha de segurança.\n\n## Ordem sugerida para validar uma migração\n\n1. `00 · Docs & saúde` — `/health` em 200: processo vivo e dependências alcançáveis.\n2. `01` → `GET /api/v1/vitrine` com `includeChildren=true` — banco do tenant conectado e árvore íntegra.\n3. `02` → `GET /api/v1/ai/transcription-stats` — comparar `total`/`transcribed` com a origem.\n4. `02` → `POST /api/v1/ai/search` — se der `count: 0` com transcrições existentes, o pgvector não migrou.\n5. `03` → `POST /videos/upload` — exercita Redis (rate limit) e Spaces (bucket) de uma vez.\n6. `03` → `POST /imports/members` — valida `GO_API_JWT_SECRET` e o corte `owner`/`admin`.\n\n## Formatos de erro (são contrato, os dois)\n\n- `{error, message}` — 405 e códigos não mapeados.\n- `{ok, error, errorCode}` — as falhas em que o cliente faz switch.\n",
+  "description": "Coleção completa do backend MemberClass (Go, Vertical Slice Architecture).\n\nCobre **todas as 33 rotas** montadas em `internal/app/router.go`, incluindo as internas (35 requests: `pdf-process` aparece três vezes, uma por `action`).\nAs pastas são organizadas **por credencial**, porque é a divisão que importa ao validar um deploy:\n\n| Pasta | Credencial | Header / cookie |\n|---|---|---|\n| 00 · Docs & saúde | nenhuma | — |\n| 01 · API do tenant | chave de API do tenant | `x-api-key` |\n| 02 · Interno | chave interna | `x-internal-api-key` |\n| 03 · Frontend admin | JWT go-token | `Authorization: Bearer` |\n\nA listagem legada `GET /api/comments`, que autenticava por cookie `next-auth.session-token`, foi **removida**: não tinha chamador, e era a única rota alcançável com credencial que o browser anexa sozinho — o que obrigava o CORS a permitir credenciais. `GET /api/v1/comments` (pasta 01) é a listagem viva e não mudou.\n\nAs três rotas da pasta 03 — `/imports/members`, `/sso/generate-token` e `/videos/upload` — ficam na raiz, sem o prefixo `/api`. O token é emitido em `/api/auth/go-token?tenantId=X`, assinado com `GO_API_JWT_SECRET`, e traz `tenantId` + `aud`. **O tenant de toda request sai dessa claim**, nunca do corpo; o corpo pode repeti-lo e é conferido (diferente ⇒ 403). A role é relida de `\"UsersOnTenants\"` a cada chamada, para que um rebaixamento valha antes do token expirar.\n| 04 · Sem autenticação | nenhuma | — (vazia: `videos/upload` migrou para a 03) |\n\n## Como usar\n\n1. Preencher as variáveis da coleção (aba **Variables**). No mínimo: `baseUrl`, `apiKey`, `internalAiApiKey`, `tenantId`, `email`.\n2. Rodar a pasta **00 · Docs & saúde** primeiro — se `/health` der 503 ou `/docs/` não responder, o serviço não está pronto e nada mais adianta.\n3. Rodar cada pasta no **Collection Runner**. Toda request traz três testes automáticos:\n   - rota está montada (não 404)\n   - credencial aceita (não 401/403)\n   - sem erro de servidor (não 5xx)\n4. Repetir removendo a credencial: as pastas 01–03 **devem** dar 401. Se passar sem credencial, é falha de segurança.\n\n## Ordem sugerida para validar uma migração\n\n1. `00 · Docs & saúde` — `/health` em 200: processo vivo e dependências alcançáveis.\n2. `01` → `GET /api/v1/vitrine` com `includeChildren=true` — banco do tenant conectado e árvore íntegra.\n3. `02` → `GET /api/v1/ai/transcription-stats` — comparar `total`/`transcribed` com a origem.\n4. `02` → `POST /api/v1/ai/search` — se der `count: 0` com transcrições existentes, o pgvector não migrou.\n5. `03` → `POST /videos/upload` — exercita Redis (rate limit) e Spaces (bucket) de uma vez.\n6. `03` → `POST /imports/members` — valida `GO_API_JWT_SECRET` e o corte `owner`/`admin`.\n\n## Formatos de erro (são contrato, os dois)\n\n- `{error, message}` — 405 e códigos não mapeados.\n- `{ok, error, errorCode}` — as falhas em que o cliente faz switch.\n",
   "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
  },
  "item": [
@@ -5231,82 +5231,6 @@
         }
        }
       }
-     },
-     "response": [],
-     "event": [
-      {
-       "listen": "test",
-       "script": {
-        "type": "text/javascript",
-        "exec": [
-         "// Checagens de migração: rota montada + credencial aceita.",
-         "pm.test('rota está montada (não 404)', function () {",
-         "    pm.expect(pm.response.code).to.not.eql(404);",
-         "});",
-         "pm.test('credencial aceita (não 401/403)', function () {",
-         "    pm.expect([401, 403]).to.not.include(pm.response.code);",
-         "});",
-         "pm.test('sem erro de servidor (não 5xx)', function () {",
-         "    pm.expect(pm.response.code).to.be.below(500);",
-         "});"
-        ]
-       }
-      }
-     ]
-    },
-    {
-     "name": "GET /api/comments — listagem legada",
-     "request": {
-      "method": "GET",
-      "header": [
-       {
-        "key": "Cookie",
-        "value": "next-auth.session-token={{sessionToken}}"
-       }
-      ],
-      "url": {
-       "raw": "{{baseUrl}}/api/comments?page=1&limit=10&email={{email}}&status=approved&courseId={{courseId}}&answered=true",
-       "host": [
-        "{{baseUrl}}"
-       ],
-       "path": [
-        "api",
-        "comments"
-       ],
-       "query": [
-        {
-         "key": "page",
-         "value": "1",
-         "description": "Página."
-        },
-        {
-         "key": "limit",
-         "value": "10",
-         "description": "Itens por página."
-        },
-        {
-         "key": "email",
-         "value": "{{email}}",
-         "description": "Filtra pelo autor."
-        },
-        {
-         "key": "status",
-         "value": "approved",
-         "description": "Status do comentário."
-        },
-        {
-         "key": "courseId",
-         "value": "{{courseId}}",
-         "description": "Filtra por curso."
-        },
-        {
-         "key": "answered",
-         "value": "true",
-         "description": "`true`/`false`."
-        }
-       ]
-      },
-      "description": "**Auth:** cookie `next-auth.session-token={{sessionToken}}` — sessão NextAuth (`AuthMiddleware`).\n**Rate limit:** nenhum.\n\nMesmo handler de `GET /api/v1/comments`, no prefixo antigo `/api/comments` e com credencial diferente: cookie de sessão NextAuth em vez de `x-api-key`. Mantida para o frontend legado.\n\n**Como testar**\n1. Logar no painel, copiar o valor do cookie `next-auth.session-token` do DevTools para `{{sessionToken}}`.\n2. Comparar a resposta com a de `GET /api/v1/comments` — o corpo deve ser igual.\n3. Sem cookie ⇒ 401.\n\n**Esperado:** 200 com a mesma lista da rota v1.\n**Sem cookie:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [],
      "event": [

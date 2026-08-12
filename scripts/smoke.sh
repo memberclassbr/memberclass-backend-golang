@@ -88,7 +88,6 @@ check 401 "POST /api/v1/social"                 -X POST "$BASE_URL/api/v1/social
 check 401 "GET  /api/v1/ai/lessons"             "$BASE_URL/api/v1/ai/lessons"
 check 401 "GET  /api/v1/ai/tenants"             "$BASE_URL/api/v1/ai/tenants"
 check 401 "POST /api/v1/auth"                   -X POST "$BASE_URL/api/v1/auth"
-check 401 "GET  /api/comments"                  "$BASE_URL/api/comments"
 check 401 "POST /api/lessons/pdf-process"       -X POST "$BASE_URL/api/lessons/pdf-process"
 check 401 "POST /api/lessons/process-all-pdfs"  -X POST "$BASE_URL/api/lessons/process-all-pdfs"
 check 401 "GET  /api/lessons/x/pdf-pages"       "$BASE_URL/api/lessons/x/pdf-pages"
@@ -102,6 +101,12 @@ check 401 "POST /videos/upload"                 -X POST "$BASE_URL/videos/upload
 # mean the old mount is still live.
 check 404 "POST /api/v1/videos/upload (gone)"      -X POST "$BASE_URL/api/v1/videos/upload"
 check 404 "POST /api/v1/sso/generate-token (gone)" -X POST "$BASE_URL/api/v1/sso/generate-token"
+
+# The legacy comments listing, which authenticated by NextAuth session cookie.
+# It had no callers, and it was the only route reachable with a credential a
+# browser attaches by itself — the reason CORS had to allow credentials.
+# `GET /api/v1/comments` is the live listing and is unaffected.
+check 404 "GET  /api/comments (gone)"             "$BASE_URL/api/comments"
 
 # ---------- tenant API key ----------
 

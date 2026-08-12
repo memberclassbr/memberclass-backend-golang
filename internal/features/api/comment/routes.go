@@ -9,9 +9,3 @@ func (f *Feature) Register(r chi.Router, mw MiddlewareSet) {
 		r.Patch("/{commentID}", f.UpdateComment)
 	})
 }
-
-// RegisterLegacy mounts the listing under `/api/comments`, the older prefix
-// guarded by the mc-api-key middleware. Same handler, different credential.
-func (f *Feature) RegisterLegacy(r chi.Router, mw MiddlewareSet) {
-	r.With(mw.AuthAPIKey).Get("/", f.GetComments)
-}

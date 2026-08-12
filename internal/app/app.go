@@ -127,7 +127,6 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	rateLimitTenant := mw.NewRateLimitTenantMiddleware(ratelimit.NewRateLimiterTenant(redis, log), log)
 	rateLimitIP := mw.NewRateLimitIPMiddleware(ratelimit.NewRateLimiterIP(redis, log), log)
 
-	authSession := mw.NewAuthMiddleware(db, cfg, log)
 	authExternal := mw.NewAuthExternalMiddleware(db, log)
 	authBearer := mw.NewBearerMiddleware(cfg, redis, log)
 
@@ -158,7 +157,6 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 		rateLimitUpload,
 		rateLimitTenant,
 		rateLimitIP,
-		authSession,
 		authExternal,
 		authBearer,
 	)

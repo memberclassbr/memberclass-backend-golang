@@ -160,62 +160,6 @@ func TestAuthExternal_DatabaseErrorLooksLikeAnInvalidKey(t *testing.T) {
 	assert.Equal(t, "INVALID_API_KEY", body["errorCode"])
 }
 
-// ---------- NextAuth session cookie ----------
-
-func TestAuthMiddleware_RejectsMissingCookie(t *testing.T) {
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "secret"}}
-	m := NewAuthMiddleware(db, cfg, fakeLogger{})
-	reached := false
-
-	w := httptest.NewRecorder()
-	m.Authenticate(okHandler(&reached)).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.False(t, reached)
-}
-
-func TestAuthMiddleware_RejectsUndecryptableCookie(t *testing.T) {
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	cfg := &config.Config{Auth: config.Auth{NextAuthSecret: "secret"}}
-	m := NewAuthMiddleware(db, cfg, fakeLogger{})
-	reached := false
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: "next-auth.session-token", Value: "garbage"})
-	w := httptest.NewRecorder()
-	m.Authenticate(okHandler(&reached)).ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusUnauthorized, w.Code)
-	assert.False(t, reached)
-}
-
-// The key derivation must depend on the configured secret; two different
-// secrets must not derive the same key, or a rotated secret would keep
-// accepting old cookies.
-func TestAuthMiddleware_KeyDerivationDependsOnSecret(t *testing.T) {
-	db, _, err := sqlmock.New()
-	require.NoError(t, err)
-	defer db.Close()
-
-	a := NewAuthMiddleware(db, &config.Config{Auth: config.Auth{NextAuthSecret: "secret-a"}}, fakeLogger{})
-	b := NewAuthMiddleware(db, &config.Config{Auth: config.Auth{NextAuthSecret: "secret-b"}}, fakeLogger{})
-
-	keyA, err := a.deriveEncryptionKey()
-	require.NoError(t, err)
-	keyB, err := b.deriveEncryptionKey()
-	require.NoError(t, err)
-
-	assert.Len(t, keyA, 32)
-	assert.NotEqual(t, keyA, keyB)
-}
-
 // ---------- Bearer JWT ----------
 
 // signJWT builds a compact HS256 token the middleware should accept.

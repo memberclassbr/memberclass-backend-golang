@@ -170,23 +170,20 @@ func TestCommentFilters_Placeholders(t *testing.T) {
 
 // ---------- 3. GET /comments ----------
 
-// The listing is mounted behind two different middlewares. Neither may reach
-// the query without a tenant: the previous handler only guarded the /api/v1
-// path and dereferenced a nil tenant on the other one.
-func TestGetComments_RequiresTenantOnEveryPath(t *testing.T) {
-	for _, path := range []string{"/api/v1/comments", "/api/comments"} {
-		t.Run(path, func(t *testing.T) {
-			f, mock, done := newTestFeature(t)
-			defer done()
+// The handler guards the tenant itself rather than relying on the middleware in
+// front of it. That mattered when the listing was mounted twice: it guarded the
+// /api/v1 path and dereferenced a nil tenant on the other one. The second mount
+// is gone, and the guard stays — it is the handler's own precondition.
+func TestGetComments_RequiresTenant(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
 
-			w := httptest.NewRecorder()
-			f.GetComments(w, request(http.MethodGet, path, "", "", nil))
+	w := httptest.NewRecorder()
+	f.GetComments(w, request(http.MethodGet, "/api/v1/comments", "", "", nil))
 
-			assert.Equal(t, http.StatusUnauthorized, w.Code)
-			assert.Equal(t, "INVALID_API_KEY", bodyOf(t, w)["errorCode"])
-			assert.NoError(t, mock.ExpectationsWereMet())
-		})
-	}
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "INVALID_API_KEY", bodyOf(t, w)["errorCode"])
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestGetComments_Success(t *testing.T) {

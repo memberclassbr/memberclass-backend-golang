@@ -93,8 +93,13 @@ type Auth struct {
 	// admin-facing endpoints. Required: an empty expected key makes the
 	// comparison trivially satisfiable.
 	InternalAPIKey string
-	// NextAuthSecret decrypts the NextAuth session cookie on `/api/comments`.
-	// Must match NEXTAUTH_SECRET on the frontend byte-for-byte.
+	// NextAuthSecret is the legacy signing key for go-token Bearer JWTs, kept
+	// because the frontend still falls back to it — see GoAPIJWTSecret. Must
+	// match NEXTAUTH_SECRET on the frontend byte-for-byte.
+	//
+	// It used to also decrypt the NextAuth session cookie, for the route at
+	// `GET /api/comments`. That route is gone, so once a deployment reaches
+	// state 3 below this value is read by nothing and can be dropped.
 	NextAuthSecret string
 	// GoAPIJWTSecret verifies the go-token Bearer JWTs the frontend mints for
 	// the routes at the root. Must match GO_API_JWT_SECRET on that side.

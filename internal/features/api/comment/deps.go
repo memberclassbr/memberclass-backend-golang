@@ -2,11 +2,11 @@
 //
 //	GET   /api/v1/comments              list, filtered and paginated
 //	PATCH /api/v1/comments/{commentID}  answer and publish
-//	GET   /api/comments                 the same listing behind the legacy
-//	                                    mc-api-key middleware
 //
-// Both listing routes run the same handler; only the middleware in front of
-// them differs.
+// The same listing was also mounted at `GET /api/comments` behind the NextAuth
+// session cookie. That route is gone: it had no callers, and it was the only
+// thing on this service reachable with a credential a browser attaches by
+// itself — which is what forced the CORS policy to allow credentials.
 package comment
 
 import (
@@ -31,8 +31,6 @@ func New(db *sql.DB, log logger.Logger) *Feature {
 // need. The router owns middleware construction; slices just compose them.
 type MiddlewareSet struct {
 	// AuthExternal validates the tenant-facing external API key.
-	AuthExternal func(http.Handler) http.Handler
-	// AuthAPIKey validates the mc-api-key header used by the legacy route.
-	AuthAPIKey      func(http.Handler) http.Handler
+	AuthExternal    func(http.Handler) http.Handler
 	RateLimitTenant func(http.Handler) http.Handler
 }

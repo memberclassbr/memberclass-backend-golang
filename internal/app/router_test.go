@@ -59,11 +59,10 @@ func createTestRouter(t *testing.T) *Router {
 	rateLimitMiddleware := mw.NewRateLimitMiddleware(nil, log)
 	rateLimitTenantMiddleware := mw.NewRateLimitTenantMiddleware(nil, log)
 	rateLimitIPMiddleware := mw.NewRateLimitIPMiddleware(nil, log)
-	authMiddleware := mw.NewAuthMiddleware(nil, cfg, log)
 	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
 	bearerMiddleware := mw.NewBearerMiddleware(cfg, nil, log)
 
-	return newRouter(log, mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, healthfeat.New(nil, nil, log), rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authMiddleware, authExternalMiddleware, bearerMiddleware)
+	return newRouter(log, mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, healthfeat.New(nil, nil, log), rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authExternalMiddleware, bearerMiddleware)
 }
 
 func TestNewRouter(t *testing.T) {
@@ -74,7 +73,7 @@ func TestNewRouter(t *testing.T) {
 	assert.NotNil(t, router.video)
 	assert.NotNil(t, router.lessonPDF)
 	assert.NotNil(t, router.rateLimitMiddleware)
-	assert.NotNil(t, router.authMiddleware)
+	assert.NotNil(t, router.authExternalMiddleware)
 }
 
 func TestRouter_SetupRoutes(t *testing.T) {

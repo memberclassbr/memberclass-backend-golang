@@ -52,7 +52,6 @@ type Router struct {
 	rateLimitMiddleware       *mw.RateLimitMiddleware
 	rateLimitTenantMiddleware *mw.RateLimitTenantMiddleware
 	rateLimitIPMiddleware     *mw.RateLimitIPMiddleware
-	authMiddleware            *mw.AuthMiddleware
 	authExternalMiddleware    *mw.AuthExternalMiddleware
 	bearerMiddleware          *mw.BearerMiddleware
 }
@@ -78,7 +77,6 @@ func newRouter(
 	rateLimitMiddleware *mw.RateLimitMiddleware,
 	rateLimitTenantMiddleware *mw.RateLimitTenantMiddleware,
 	rateLimitIPMiddleware *mw.RateLimitIPMiddleware,
-	authMiddleware *mw.AuthMiddleware,
 	authExternalMiddleware *mw.AuthExternalMiddleware,
 	bearerMiddleware *mw.BearerMiddleware,
 ) *Router {
@@ -119,29 +117,26 @@ func newRouter(
 	// It does not reflect the caller's Origin, and it does not set
 	// Allow-Credentials. Those two together — which is what this used to send —
 	// are the combination browsers treat as "every site on the internet may
-	// make an authenticated cross-origin request here and read the reply". Any
-	// page could have driven `/api/comments` with the visitor's
-	// next-auth.session-token cookie attached and read the response back.
+	// make an authenticated cross-origin request here and read the reply". The
+	// route that made that concrete was `GET /api/comments`, authenticated by
+	// the next-auth.session-token cookie: any page could have driven it with a
+	// visitor's session attached and read the response back.
 	//
-	// A literal "*" is what makes that impossible rather than merely
-	// unattractive: a browser refuses to send credentials to a wildcard origin
-	// at all, so the cookie never leaves. The wildcard is not a relaxation
-	// here, it is the enforcement.
+	// That route is gone and this is a wildcard, and the two belong together.
+	// A literal "*" is what makes credentialed cross-origin requests impossible
+	// rather than merely unattractive — a browser will not send credentials to
+	// a wildcard origin at all. The wildcard is the enforcement here, not a
+	// relaxation.
 	//
 	// It stays a wildcard rather than an allowlist because tenants bring their
 	// own custom domains and the set is not enumerable from this deployment.
-	// Little is given away by that: every other credential this service takes
-	// travels in a header the browser will not attach on its own — Bearer,
+	// Nothing is given away by that now: every credential this service accepts
+	// travels in a header a browser will not attach on its own — Bearer,
 	// x-api-key, x-internal-api-key — so a cross-origin request from an
 	// attacker's page arrives unauthenticated, which is a request from nobody.
 	//
-	// `GET /api/comments` is the one exception and the reason this mattered: it
-	// authenticates with the next-auth.session-token cookie, which browsers do
-	// attach on their own. The consequence cuts both ways — that route can no
-	// longer be called cross-origin from a browser by anyone, attacker or
-	// frontend. A same-origin or server-side caller is unaffected; a browser
-	// caller on another origin needs the route moved onto a header credential
-	// rather than the CORS policy widened back.
+	// A route that ever needs to be callable cross-origin from a browser *with*
+	// a credential gets a header credential. This does not get widened back.
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
@@ -172,7 +167,6 @@ func newRouter(
 		rateLimitMiddleware:       rateLimitMiddleware,
 		rateLimitTenantMiddleware: rateLimitTenantMiddleware,
 		rateLimitIPMiddleware:     rateLimitIPMiddleware,
-		authMiddleware:            authMiddleware,
 		authExternalMiddleware:    authExternalMiddleware,
 		bearerMiddleware:          bearerMiddleware,
 	}
@@ -279,13 +273,6 @@ func (r *Router) SetupRoutes() {
 		router.Route("/lessons", func(router chi.Router) {
 			r.lessonPDF.Register(router, lessonpdf.MiddlewareSet{})
 		})
-
-		router.Route("/comments", func(router chi.Router) {
-			r.comment.RegisterLegacy(router, commentfeat.MiddlewareSet{
-				AuthAPIKey: r.authMiddleware.Authenticate,
-			})
-		})
-
 	})
 
 	// ---- Frontend-origin surface, mounted at the root without /api ----
