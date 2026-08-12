@@ -80,6 +80,7 @@ check 401 "GET  /api/v1/vitrine"                "$BASE_URL/api/v1/vitrine"
 check 401 "GET  /api/v1/comments"               "$BASE_URL/api/v1/comments"
 check 401 "GET  /api/v1/student/report"         "$BASE_URL/api/v1/student/report"
 check 401 "GET  /api/v1/users/purchases"        "$BASE_URL/api/v1/users/purchases"
+check 401 "GET  /api/v1/users/payment-events"   "$BASE_URL/api/v1/users/payment-events"
 check 401 "GET  /api/v1/user/activities"        "$BASE_URL/api/v1/user/activities"
 check 401 "GET  /api/v1/user/activity/summary"  "$BASE_URL/api/v1/user/activity/summary"
 check 401 "GET  /api/v1/user/lessons/completed" "$BASE_URL/api/v1/user/lessons/completed"
@@ -114,11 +115,13 @@ else
   # the route and its auth are wired.
   if [[ -n "$EMAIL" ]]; then
     check 200 "GET  /api/v1/users/purchases"        "${H[@]}" "$BASE_URL/api/v1/users/purchases?email=$EMAIL"
+    check 200 "GET  /api/v1/users/payment-events"   "${H[@]}" "$BASE_URL/api/v1/users/payment-events?email=$EMAIL"
     check 200 "GET  /api/v1/user/lessons/completed" "${H[@]}" "$BASE_URL/api/v1/user/lessons/completed?email=$EMAIL"
     check 200 "POST /api/v1/auth (magic link)"      "${H[@]}" -X POST \
       -H 'Content-Type: application/json' -d "{\"email\":\"$EMAIL\"}" "$BASE_URL/api/v1/auth"
   else
     check 400 "GET  /api/v1/users/purchases (no email)" "${H[@]}" "$BASE_URL/api/v1/users/purchases"
+    check 400 "GET  /api/v1/users/payment-events (no email)" "${H[@]}" "$BASE_URL/api/v1/users/payment-events"
     skip "GET  /api/v1/user/lessons/completed" "set EMAIL"
     skip "POST /api/v1/auth" "set EMAIL"
   fi

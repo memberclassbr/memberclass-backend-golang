@@ -1779,7 +1779,131 @@
      ]
     },
     {
-     "name": "GET /api/v1/users/purchases",
+     "name": "GET /api/v1/users/payment-events",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "mc-api-key",
+        "value": "{{apiKey}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/users/payment-events?email={{email}}&type=&page=1&limit=10",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "users",
+        "payment-events"
+       ],
+       "query": [
+        {
+         "key": "email",
+         "value": "{{email}}",
+         "description": "E-mail do membro. Obrigatório."
+        },
+        {
+         "key": "type",
+         "value": "",
+         "description": "purchase | renewal | refund | chargeback | cancellation | expired. Vazio = ledger inteiro. Valor fora da lista ⇒ 400."
+        },
+        {
+         "key": "page",
+         "value": "1",
+         "description": "Página."
+        },
+        {
+         "key": "limit",
+         "value": "10",
+         "description": "Itens por página."
+        }
+       ]
+      },
+      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nLedger de pagamentos do membro, lido de `PaymentEvent`. Substitui `GET /api/v1/users/purchases`.\n\n**Valores em centavos.** `amount: 19700` com `currency: \"BRL\"` são R$ 197,00 — é a menor unidade da moeda, como os gateways reportam. A formatação é do cliente; devolver decimal poria dinheiro em ponto flutuante.\n\n**Nulos têm significado.** O gateway nem sempre manda tudo:\n\n| Campo | Null significa |\n|---|---|\n| `amount` | valor não informado — **não** é zero |\n| `occurredAt` | gateway não mandou a hora dele; a ordenação cai para a hora de recebimento |\n| `deliveryName` | evento não aponta para uma entrega (ex.: chargeback antes da concessão resolver) |\n| `expiresAt` | sem data de expiração no evento |\n| `transactionId` / `subscriptionId` | evento sem correlação no gateway |\n\n**Campos internos não saem:** chave primária do evento, `tenantId`, `userId`, `deliveryId`, `externalEventId` (dedup de webhook) e `createdAt` (quando o webhook chegou, não quando o pagamento ocorreu).\n\n**Como testar**\n1. Informar `{{email}}` de um membro que tenha compra registrada.\n2. Rodar sem `type` para ver o ledger inteiro, estornos e cancelamentos incluídos.\n3. Filtrar por `type=purchase` e conferir que a contagem cai.\n4. Mandar `type=purchases` (com s) ⇒ 400 `INVALID_EVENT_TYPE`, não página vazia.\n5. Conferir `transactionId` contra o extrato do gateway.\n6. Comparar com a rota depreciada `/users/purchases`: mesma origem de dinheiro, dados bem mais rasos.\n\nA resposta fica 5 min em cache no Redis (chave `payment-events:...`).\n\n**Esperado:** 200 `{events:[...], pagination}`. Ver a aba **Examples**.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+     },
+     "response": [
+      {
+       "name": "200 — compra, renovação e chargeback esparso",
+       "originalRequest": {
+        "method": "GET",
+        "header": [
+         {
+          "key": "mc-api-key",
+          "value": "{{apiKey}}"
+         }
+        ],
+        "url": {
+         "raw": "{{baseUrl}}/api/v1/users/payment-events?email={{email}}&type=&page=1&limit=10",
+         "host": [
+          "{{baseUrl}}"
+         ],
+         "path": [
+          "api",
+          "v1",
+          "users",
+          "payment-events"
+         ],
+         "query": [
+          {
+           "key": "email",
+           "value": "{{email}}",
+           "description": "E-mail do membro. Obrigatório."
+          },
+          {
+           "key": "type",
+           "value": "",
+           "description": "purchase | renewal | refund | chargeback | cancellation | expired. Vazio = ledger inteiro. Valor fora da lista ⇒ 400."
+          },
+          {
+           "key": "page",
+           "value": "1",
+           "description": "Página."
+          },
+          {
+           "key": "limit",
+           "value": "10",
+           "description": "Itens por página."
+          }
+         ]
+        }
+       },
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "body": "{\n    \"events\": [\n        {\n            \"type\": \"purchase\",\n            \"platform\": \"hotmart\",\n            \"amount\": 19700,\n            \"currency\": \"BRL\",\n            \"plan\": \"Anual\",\n            \"occurredAt\": \"2026-08-03T23:32:49.000Z\",\n            \"expiresAt\": \"2027-08-03T00:00:00.000Z\",\n            \"deliveryName\": \"Assinatura Anual\",\n            \"transactionId\": \"tx_123\",\n            \"subscriptionId\": \"sub_456\"\n        },\n        {\n            \"type\": \"renewal\",\n            \"platform\": \"hotmart\",\n            \"amount\": 19700,\n            \"currency\": \"BRL\",\n            \"plan\": \"Anual\",\n            \"occurredAt\": \"2027-08-03T23:31:02.000Z\",\n            \"expiresAt\": \"2028-08-03T00:00:00.000Z\",\n            \"deliveryName\": \"Assinatura Anual\",\n            \"transactionId\": \"tx_789\",\n            \"subscriptionId\": \"sub_456\"\n        },\n        {\n            \"type\": \"chargeback\",\n            \"platform\": \"hotmart\",\n            \"amount\": null,\n            \"currency\": null,\n            \"plan\": null,\n            \"occurredAt\": null,\n            \"expiresAt\": null,\n            \"deliveryName\": null,\n            \"transactionId\": null,\n            \"subscriptionId\": null\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 3,\n        \"totalPages\": 1,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
+      }
+     ],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('rota está montada (não 404)', function () {",
+         "    pm.expect(pm.response.code).to.not.eql(404);",
+         "});",
+         "pm.test('credencial aceita (não 401/403)', function () {",
+         "    pm.expect([401, 403]).to.not.include(pm.response.code);",
+         "});",
+         "pm.test('sem erro de servidor (não 5xx)', function () {",
+         "    pm.expect(pm.response.code).to.be.below(500);",
+         "});"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "GET /api/v1/users/purchases [DEPRECADO]",
      "request": {
       "method": "GET",
       "header": [
@@ -1822,7 +1946,7 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nCompras e reembolsos do usuário. Prefixo plural `/users` — é assim desde sempre, não confundir com `/user`.\n\n**Como testar**\n1. Rodar com `email`.\n2. Filtrar por `type` para separar compra de reembolso.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**⚠️ DEPRECADO — use `GET /api/v1/users/payment-events`.**\n\nLê a tabela antiga `UserEvent`, que só registra que algo aconteceu e quando. O `updatedAt` da resposta é cópia do `createdAt`, não um segundo carimbo. A rota sucessora lê `PaymentEvent` e informa quanto foi pago, em qual plataforma, de qual plano e até quando o acesso vale.\n\nContinua respondendo sem mudança de contrato — a resposta agora traz os cabeçalhos `Deprecation: true` e `Link: </api/v1/users/payment-events>; rel=\"successor-version\"`.\n\n**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** por tenant\n\nCompras e reembolsos do usuário. Prefixo plural `/users` — é assim desde sempre, não confundir com `/user`.\n\n**Como testar**\n1. Rodar com `email`.\n2. Filtrar por `type` para separar compra de reembolso.\n\n**Esperado:** 200 com lista paginada.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {

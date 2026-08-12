@@ -837,12 +837,141 @@ paths:
                 error: "Internal Server Error"
                 message: "Internal server error"
 
-  /api/v1/users/purchases:
+  /api/v1/users/payment-events:
     get:
       tags:
         - Users
-      summary: Listar compras e reembolsos do usuário
+      summary: Listar o histórico de pagamentos do usuário
       description: |
+        Ledger de pagamentos de um membro do tenant, lido de `PaymentEvent`.
+        Substitui `GET /api/v1/users/purchases`.
+
+        **Autenticação:** header `mc-api-key`.
+
+        **Cache:** Redis, TTL de 300 segundos.
+
+        **Valores:** `amount` vem na menor unidade da moeda (centavos para BRL),
+        como os gateways reportam. `19700` com `currency: "BRL"` são R$ 197,00.
+        A formatação é do cliente — devolver decimal poria dinheiro em ponto
+        flutuante.
+
+        **Nulos têm significado:** o gateway nem sempre envia todos os campos.
+        `amount` nulo não é zero, é ausência de valor informado. `occurredAt`
+        nulo significa que o gateway não mandou a hora dele; a ordenação cai
+        para a hora de recebimento nesse caso.
+
+        **Campos internos não são expostos.** A chave primária do evento,
+        `tenantId`, `userId`, `deliveryId`, o `externalEventId` (deduplicação de
+        webhook) e o `createdAt` (quando o webhook chegou, não quando o
+        pagamento ocorreu) ficam de fora.
+      operationId: getUserPaymentEvents
+      parameters:
+        - name: mc-api-key
+          in: header
+          required: true
+          description: Token de API do tenant
+          schema:
+            type: string
+        - name: email
+          in: query
+          required: true
+          description: E-mail do membro
+          schema:
+            type: string
+            format: email
+        - name: type
+          in: query
+          required: false
+          description: >-
+            Filtra por tipo de evento. Ausente traz o ledger inteiro, estornos e
+            cancelamentos incluídos. Um valor fora da lista responde 400
+            `INVALID_EVENT_TYPE` em vez de página vazia.
+          schema:
+            type: string
+            enum: [purchase, renewal, refund, chargeback, cancellation, expired]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Histórico de pagamentos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentEvent'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+              example:
+                events:
+                  - type: "purchase"
+                    platform: "hotmart"
+                    amount: 19700
+                    currency: "BRL"
+                    plan: "Anual"
+                    occurredAt: "2026-08-03T23:32:49.000Z"
+                    expiresAt: "2027-08-03T00:00:00.000Z"
+                    deliveryName: "Assinatura Anual"
+                    transactionId: "tx_123"
+                    subscriptionId: "sub_456"
+                  - type: "chargeback"
+                    platform: "hotmart"
+                    amount: null
+                    currency: null
+                    plan: null
+                    occurredAt: null
+                    expiresAt: null
+                    deliveryName: null
+                    transactionId: null
+                    subscriptionId: null
+                pagination:
+                  page: 1
+                  limit: 10
+                  totalCount: 2
+                  totalPages: 1
+                  hasNextPage: false
+                  hasPrevPage: false
+        '400':
+          description: Parâmetro inválido
+        '401':
+          description: Token de API ausente ou inválido
+        '404':
+          description: Usuário não encontrado neste tenant
+  /api/v1/users/purchases:
+    get:
+      deprecated: true
+      tags:
+        - Users
+      summary: "[DEPRECADO] Listar compras e reembolsos do usuário"
+      description: |
+        **Depreciado — use `GET /api/v1/users/payment-events`.**
+
+        Lê a tabela antiga `UserEvent`, que registra apenas que algo aconteceu e
+        quando; o `updatedAt` da resposta é uma cópia do `createdAt`, não um
+        segundo carimbo. A rota sucessora lê `PaymentEvent` e informa quanto foi
+        pago, em qual plataforma, de qual plano e até quando o acesso concedido
+        vale.
+
+        Continua respondendo, sem mudança de contrato. A resposta agora carrega
+        os cabeçalhos `Deprecation: true` e
+        `Link: </api/v1/users/payment-events>; rel="successor-version"`.
+
         Retorna uma lista paginada de compras e reembolsos de um usuário específico.
         
         **Autenticação:** Requer header `mc-api-key` com token de API válido.
@@ -2092,6 +2221,73 @@ components:
             Data do último login, lida da entidade LoginEvent. Null quando o
             usuário nunca logou.
           example: "2024-03-10T09:15:00Z"
+
+    PaymentEvent:
+      type: object
+      description: >-
+        Um evento do ledger de pagamentos. Carrega dez das quatorze colunas de
+        PaymentEvent; as quatro restantes são identificadores internos ou hora
+        de infraestrutura, não fatos de pagamento.
+      properties:
+        type:
+          type: string
+          description: Tipo do evento.
+          enum: [purchase, renewal, refund, chargeback, cancellation, expired]
+          example: "purchase"
+        platform:
+          type: string
+          description: Gateway de origem do evento.
+          example: "hotmart"
+        amount:
+          type: integer
+          nullable: true
+          description: >-
+            Valor na menor unidade da moeda (centavos para BRL). Null significa
+            que o gateway não informou valor — não é zero.
+          example: 19700
+        currency:
+          type: string
+          nullable: true
+          example: "BRL"
+        plan:
+          type: string
+          nullable: true
+          description: Rótulo do plano, para exibição.
+          example: "Anual"
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: >-
+            Hora do evento no gateway. Null quando o gateway não a envia; nesse
+            caso a ordenação do ledger usa a hora de recebimento.
+          example: "2026-08-03T23:32:49.000Z"
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Até quando vale o acesso concedido por este evento.
+          example: "2027-08-03T00:00:00.000Z"
+        deliveryName:
+          type: string
+          nullable: true
+          description: >-
+            Nome da entrega associada. Null quando o evento não aponta para uma
+            — um chargeback que chega antes da concessão resolver, por exemplo.
+          example: "Assinatura Anual"
+        transactionId:
+          type: string
+          nullable: true
+          description: ID da transação no gateway. Use para conciliar com o extrato.
+          example: "tx_123"
+        subscriptionId:
+          type: string
+          nullable: true
+          description: >-
+            ID da assinatura no gateway. Correlaciona renovações da mesma
+            assinatura; sem ele, duas renovações são indistinguíveis de duas
+            compras.
+          example: "sub_456"
 
     DeliveryInfo:
       type: object
