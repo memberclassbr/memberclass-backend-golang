@@ -1034,21 +1034,21 @@
         }
        ]
       },
-      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** NENHUM — esta rota não passa pelo rate limit por tenant (comportamento legado, ver routes.go)\n\nDados cadastrais do usuário pelo e-mail.\n\n**Como testar**\n1. Informar `{{email}}` de um usuário existente.\n2. Testar com e-mail inexistente para ver o caminho de erro.\n\n**Esperado:** 200 com os dados do usuário.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** header `mc-api-key: {{apiKey}}` — chave externa do tenant (`AuthExternalMiddleware`). O tenant é resolvido a partir da chave, por isso não se envia `tenantId`.\n**Rate limit:** NENHUM — esta rota não passa pelo rate limit por tenant (comportamento legado, ver routes.go)\n\nMembros do tenant com suas concessões de acesso. Sem `email` pagina o cadastro inteiro; com `email` devolve só aquele membro — e-mail de outro tenant responde 404, não página vazia.\n\n`lastAccess` vem da entidade `LoginEvent`. Cada item de `deliveries` traz o ciclo de vida do pagamento, vindo de `MemberOnDelivery`: `status` (`active` / `expired` / `refunded` / `canceled`), `expiresAt`, `platform`, `externalSubscriptionId`, `canceledAt` e `lastEventAt`.\n\n**Os nulos têm significado, não são dado faltando.**\n\n| Campo | Null significa |\n|---|---|\n| `expiresAt` | acesso **vitalício** (compra única), não sem-informação |\n| `platform` | concessão feita à mão, sem webhook de gateway |\n| `externalSubscriptionId` | não veio de assinatura |\n| `canceledAt` | não cancelada |\n| `lastAccess` | o usuário nunca logou |\n\n`canceledAt` preenchido junto de `status: active` é assinatura cancelada cujo acesso ainda vale até `expiresAt`.\n\n**Como testar**\n1. Informar `{{email}}` de um usuário existente.\n2. Conferir `lastAccess`. Se vier `null` para alguém que sabidamente logou, a tabela `LoginEvent` não está sendo populada neste deploy — era esse o sintoma antes da correção, quando a query ainda lia `SystemLog`.\n3. Comparar `status` e `expiresAt` com o gateway, para um aluno cuja assinatura você conhece.\n4. Rodar sem `email` para paginar o cadastro inteiro.\n5. Testar com e-mail inexistente ou de outro tenant ⇒ 404 `USER_NOT_FOUND`.\n\nA resposta fica 5 min em cache no Redis (chave `user:informations:v2:...`), então uma alteração feita agora no banco pode não aparecer de imediato.\n\n**Esperado:** 200 `{users:[{userId, email, isPaid, deliveries[], lastAccess}], pagination}`. Ver a aba **Examples** para a forma completa.\n**Sem/errada a credencial:** 401.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [
       {
-       "name": "Get Informations - Sucesso",
+       "name": "200 — assinatura de gateway + concessão vitalícia",
        "originalRequest": {
         "method": "GET",
         "header": [
          {
           "key": "mc-api-key",
-          "value": "valid-api-key"
+          "value": "{{apiKey}}"
          }
         ],
         "url": {
-         "raw": "{{baseUrl}}/api/v1/user/informations?email=user@example.com",
+         "raw": "{{baseUrl}}/api/v1/user/informations?email={{email}}&page=1&limit=10",
          "host": [
           "{{baseUrl}}"
          ],
@@ -1061,7 +1061,18 @@
          "query": [
           {
            "key": "email",
-           "value": "user@example.com"
+           "value": "{{email}}",
+           "description": "E-mail do usuário. Obrigatório."
+          },
+          {
+           "key": "page",
+           "value": "1",
+           "description": "Paginação de listas aninhadas."
+          },
+          {
+           "key": "limit",
+           "value": "10",
+           "description": "Itens por página."
           }
          ]
         }
@@ -1075,7 +1086,7 @@
          "value": "application/json"
         }
        ],
-       "body": "{\n    \"id\": \"user-123\",\n    \"username\": \"joaosilva\",\n    \"email\": \"user@example.com\",\n    \"emailVerified\": \"2024-01-15T10:30:00Z\",\n    \"image\": \"https://example.com/avatar.jpg\",\n    \"phone\": \"+5511999999999\",\n    \"referrals\": 5,\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"updatedAt\": \"2024-01-15T10:30:00Z\"\n}"
+       "body": "{\n    \"users\": [\n        {\n            \"userId\": \"cmsdv6w210000uodme3e76w0v\",\n            \"email\": \"cliente@exemplo.com\",\n            \"isPaid\": true,\n            \"deliveries\": [\n                {\n                    \"id\": \"cmsdupu8f0005uovwzw4a81bg\",\n                    \"name\": \"Assinatura Anual\",\n                    \"accessDate\": \"2026-08-03T23:32:49.169Z\",\n                    \"status\": \"active\",\n                    \"expiresAt\": \"2027-08-03T00:00:00.000Z\",\n                    \"platform\": \"hotmart\",\n                    \"externalSubscriptionId\": \"sub_123\",\n                    \"canceledAt\": null,\n                    \"lastEventAt\": \"2026-08-03T23:32:49.169Z\"\n                },\n                {\n                    \"id\": \"cmsdupu8f0006uovwzw4a81bh\",\n                    \"name\": \"Curso Vitalício\",\n                    \"accessDate\": \"2026-05-10T14:02:11.000Z\",\n                    \"status\": \"active\",\n                    \"expiresAt\": null,\n                    \"platform\": null,\n                    \"externalSubscriptionId\": null,\n                    \"canceledAt\": null,\n                    \"lastEventAt\": null\n                }\n            ],\n            \"lastAccess\": \"2026-08-12T09:41:03.512Z\"\n        }\n    ],\n    \"pagination\": {\n        \"page\": 1,\n        \"limit\": 10,\n        \"totalCount\": 1,\n        \"totalPages\": 1,\n        \"hasNextPage\": false,\n        \"hasPrevPage\": false\n    }\n}"
       }
      ],
      "event": [
