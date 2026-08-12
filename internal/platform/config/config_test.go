@@ -18,7 +18,6 @@ var requiredEnv = map[string]string{
 	"INTERNAL_AI_API_KEY": "internal-key",
 	"NEXTAUTH_SECRET":     "nextauth-secret",
 	"PUBLIC_DOMAIN_URL":   "customer.com.br",
-	"PUBLIC_ROOT_DOMAIN":  "localhost:8181",
 }
 
 // setEnv applies the required set plus any overrides. An empty override value
@@ -40,6 +39,7 @@ func setEnv(t *testing.T, overrides map[string]string) {
 		"TRANSCRIPTION_POLL_INTERVAL_SECONDS", "TRANSCRIPTION_WORKER_CONCURRENCY",
 		"PANDA_API_KEY", "PANDA_ALLOWED_TENANT_IDS",
 		"ANALYTICS_DELETE_ENABLED",
+		"GO_API_JWT_SECRET", "GO_API_JWT_LEGACY_FALLBACK",
 	} {
 		t.Setenv(k, "")
 	}
@@ -273,4 +273,85 @@ func TestApp_IsDevelopment(t *testing.T) {
 			t.Errorf("IsDevelopment(%q) = %v, want %v", env, got, want)
 		}
 	}
+}
+
+// A short HMAC key is brute-forceable offline from a single captured token, and
+// that token carries tenant-scoped admin access. Load refuses to start rather
+// than run with one.
+func TestLoad_RejectsAShortGoAPISecret(t *testing.T) {
+	setEnv(t, map[string]string{"GO_API_JWT_SECRET": "too-short"})
+
+	_, err := Load()
+
+	if err == nil {
+		t.Fatal("Load accepted a GO_API_JWT_SECRET below the length floor")
+	}
+	if !strings.Contains(err.Error(), "GO_API_JWT_SECRET") {
+		t.Errorf("error does not name the offending variable: %v", err)
+	}
+}
+
+// GO_API_JWT_SECRET is optional because the frontend's own copy is: it falls
+// back to signing with NEXTAUTH_SECRET when unset, so a backend that required
+// this one would reject every token the moment it deployed first.
+func TestLoad_GoAPISecretIsOptional(t *testing.T) {
+	setEnv(t, map[string]string{"GO_API_JWT_SECRET": ""})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Auth.GoAPIJWTSecret != "" {
+		t.Errorf("Auth.GoAPIJWTSecret = %q, want empty", cfg.Auth.GoAPIJWTSecret)
+	}
+	if !cfg.Auth.AllowLegacyJWTSecret {
+		t.Error("the legacy fallback must default on, or an unset GO_API_JWT_SECRET locks everyone out")
+	}
+}
+
+// The go-token secret is its own variable so that leaking it does not also leak
+// the key the session cookie is derived from — but only once the fallback is
+// closed, which is why both earlier states warn.
+func TestLoad_WarnsWhileTheSessionSecretIsStillAccepted(t *testing.T) {
+	t.Run("no dedicated secret", func(t *testing.T) {
+		setEnv(t, map[string]string{"GO_API_JWT_SECRET": ""})
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if !strings.Contains(strings.Join(cfg.Warnings(), "\n"), "GO_API_JWT_SECRET") {
+			t.Errorf("boot log does not name the variable to set:\n%s", strings.Join(cfg.Warnings(), "\n"))
+		}
+	})
+
+	t.Run("fallback still open", func(t *testing.T) {
+		setEnv(t, map[string]string{"GO_API_JWT_SECRET": "go-api-jwt-secret-at-least-32-bytes"})
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if !strings.Contains(strings.Join(cfg.Warnings(), "\n"), "GO_API_JWT_LEGACY_FALLBACK") {
+			t.Errorf("boot log does not name the flag that closes the window:\n%s", strings.Join(cfg.Warnings(), "\n"))
+		}
+	})
+
+	t.Run("fallback closed is quiet", func(t *testing.T) {
+		setEnv(t, map[string]string{
+			"GO_API_JWT_SECRET":          "go-api-jwt-secret-at-least-32-bytes",
+			"GO_API_JWT_LEGACY_FALLBACK": "false",
+		})
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Auth.AllowLegacyJWTSecret {
+			t.Error("AllowLegacyJWTSecret = true with GO_API_JWT_LEGACY_FALLBACK=false")
+		}
+		if strings.Contains(strings.Join(cfg.Warnings(), "\n"), "GO_API_JWT") {
+			t.Errorf("still warning about the secret in the end state:\n%s", strings.Join(cfg.Warnings(), "\n"))
+		}
+	})
 }

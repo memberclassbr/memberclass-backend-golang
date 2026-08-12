@@ -12,6 +12,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/shared/httpx"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
 	"github.com/memberclass-backend-golang/internal/shared/utils"
 )
 
@@ -38,8 +39,17 @@ type uploadVideoResponse struct {
 
 // ---------- 1. HTTP handler ----------
 
-// UploadVideo handles `POST /api/v1/videos/upload`, a multipart form carrying
-// the file, the tenantId and an optional title.
+// UploadVideo handles `POST /videos/upload`, a multipart form carrying the file
+// and an optional title.
+//
+// The Bearer middleware has already established who the caller is and which
+// tenant their token is scoped to; what this handler adds is that they hold a
+// role — any role — in that tenant. Without the check the token would be a
+// licence to upload into every tenant on the deployment.
+//
+// The form's `tenantId` field is vestigial: it is confirmed against the claim
+// if present and never used as the source. Reading it as the source would hand
+// the scope back to the caller, since the form is theirs to write.
 func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(0); err != nil {
 		f.log.Error("Failed to parse multipart form", "error", err)
@@ -55,11 +65,17 @@ func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	tenantID := r.FormValue("tenantId")
-	if tenantID == "" {
-		httpx.WriteError(w, "tenantId is required", http.StatusBadRequest)
+	// Any role may upload; belonging to the tenant is the whole requirement.
+	grant, err := f.roles.Authorize(r.Context(), tenantrole.AnyRole...)
+	if err != nil {
+		f.writeAuthError(w, err)
 		return
 	}
+	if err := grant.Confirm(r.FormValue("tenantId")); err != nil {
+		f.writeAuthError(w, err)
+		return
+	}
+	tenantID := grant.TenantID
 
 	title := r.FormValue("title")
 	if title == "" {
@@ -89,6 +105,19 @@ func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteSuccess(w, result, http.StatusOK)
+}
+
+// writeAuthError maps a tenantrole failure onto this slice's envelope. A
+// lookup that failed for an infrastructure reason is logged and answered as a
+// 500; the caller is told nothing about which tenant exists.
+func (f *Feature) writeAuthError(w http.ResponseWriter, err error) {
+	status := tenantrole.Status(err)
+	if status == http.StatusInternalServerError {
+		f.log.Error("upload: role lookup failed", "error", err.Error())
+		httpx.WriteError(w, "Failed to validate tenant access", status)
+		return
+	}
+	httpx.WriteError(w, "Not allowed to upload for this tenant", status)
 }
 
 func writeUseCaseError(w http.ResponseWriter, err error) {

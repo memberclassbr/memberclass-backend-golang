@@ -9,12 +9,12 @@ import (
 	"html/template"
 	"mime"
 	"net/mail"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/memberclass-backend-golang/internal/platform/resend"
+	"github.com/memberclass-backend-golang/internal/shared/magiclink"
 )
 
 // Template types in the TenantEmailTemplate table — match the Next.js constants.
@@ -96,14 +96,11 @@ func (f *Feature) sendGroup(
 	tmpl *emailTemplateOverride,
 	counters *importCounters,
 ) {
-	// Single source of truth for both the From-host (always memberclass.com.br)
-	// AND the root under which tenant subdomains are built. PUBLIC_ROOT_DOMAIN
-	// is intentionally NOT used here — that env is the backend's own port
-	// (localhost:8181 in dev) and would produce broken magic links.
-	publicRoot := normalizeEmailDomain(firstNonEmpty(
-		os.Getenv("PUBLIC_DOMAIN_URL"),
-		os.Getenv("NEXT_PUBLIC_DOMAIN_URL"),
-	))
+	// Single source of truth for both the From-host and the root under which
+	// tenant subdomains are built. config.Load makes PUBLIC_DOMAIN_URL
+	// required, so an empty value here means the slice was constructed without
+	// a config — a test, or a wiring mistake.
+	publicRoot := f.publicDomain
 	if publicRoot == "" {
 		f.log.Error("import.public_domain_missing",
 			"import_id", importID,
@@ -118,7 +115,7 @@ func (f *Feature) sendGroup(
 	}
 
 	tenantDom := tenantDomain(tenant, publicRoot)
-	proto := pickProtocol(tenantDom)
+	proto := magiclink.Protocol(tenantDom)
 
 	transLang := ""
 	if tenant.Language.Valid {
@@ -157,7 +154,7 @@ func (f *Feature) sendGroup(
 	emails := make([]resend.Email, 0, len(sendable))
 	for _, i := range sendable {
 		s := &states[i]
-		link := buildMagicLink(proto, tenantDom, s.shortCode, s.magicToken, s.input.Email)
+		link := magiclink.Link(proto, tenantDom, s.shortCode)
 		subject, html := renderEmail(kind, s, tenant, link, passwordAccount, tmpl, i18n)
 		emails = append(emails, resend.Email{
 			From:    fromAddress,
@@ -239,26 +236,6 @@ func buildFromAddress(tenantName, publicRoot string) string {
 		name = mime.QEncoding.Encode("UTF-8", name)
 	}
 	return fmt.Sprintf("%s <%s>", name, addr)
-}
-
-// ---------- Link builder ----------
-
-// buildMagicLink matches the Next.js buildMagicLink(): prefer shortCode when
-// available, otherwise fall back to the raw token + email.
-func buildMagicLink(proto, domain, shortCode, token, email string) string {
-	v := url.Values{}
-	if shortCode != "" {
-		v.Set("code", shortCode)
-	} else {
-		if token != "" {
-			v.Set("token", token)
-		}
-		if email != "" {
-			v.Set("email", strings.ToLower(email))
-		}
-	}
-	v.Set("isReset", "false")
-	return fmt.Sprintf("%s://%s/login?%s", proto, domain, v.Encode())
 }
 
 // ---------- Template override lookup ----------
@@ -413,11 +390,7 @@ func renderEmail(
 		buttonSource = i18n.DeliveryButton
 		previewSource = i18n.DeliverySubject
 
-		if strings.Contains(link, "?") {
-			data.ResetLink = link + "&isReset=true"
-		} else {
-			data.ResetLink = link + "?isReset=true"
-		}
+		data.ResetLink = magiclink.WithReset(link)
 	}
 
 	data.Subject = pick(override.Subject, subjectSource)

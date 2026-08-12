@@ -13,12 +13,10 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/memberclass-backend-golang/internal/platform/config"
+	"github.com/memberclass-backend-golang/internal/shared/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-const testInternalKey = "internal-key"
 
 type fakeLogger struct{}
 
@@ -32,20 +30,42 @@ func newTestFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, func()) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	cfg := &config.Config{Auth: config.Auth{InternalAPIKey: testInternalKey}}
-	return New(db, cfg, fakeLogger{}), mock, func() { _ = db.Close() }
+	return New(db, fakeLogger{}), mock, func() { _ = db.Close() }
 }
 
-func generateRequest(body, externalURL string, withKey bool) *http.Request {
+// generateRequest builds the POST already carrying the identity the Bearer
+// middleware would have attached, scoped to tenant t1. An empty callerID means
+// no identity at all.
+func generateRequest(body, externalURL, callerID string) *http.Request {
+	return generateRequestIn(body, externalURL, callerID, "t1")
+}
+
+// generateRequestIn is generateRequest with the token's tenant spelled out, for
+// the tests that turn on which tenant the token names.
+func generateRequestIn(body, externalURL, callerID, tenantID string) *http.Request {
 	target := "/generate-token"
 	if externalURL != "" {
 		target += "?externalUrl=" + url.QueryEscape(externalURL)
 	}
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
-	if withKey {
-		req.Header.Set("x-internal-api-key", testInternalKey)
+	if callerID == "" {
+		return req
 	}
-	return req
+	return req.WithContext(middleware.ContextWithAuthUser(req.Context(), &middleware.AuthUser{
+		UserID:   callerID,
+		Email:    callerID + "@example.com",
+		TenantID: tenantID,
+		// Claimed on the token and ignored by the handler — every test below
+		// gets the role it is really judged by from the mocked query.
+		Role: "owner",
+	}))
+}
+
+// expectRole queues the role lookup that runs before any of the SSO work.
+func expectRole(mock sqlmock.Sqlmock, callerID, tenantID, role string) {
+	mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).
+		WithArgs(callerID, tenantID).
+		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow(role))
 }
 
 func bodyOf(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
@@ -61,45 +81,116 @@ func lockRowColumns() []string {
 
 // ---------- 1. generate-token authorisation ----------
 
-// The endpoint mints credentials, so an unauthenticated caller must be
-// rejected before anything else — including before the method check.
-func TestGenerateSSOToken_RejectsBadInternalKey(t *testing.T) {
-	cases := []struct {
-		name    string
-		withKey bool
-		key     string
-	}{
-		{"no header", false, ""},
-		{"wrong key", true, "nope"},
-	}
+// A request that reaches the handler without an identity is rejected before a
+// single query runs, so the guard does not depend on the Bearer middleware
+// being present in the chain.
+func TestGenerateSSOToken_RequiresIdentity(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", ""))
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, "UNAUTHORIZED", bodyOf(t, w)["errorCode"])
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Minting for yourself is what a member does when they follow a link out to
+// the tenant's own site, so it is open to the most junior role there is.
+func TestGenerateSSOToken_AnyRoleMintsForItself(t *testing.T) {
+	for _, role := range []string{"owner", "admin", "manager", "tutor", "member"} {
+		t.Run(role, func(t *testing.T) {
 			f, mock, done := newTestFeature(t)
 			defer done()
 
-			req := generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", false)
-			if tc.withKey {
-				req.Header.Set("x-internal-api-key", tc.key)
-			}
+			expectRole(mock, "u1", "t1", role)
+			mock.ExpectQuery(`FROM "User" WHERE id`).
+				WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+			mock.ExpectQuery(`FROM "UsersOnTenants"`).
+				WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+			mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+				WillReturnResult(sqlmock.NewResult(0, 1))
 
 			w := httptest.NewRecorder()
-			f.GenerateSSOToken(w, req)
+			f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", "u1"))
 
-			assert.Equal(t, http.StatusUnauthorized, w.Code)
-			assert.Equal(t, "UNAUTHORIZED", bodyOf(t, w)["errorCode"])
+			assert.Equal(t, http.StatusOK, w.Code)
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
 }
 
+// The token this endpoint mints is redeemed at validate-token for the target
+// user's identity on the tenant's external site. Minting one for somebody else
+// is impersonation, so it takes owner or admin — this is the check that stands
+// between a member and every account in their tenant.
+func TestGenerateSSOToken_JuniorRolesCannotMintForAnotherUser(t *testing.T) {
+	for _, role := range []string{"member", "tutor", "manager"} {
+		t.Run(role, func(t *testing.T) {
+			f, mock, done := newTestFeature(t)
+			defer done()
+
+			expectRole(mock, "attacker", "t1", role)
+
+			w := httptest.NewRecorder()
+			f.GenerateSSOToken(w, generateRequest(`{"userId":"victim","tenantId":"t1"}`, "https://escola.com.br", "attacker"))
+
+			assert.Equal(t, http.StatusForbidden, w.Code)
+			assert.Equal(t, "FORBIDDEN", bodyOf(t, w)["errorCode"])
+			// Nothing was minted or written.
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestGenerateSSOToken_OwnerAndAdminMayMintForAnotherUser(t *testing.T) {
+	for _, role := range []string{"owner", "admin"} {
+		t.Run(role, func(t *testing.T) {
+			f, mock, done := newTestFeature(t)
+			defer done()
+
+			expectRole(mock, "boss", "t1", role)
+			mock.ExpectQuery(`FROM "User" WHERE id`).
+				WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+			mock.ExpectQuery(`FROM "UsersOnTenants"`).
+				WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+			mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+
+			w := httptest.NewRecorder()
+			f.GenerateSSOToken(w, generateRequest(`{"userId":"someone","tenantId":"t1"}`, "https://escola.com.br", "boss"))
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+// The role is read for the tenant the token names. A token minted before the
+// caller lost their row buys nothing once the row is gone.
+func TestGenerateSSOToken_RejectsTenantTheCallerDoesNotBelongTo(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).
+		WithArgs("u1", "other-tenant").
+		WillReturnError(sql.ErrNoRows)
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequestIn(`{"userId":"u1"}`, "https://escola.com.br", "u1", "other-tenant"))
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// `externalUrl` is the only field with no sensible default — the whole point
+// of the endpoint is the site being handed off to.
 func TestGenerateSSOToken_RequiredFields(t *testing.T) {
 	cases := map[string]struct {
 		body        string
 		externalURL string
 	}{
-		"missing userId":      {`{"tenantId":"t1"}`, "https://escola.com.br"},
-		"missing tenantId":    {`{"userId":"u1"}`, "https://escola.com.br"},
 		"missing externalUrl": {`{"userId":"u1","tenantId":"t1"}`, ""},
 		"malformed body":      {`{not json`, "https://escola.com.br"},
 	}
@@ -110,13 +201,102 @@ func TestGenerateSSOToken_RequiredFields(t *testing.T) {
 			defer done()
 
 			w := httptest.NewRecorder()
-			f.GenerateSSOToken(w, generateRequest(tc.body, tc.externalURL, true))
+			f.GenerateSSOToken(w, generateRequest(tc.body, tc.externalURL, "u1"))
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Equal(t, "INVALID_REQUEST", bodyOf(t, w)["errorCode"])
+			// A malformed request never reaches the database.
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+// ---------- 1b. The tenant comes from the token ----------
+
+// An empty body is a complete request: it means "a hand-off for me, in the
+// tenant my token is scoped to". Neither field has to be sent, and no query
+// runs to work the tenant out — the claim already names it.
+func TestGenerateSSOToken_DefaultsBothFieldsToTheCallersToken(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectRole(mock, "u1", "t1", "member")
+	mock.ExpectQuery(`FROM "User" WHERE id`).
+		WithArgs("u1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`FROM "UsersOnTenants"`).
+		WithArgs("u1", "t1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "u1", "t1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(``, "https://escola.com.br", "u1"))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// A body may still carry the tenant; it just has to be the one the token names.
+func TestGenerateSSOToken_AcceptsTheTokensOwnTenantInTheBody(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectRole(mock, "u1", "t1", "member")
+	mock.ExpectQuery(`FROM "User" WHERE id`).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`FROM "UsersOnTenants"`).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{"tenantId":"t1"}`, "https://escola.com.br", "u1"))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The scope of the token is the whole point. A body naming another tenant is
+// refused outright — an owner of t1 does not get to mint a hand-off in t2 by
+// asking, and the role lookup that ran was for t1 either way.
+func TestGenerateSSOToken_RejectsATenantTheTokenDoesNotName(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectRole(mock, "u1", "t1", "owner")
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{"tenantId":"t2"}`, "https://escola.com.br", "u1"))
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, "FORBIDDEN", bodyOf(t, w)["errorCode"])
+	// Nothing was minted or written into either tenant.
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The tenant follows the *caller's token*, never the userId in the body: a
+// target who belongs elsewhere cannot drag the hand-off into another tenant.
+func TestGenerateSSOToken_TenantFollowsTheTokenNotTheTarget(t *testing.T) {
+	f, mock, done := newTestFeature(t)
+	defer done()
+
+	expectRole(mock, "boss", "t1", "owner")
+	mock.ExpectQuery(`FROM "User" WHERE id`).
+		WithArgs("someone").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(`FROM "UsersOnTenants"`).
+		WithArgs("someone", "t1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectExec(`UPDATE "UsersOnTenants"`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	w := httptest.NewRecorder()
+	f.GenerateSSOToken(w, generateRequest(`{"userId":"someone"}`, "https://escola.com.br", "boss"))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ---------- 2. generate-token rules ----------
@@ -127,12 +307,13 @@ func TestGenerateSSOToken_UnknownUserIsNotFound(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
 
+	expectRole(mock, "u1", "t1", "member")
 	mock.ExpectQuery(`FROM "User" WHERE id`).
 		WithArgs("u1").
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 
 	w := httptest.NewRecorder()
-	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", true))
+	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", "u1"))
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	assert.Equal(t, "NOT_FOUND", bodyOf(t, w)["errorCode"])
@@ -143,6 +324,9 @@ func TestGenerateSSOToken_UserOutsideTenantIsForbidden(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
 
+	// Reachable only when the caller is minting for somebody else: a caller
+	// minting for themselves already proved their own membership.
+	expectRole(mock, "boss", "t1", "owner")
 	mock.ExpectQuery(`FROM "User" WHERE id`).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery(`FROM "UsersOnTenants"`).
@@ -150,7 +334,7 @@ func TestGenerateSSOToken_UserOutsideTenantIsForbidden(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 
 	w := httptest.NewRecorder()
-	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", true))
+	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", "boss"))
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Equal(t, "FORBIDDEN", bodyOf(t, w)["errorCode"])
@@ -162,6 +346,7 @@ func TestGenerateSSOToken_Success(t *testing.T) {
 	f, mock, done := newTestFeature(t)
 	defer done()
 
+	expectRole(mock, "u1", "t1", "member")
 	mock.ExpectQuery(`FROM "User" WHERE id`).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery(`FROM "UsersOnTenants"`).
@@ -170,7 +355,7 @@ func TestGenerateSSOToken_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	w := httptest.NewRecorder()
-	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br/entrar", true))
+	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br/entrar", "u1"))
 
 	require.Equal(t, http.StatusOK, w.Code)
 
@@ -194,6 +379,7 @@ func TestGenerateSSOToken_StoresOnlyTheHash(t *testing.T) {
 	defer done()
 
 	var stored string
+	expectRole(mock, "u1", "t1", "member")
 	mock.ExpectQuery(`FROM "User" WHERE id`).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectQuery(`FROM "UsersOnTenants"`).
@@ -207,7 +393,7 @@ func TestGenerateSSOToken_StoresOnlyTheHash(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	w := httptest.NewRecorder()
-	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", true))
+	f.GenerateSSOToken(w, generateRequest(`{"userId":"u1","tenantId":"t1"}`, "https://escola.com.br", "u1"))
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var resp generateTokenResponse
@@ -386,7 +572,6 @@ func TestHandlers_RejectNonPost(t *testing.T) {
 	defer done()
 
 	req := httptest.NewRequest(http.MethodGet, "/generate-token", nil)
-	req.Header.Set("x-internal-api-key", testInternalKey)
 	w := httptest.NewRecorder()
 	f.GenerateSSOToken(w, req)
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)

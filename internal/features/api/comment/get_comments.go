@@ -46,7 +46,7 @@ type getCommentsRequest struct {
 
 // ---------- 1. HTTP handler ----------
 
-// GetComments handles both `GET /api/v1/comments` and `GET /api/comments`.
+// GetComments handles `GET /api/v1/comments`.
 func (f *Feature) GetComments(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")

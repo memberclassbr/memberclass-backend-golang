@@ -13,6 +13,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
+	"github.com/memberclass-backend-golang/internal/shared/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,8 +85,36 @@ func newTestFeature(t *testing.T) (*Feature, sqlmock.Sqlmock, *fakeBunny, func()
 	return New(db, svc, fakeLogger{}), mock, svc, func() { _ = db.Close() }
 }
 
-// uploadRequest builds the multipart POST the endpoint expects.
+// testUserID is the account every request in this file authenticates as.
+const testUserID = "u1"
+
+// uploadRequest builds the multipart POST the endpoint expects, already
+// carrying the identity the Bearer middleware would have attached, scoped to
+// tenant t1.
 func uploadRequest(t *testing.T, fields map[string]string, filename string, content []byte) *http.Request {
+	t.Helper()
+	return uploadRequestIn(t, "t1", fields, filename, content)
+}
+
+// uploadRequestIn is uploadRequest with the token's tenant spelled out, for the
+// tests that turn on which tenant the token names.
+func uploadRequestIn(t *testing.T, tenantID string, fields map[string]string, filename string, content []byte) *http.Request {
+	t.Helper()
+	return anonymousUploadRequest(t, fields, filename, content).WithContext(
+		middleware.ContextWithAuthUser(context.Background(), &middleware.AuthUser{
+			UserID:   testUserID,
+			Email:    "admin@example.com",
+			TenantID: tenantID,
+			// Deliberately a role the endpoint would refuse if it trusted the
+			// token. It does not: the role comes from the database.
+			Role: "member",
+		}),
+	)
+}
+
+// anonymousUploadRequest is the same POST with no identity attached — what
+// reaches the handler if the Bearer middleware is ever missing from the chain.
+func anonymousUploadRequest(t *testing.T, fields map[string]string, filename string, content []byte) *http.Request {
 	t.Helper()
 
 	var body bytes.Buffer
@@ -102,9 +131,16 @@ func uploadRequest(t *testing.T, fields map[string]string, filename string, cont
 	}
 	require.NoError(t, writer.Close())
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/videos/upload", &body)
+	req := httptest.NewRequest(http.MethodPost, "/videos/upload", &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
+}
+
+// expectRole queues the membership lookup that now runs before any Bunny work.
+func expectRole(mock sqlmock.Sqlmock, tenantID, role string) {
+	mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).
+		WithArgs(testUserID, tenantID).
+		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow(role))
 }
 
 func expectCredentials(mock sqlmock.Sqlmock, tenantID, libraryID, apiKey string) {
@@ -127,14 +163,22 @@ func TestUploadVideo_RequiresFile(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUploadVideo_RequiresTenantID(t *testing.T) {
-	f, mock, _, done := newTestFeature(t)
+// The form no longer has to carry a tenantId — the token names one. Omitting it
+// is the ordinary request now.
+func TestUploadVideo_TenantIDIsOptionalInTheForm(t *testing.T) {
+	f, mock, svc, done := newTestFeature(t)
 	defer done()
+
+	expectRole(mock, "t1", "member")
+	expectCredentials(mock, "t1", "lib-1", "key-1")
+	svc.collections = &bunny.CollectionsResponse{
+		Items: []bunny.Collection{{Name: socialCollection, GUID: "coll-1"}},
+	}
 
 	w := httptest.NewRecorder()
 	f.UploadVideo(w, uploadRequest(t, nil, "aula.mp4", []byte("data")))
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -146,6 +190,7 @@ func TestUploadVideo_UsesPerTenantCredentials(t *testing.T) {
 	f, mock, svc, done := newTestFeature(t)
 	defer done()
 
+	expectRole(mock, "t1", "member")
 	expectCredentials(mock, "t1", "lib-1", "key-1")
 	svc.collections = &bunny.CollectionsResponse{
 		Items: []bunny.Collection{{Name: socialCollection, GUID: "coll-1"}},
@@ -164,14 +209,91 @@ func TestUploadVideo_UnknownTenant(t *testing.T) {
 	f, mock, svc, done := newTestFeature(t)
 	defer done()
 
+	expectRole(mock, "missing", "member")
 	mock.ExpectQuery(`FROM "Tenant"`).WillReturnError(sql.ErrNoRows)
 
 	w := httptest.NewRecorder()
-	f.UploadVideo(w, uploadRequest(t, map[string]string{"tenantId": "missing"}, "aula.mp4", []byte("data")))
+	f.UploadVideo(w, uploadRequestIn(t, "missing", nil, "aula.mp4", []byte("data")))
 
 	assert.Equal(t, http.StatusNotFound, w.Code)
 	// Nothing was sent to Bunny.
 	assert.Equal(t, 0, svc.uploadCalls)
+}
+
+// ---------- 2b. Tenant membership ----------
+
+// Upload is open to every role, but only inside a tenant the caller belongs
+// to. Without this check the Bearer would be a licence to upload into every
+// tenant on the deployment.
+func TestUploadVideo_RejectsTenantTheCallerDoesNotBelongTo(t *testing.T) {
+	f, mock, svc, done := newTestFeature(t)
+	defer done()
+
+	mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).
+		WithArgs(testUserID, "other-tenant").
+		WillReturnError(sql.ErrNoRows)
+
+	w := httptest.NewRecorder()
+	f.UploadVideo(w, uploadRequestIn(t, "other-tenant", nil, "aula.mp4", []byte("data")))
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	// The Bunny credentials were never even read.
+	assert.Equal(t, 0, svc.uploadCalls)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The form field is vestigial and checked, not trusted: a caller who belongs to
+// t1 and writes another tenant into the form gets 403, not an upload into it.
+func TestUploadVideo_RejectsATenantTheTokenDoesNotName(t *testing.T) {
+	f, mock, svc, done := newTestFeature(t)
+	defer done()
+
+	expectRole(mock, "t1", "owner")
+
+	w := httptest.NewRecorder()
+	f.UploadVideo(w, uploadRequest(t, map[string]string{"tenantId": "someone-elses-tenant"}, "aula.mp4", []byte("data")))
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Equal(t, 0, svc.uploadCalls)
+	// No credentials were read for either tenant.
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// Every role passes, including the most junior one.
+func TestUploadVideo_AllowsEveryRole(t *testing.T) {
+	for _, role := range []string{"owner", "admin", "manager", "tutor", "member"} {
+		t.Run(role, func(t *testing.T) {
+			f, mock, svc, done := newTestFeature(t)
+			defer done()
+
+			expectRole(mock, "t1", role)
+			expectCredentials(mock, "t1", "lib-1", "key-1")
+			svc.collections = &bunny.CollectionsResponse{
+				Items: []bunny.Collection{{Name: socialCollection, GUID: "coll-1"}},
+			}
+
+			w := httptest.NewRecorder()
+			f.UploadVideo(w, uploadRequest(t, map[string]string{"tenantId": "t1"}, "aula.mp4", []byte("data")))
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+// A request that reaches the handler without an identity is a 401, not a
+// silent success — the guard does not depend on the middleware being present.
+func TestUploadVideo_RequiresIdentity(t *testing.T) {
+	f, mock, svc, done := newTestFeature(t)
+	defer done()
+
+	w := httptest.NewRecorder()
+	f.UploadVideo(w, anonymousUploadRequest(t, map[string]string{"tenantId": "t1"}, "aula.mp4", []byte("data")))
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.Equal(t, 0, svc.uploadCalls)
+	// No query ran at all.
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ---------- 3. Upload flow ----------
@@ -180,6 +302,7 @@ func TestUploadVideo_Success(t *testing.T) {
 	f, mock, svc, done := newTestFeature(t)
 	defer done()
 
+	expectRole(mock, "t1", "member")
 	expectCredentials(mock, "t1", "lib-1", "key-1")
 	svc.collections = &bunny.CollectionsResponse{
 		Items: []bunny.Collection{{Name: socialCollection, GUID: "coll-1"}},
@@ -210,6 +333,7 @@ func TestUploadVideo_TitleDefaultsToFilename(t *testing.T) {
 	f, mock, svc, done := newTestFeature(t)
 	defer done()
 
+	expectRole(mock, "t1", "member")
 	expectCredentials(mock, "t1", "lib-1", "key-1")
 	svc.collections = &bunny.CollectionsResponse{}
 
@@ -227,6 +351,7 @@ func TestUploadVideo_CollectionFailureDoesNotBlockUpload(t *testing.T) {
 		f, mock, svc, done := newTestFeature(t)
 		defer done()
 
+		expectRole(mock, "t1", "member")
 		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collErr = errors.New("bunny down")
 
@@ -242,6 +367,7 @@ func TestUploadVideo_CollectionFailureDoesNotBlockUpload(t *testing.T) {
 		f, mock, svc, done := newTestFeature(t)
 		defer done()
 
+		expectRole(mock, "t1", "member")
 		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collections = &bunny.CollectionsResponse{}
 		svc.createCollErr = errors.New("bunny down")
@@ -259,6 +385,7 @@ func TestUploadVideo_CreatesSocialCollectionWhenAbsent(t *testing.T) {
 	f, mock, svc, done := newTestFeature(t)
 	defer done()
 
+	expectRole(mock, "t1", "member")
 	expectCredentials(mock, "t1", "lib-1", "key-1")
 	svc.collections = &bunny.CollectionsResponse{
 		Items: []bunny.Collection{{Name: "outra", GUID: "x"}},
@@ -277,6 +404,7 @@ func TestUploadVideo_BunnyFailures(t *testing.T) {
 		f, mock, svc, done := newTestFeature(t)
 		defer done()
 
+		expectRole(mock, "t1", "member")
 		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collections = &bunny.CollectionsResponse{}
 		svc.createVideoErr = errors.New("bunny rejected")
@@ -293,6 +421,7 @@ func TestUploadVideo_BunnyFailures(t *testing.T) {
 		f, mock, svc, done := newTestFeature(t)
 		defer done()
 
+		expectRole(mock, "t1", "member")
 		expectCredentials(mock, "t1", "lib-1", "key-1")
 		svc.collections = &bunny.CollectionsResponse{}
 		svc.uploadErr = errors.New("bunny rejected")

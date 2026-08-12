@@ -87,26 +87,72 @@ type Storage struct {
 	URL       string
 }
 
-// Auth holds the two shared secrets that gate privileged endpoints.
+// Auth holds the shared secrets that gate privileged endpoints.
 type Auth struct {
 	// InternalAPIKey is compared against the x-internal-api-key header by the
 	// admin-facing endpoints. Required: an empty expected key makes the
 	// comparison trivially satisfiable.
 	InternalAPIKey string
-	// NextAuthSecret verifies the HS256 JWTs minted by the Next.js frontend.
-	// Must match NEXTAUTH_SECRET on that side byte-for-byte.
+	// NextAuthSecret is the legacy signing key for go-token Bearer JWTs, kept
+	// because the frontend still falls back to it — see GoAPIJWTSecret. Must
+	// match NEXTAUTH_SECRET on the frontend byte-for-byte.
+	//
+	// It used to also decrypt the NextAuth session cookie, for the route at
+	// `GET /api/comments`. That route is gone, so once a deployment reaches
+	// state 3 below this value is read by nothing and can be dropped.
 	NextAuthSecret string
+	// GoAPIJWTSecret verifies the go-token Bearer JWTs the frontend mints for
+	// the routes at the root. Must match GO_API_JWT_SECRET on that side.
+	//
+	// Optional, and that is the whole point: the frontend treats its own
+	// GO_API_JWT_SECRET as optional too and falls back to NEXTAUTH_SECRET when
+	// unset, so a backend that accepted only this one would reject every token
+	// the moment it deployed ahead of the frontend's env change.
+	//
+	// Load enforces a length floor when it is set — see minJWTSecretBytes.
+	GoAPIJWTSecret string
+
+	// AllowLegacyJWTSecret keeps NEXTAUTH_SECRET in the set of keys a go-token
+	// may be signed with. It is what makes the migration staged rather than a
+	// flag day, and it runs in three states:
+	//
+	//  1. GO_API_JWT_SECRET unset — verified with NEXTAUTH_SECRET, as before.
+	//  2. GO_API_JWT_SECRET set — both accepted. Neither side has to move
+	//     first; set the same value on the frontend whenever it suits.
+	//  3. GO_API_JWT_LEGACY_FALLBACK=false — only the dedicated secret.
+	//
+	// State 3 is the one that actually buys something, and until a deployment
+	// reaches it nothing has been gained: NEXTAUTH_SECRET also derives the
+	// session cookie's key, so a leaked go-token key is still a forged
+	// session. States 1 and 2 both warn at boot for that reason.
+	AllowLegacyJWTSecret bool
 }
+
+// minJWTSecretBytes is the floor for GO_API_JWT_SECRET.
+//
+// The Bearer verification is hand-rolled HMAC rather than go-jose, so nothing
+// in the crypto path enforces a key length. A short secret is brute-forceable
+// offline from a single captured token, and that token carries tenant-scoped
+// admin access — 32 bytes is what go-jose would have required for HS256.
+//
+// It is not enforced on NEXTAUTH_SECRET: that value is already deployed at
+// whatever length it has, and refusing to boot over it would be an outage
+// rather than a fix.
+const minJWTSecretBytes = 32
 
 // Public holds the customer-facing hostnames used to build links and email
 // addresses.
 type Public struct {
 	// DomainURL is the frontend root domain, e.g. memberclass.com.br. Bare
 	// host: no scheme, no port, no path.
+	//
+	// It is the single source for both halves of a magic link — the `From`
+	// host of the email that carries it and the root under which a tenant's
+	// subdomain is built. There used to be a second variable,
+	// PUBLIC_ROOT_DOMAIN, holding this service's own host:port; every
+	// deployment set the two to the same value, and the one path that read it
+	// produced links pointing at the backend rather than at the frontend.
 	DomainURL string
-	// RootDomain is this service's own host:port, used by the magic-link
-	// endpoints served out of this binary.
-	RootDomain string
 	// FilesURL is the CDN prefix that resolves relative asset paths (tenant
 	// logos in email templates). Optional.
 	FilesURL string
@@ -237,11 +283,14 @@ func Load() (*Config, error) {
 		Auth: Auth{
 			InternalAPIKey: required("INTERNAL_AI_API_KEY"),
 			NextAuthSecret: required("NEXTAUTH_SECRET"),
+			GoAPIJWTSecret: lookup("GO_API_JWT_SECRET"),
+			// Defaults to on: a deployment that has not been told the frontend
+			// has migrated must keep accepting what the frontend signs today.
+			AllowLegacyJWTSecret: optional("GO_API_JWT_LEGACY_FALLBACK", "true") != "false",
 		},
 		Public: Public{
-			DomainURL:  required("PUBLIC_DOMAIN_URL", "NEXT_PUBLIC_DOMAIN_URL"),
-			RootDomain: required("PUBLIC_ROOT_DOMAIN"),
-			FilesURL:   lookup("PUBLIC_FILES_URL", "NEXT_PUBLIC_FILES_URL"),
+			DomainURL: required("PUBLIC_DOMAIN_URL", "NEXT_PUBLIC_DOMAIN_URL"),
+			FilesURL:  lookup("PUBLIC_FILES_URL", "NEXT_PUBLIC_FILES_URL"),
 		},
 		Bunny: Bunny{
 			APIKey:  os.Getenv("BUNNY_API_KEY"),
@@ -255,6 +304,25 @@ func Load() (*Config, error) {
 
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
+	}
+
+	if n := len(cfg.Auth.GoAPIJWTSecret); n > 0 && n < minJWTSecretBytes {
+		return nil, fmt.Errorf(
+			"GO_API_JWT_SECRET must be at least %d bytes, got %d — a shorter HMAC key is brute-forceable offline from one captured token",
+			minJWTSecretBytes, n,
+		)
+	}
+	// Both of these say the same thing — a leaked go-token key is still the
+	// session key — and both stop once a deployment reaches state 3.
+	switch {
+	case cfg.Auth.GoAPIJWTSecret == "":
+		cfg.warnings = append(cfg.warnings,
+			"go-token JWTs are verified with NEXTAUTH_SECRET: set GO_API_JWT_SECRET "+
+				"(>= 32 bytes, the same value on the frontend) so a leaked API key is not also the session key")
+	case cfg.Auth.AllowLegacyJWTSecret:
+		cfg.warnings = append(cfg.warnings,
+			"go-token JWTs still accept NEXTAUTH_SECRET as a fallback: once the frontend signs with "+
+				"GO_API_JWT_SECRET, set GO_API_JWT_LEGACY_FALLBACK=false to close the window")
 	}
 
 	cfg.loadIlovePDF()

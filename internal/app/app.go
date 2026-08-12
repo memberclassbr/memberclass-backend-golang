@@ -127,13 +127,12 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	rateLimitTenant := mw.NewRateLimitTenantMiddleware(ratelimit.NewRateLimiterTenant(redis, log), log)
 	rateLimitIP := mw.NewRateLimitIPMiddleware(ratelimit.NewRateLimiterIP(redis, log), log)
 
-	authSession := mw.NewAuthMiddleware(db, cfg, log)
 	authExternal := mw.NewAuthExternalMiddleware(db, log)
-	authBearer := mw.NewBearerMiddleware(cfg, log)
+	authBearer := mw.NewBearerMiddleware(cfg, redis, log)
 
 	// ---------- slices ----------
 
-	memberImport := member_import.New(db, log, resendSvc)
+	memberImport := member_import.New(db, log, resendSvc, cfg)
 	notifications := notificationsworker.New(db, log)
 	transcription := transcriptionworker.New(txDB.DB, db, log, bunnySvc)
 
@@ -151,14 +150,13 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 		studentfeat.New(db, redis, log),
 		docs.New(),
 		authfeat.New(db, redis, cfg, log),
-		ssofeat.New(db, cfg, log),
+		ssofeat.New(db, log),
 		aifeat.New(db, cfg, log),
 		vitrinefeat.New(db, log),
 		healthfeat.New(db, redis, log),
 		rateLimitUpload,
 		rateLimitTenant,
 		rateLimitIP,
-		authSession,
 		authExternal,
 		authBearer,
 	)

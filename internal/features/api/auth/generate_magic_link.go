@@ -2,9 +2,7 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,10 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/memberclass-backend-golang/internal/shared/magiclink"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
+	"github.com/memberclass-backend-golang/internal/shared/utils"
 )
 
 // magicTokenTTL is how long a minted link stays usable.
@@ -29,8 +30,12 @@ const linkCacheTTL = 300 * time.Second
 // bcryptCost is the work factor for hashing the magic token before storage.
 const bcryptCost = 10
 
-// linkFormat is the login URL the frontend serves.
-const linkFormat = "%s://%s/login?token=%s&email=%s&isReset=false"
+// magicTokenMethod tags every row this endpoint mints. "MagicToken"."method" is
+// the audit trail for how a login link came to exist, so this endpoint gets its
+// own value rather than borrowing one of the frontend's — otherwise a link
+// minted through a tenant's API key is indistinguishable from one an admin
+// clicked for in the panel.
+const magicTokenMethod = "api_magic_link"
 
 // ---------- DTOs ----------
 
@@ -95,7 +100,7 @@ func (f *Feature) generateMagicLink(ctx context.Context, email, redirectPath, te
 	// first one before it arrives.
 	cacheKey := fmt.Sprintf("auth_cache:%s:%s", tenantID, email)
 	if cached, err := f.cache.Get(ctx, cacheKey); err == nil && cached != "" {
-		return &authResponse{OK: true, Link: withRedirect(cached, redirect)}, nil
+		return &authResponse{OK: true, Link: magiclink.WithRedirect(cached, redirect)}, nil
 	}
 
 	userID, err := f.memberID(ctx, email, tenantID)
@@ -103,33 +108,44 @@ func (f *Feature) generateMagicLink(ctx context.Context, email, redirectPath, te
 		return nil, err
 	}
 
-	token, err := generateToken()
+	token, err := magiclink.NewRawToken()
 	if err != nil {
 		return nil, &memberclasserrors.MemberClassError{Code: 500, Message: "error generating magic token"}
 	}
 
-	// Only the hash is stored: a database dump must not yield usable links.
+	expires := time.Now().Add(magicTokenTTL)
+
+	// The legacy column. Nothing this endpoint emits reads it any more — the
+	// link resolves by short code — but the frontend still honours it on the
+	// old /login?token= route, and refreshing it here keeps a member's single
+	// live token in step with the row minted below.
 	tokenHash, err := bcrypt.GenerateFromPassword([]byte(token), bcryptCost)
 	if err != nil {
 		return nil, &memberclasserrors.MemberClassError{Code: 500, Message: "error hashing magic token"}
 	}
-
-	if err := f.storeMagicToken(ctx, userID, string(tokenHash), time.Now().Add(magicTokenTTL)); err != nil {
+	if err := f.storeMagicToken(ctx, userID, string(tokenHash), expires); err != nil {
 		return nil, err
 	}
 
-	link, err := f.buildLoginLink(ctx, tenantID, token, email)
+	shortCode, err := f.createMagicToken(ctx, userID, tenantID, token, expires)
 	if err != nil {
 		return nil, err
 	}
 
-	// The link is cached without the redirect, so two requests that differ only
-	// in destination share one token — see withRedirect.
+	link, err := f.buildLoginLink(ctx, tenantID, shortCode)
+	if err != nil {
+		return nil, err
+	}
+
+	// What goes in the cache is the bare link. The destination is appended
+	// after, so two requests that differ only in where the member lands share
+	// one token instead of the second mint invalidating the first — see
+	// storeMagicToken on why a member has only one live token.
 	if err := f.cache.Set(ctx, cacheKey, link, linkCacheTTL); err != nil {
 		f.log.Error("Error caching auth response: " + err.Error())
 	}
 
-	return &authResponse{OK: true, Link: withRedirect(link, redirect)}, nil
+	return &authResponse{OK: true, Link: magiclink.WithRedirect(link, redirect)}, nil
 }
 
 // maxRedirectPathLen bounds the destination so a caller cannot push an
@@ -174,31 +190,10 @@ func sanitizeRedirectPath(raw string) (string, error) {
 	return raw, nil
 }
 
-// withRedirect appends the post-login destination to a login link.
-//
-// It is applied after the cache rather than before it because "User"."magicToken"
-// holds a single value per member: minting a second token for the same member
-// invalidates the first. Caching the link without the destination lets two
-// requests that differ only in where they land share one still-valid token.
-func withRedirect(link, redirectPath string) string {
-	if redirectPath == "" {
-		return link
-	}
-	return link + "&redirect=" + url.QueryEscape(redirectPath)
-}
-
-func generateToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(b), nil
-}
-
 // buildLoginLink resolves the tenant's own domain. A tenant with a custom
-// domain uses it directly; otherwise the link is built from its subdomain
-// under this deployment's root domain, defaulting to "acessos".
-func (f *Feature) buildLoginLink(ctx context.Context, tenantID, token, email string) (string, error) {
+// domain uses it directly; otherwise the link is built from its subdomain under
+// the frontend's root domain, defaulting to "acessos".
+func (f *Feature) buildLoginLink(ctx context.Context, tenantID, shortCode string) (string, error) {
 	customDomain, subDomain, err := f.tenantDomains(ctx, tenantID)
 	if err != nil {
 		return "", err
@@ -210,15 +205,10 @@ func (f *Feature) buildLoginLink(ctx context.Context, tenantID, token, email str
 		if subdomain == "" {
 			subdomain = "acessos"
 		}
-		domain = fmt.Sprintf("%s.%s", subdomain, f.rootDomain)
+		domain = fmt.Sprintf("%s.%s", subdomain, f.publicDomain)
 	}
 
-	protocol := "https"
-	if strings.Contains(f.rootDomain, "localhost") {
-		protocol = "http"
-	}
-
-	return fmt.Sprintf(linkFormat, protocol, domain, token, email), nil
+	return magiclink.Link(magiclink.Protocol(domain), domain, shortCode), nil
 }
 
 // ---------- 3. SQL ----------
@@ -238,6 +228,17 @@ const (
 		UPDATE "User"
 		SET "magicToken" = $1, "magicTokenValidUntil" = $2, "updatedAt" = NOW()
 		WHERE id = $3
+	`
+
+	// sqlCreateMagicToken mints the row the frontend redeems at
+	// `/api/auth/magic/<shortCode>`.
+	//
+	// "token" holds a sha256 hex digest rather than the bcrypt hash the "User"
+	// column above uses. That is not an oversight: the frontend computes the
+	// same digest to compare, and a salted hash would never match it.
+	sqlCreateMagicToken = `
+		INSERT INTO "MagicToken" (id, token, "shortCode", "userId", "tenantId", method, expires, "createdAt")
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
 	`
 
 	// Mind the casing: "customDomain" is camelCase but subdomain is not. Prisma
@@ -260,12 +261,67 @@ func (f *Feature) memberID(ctx context.Context, email, tenantID string) (string,
 	return userID, nil
 }
 
+// storeMagicToken refreshes the legacy "User"."magicToken" column, which holds
+// a single value per member — writing it invalidates whatever token was there
+// before. That is what the response cache in generateMagicLink exists to avoid.
 func (f *Feature) storeMagicToken(ctx context.Context, userID, tokenHash string, validUntil time.Time) error {
 	_, err := f.db.ExecContext(ctx, sqlStoreMagicToken, tokenHash, validUntil, userID)
 	if err != nil {
 		return f.fail("Error updating magic token: ", err, "error updating magic token")
 	}
 	return nil
+}
+
+// shortCodeAttempts bounds the retry on a "shortCode" collision. The column is
+// unique and the code carries 60 bits, so even a second attempt is vanishingly
+// unlikely; three exist so that exhausting them means a bug, not bad luck.
+const shortCodeAttempts = 3
+
+// createMagicToken mints the row the link points at and returns its short code.
+//
+// A failure here is fatal to the request rather than something to fall back
+// from. The alternative would be emitting the old `/login?token=&email=` link,
+// which puts the member's address back in a URL — the one thing this format
+// exists to stop.
+func (f *Feature) createMagicToken(ctx context.Context, userID, tenantID, rawToken string, expires time.Time) (string, error) {
+	for range shortCodeAttempts {
+		shortCode, err := magiclink.NewShortCode()
+		if err != nil {
+			return "", f.fail("Error generating short code: ", err, "error creating magic token")
+		}
+
+		_, err = f.db.ExecContext(ctx, sqlCreateMagicToken,
+			utils.GenerateCUID(),
+			magiclink.HashToken(rawToken),
+			shortCode,
+			userID,
+			tenantID,
+			magicTokenMethod,
+			expires,
+		)
+		switch {
+		case err == nil:
+			return shortCode, nil
+		case isUniqueViolation(err):
+			f.log.Warn("Magic token short code collided, regenerating")
+		default:
+			return "", f.fail("Error creating magic token: ", err, "error creating magic token")
+		}
+	}
+
+	return "", f.fail(
+		"Error creating magic token: ",
+		fmt.Errorf("short code still colliding after %d attempts", shortCodeAttempts),
+		"error creating magic token",
+	)
+}
+
+// isUniqueViolation reports whether err is Postgres' unique_violation. On the
+// insert above only "shortCode" can realistically raise it: the id is a CUID
+// and "token" is a digest of 32 random bytes.
+func isUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505"
 }
 
 func (f *Feature) tenantDomains(ctx context.Context, tenantID string) (customDomain, subDomain string, err error) {
