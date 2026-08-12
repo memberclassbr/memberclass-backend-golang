@@ -11,8 +11,11 @@
 --   (token_usage.video_id is informational, no FK constraint to enforce)
 --
 -- Safe to re-run: it operates only on rows that are still duplicated.
-
-BEGIN;
+--
+-- Applied at boot by MigrateTranscription, which already wraps this file in a
+-- transaction — so there is no BEGIN/COMMIT here, and no psql meta-command
+-- (`\gset` and friends) can appear: the file is sent to the server as SQL, not
+-- fed to psql.
 
 CREATE TEMP TABLE _video_losers AS
 SELECT id
@@ -26,8 +29,6 @@ SELECT id
   ) ranked
  WHERE rn > 1;
 
-SELECT format('deleting %s duplicate videos', COUNT(*)) FROM _video_losers \gset
-
 DELETE FROM public.chunks      WHERE video_id IN (SELECT id FROM _video_losers);
 DELETE FROM public.transcripts WHERE video_id IN (SELECT id FROM _video_losers);
 -- token_usage carries video_id without an FK; null it out so historical cost
@@ -36,5 +37,3 @@ UPDATE public.token_usage SET video_id = NULL WHERE video_id IN (SELECT id FROM 
 DELETE FROM public.videos      WHERE id IN (SELECT id FROM _video_losers);
 
 DROP TABLE _video_losers;
-
-COMMIT;
