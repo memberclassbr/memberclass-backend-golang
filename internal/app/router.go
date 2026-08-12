@@ -176,10 +176,11 @@ func (r *Router) SetupRoutes() {
 			})
 		})
 
+		// Only validate-token remains here: it is called by the tenant's own
+		// site with the tenant API key. generate-token moved to /sso.
 		router.Route("/sso", func(router chi.Router) {
-			r.sso.Register(router, ssofeat.MiddlewareSet{
-				AuthExternal:    r.authExternalMiddleware.Authenticate,
-				RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+			r.sso.RegisterTenantAPI(router, ssofeat.MiddlewareSet{
+				AuthExternal: r.authExternalMiddleware.Authenticate,
 			})
 		})
 
@@ -194,13 +195,6 @@ func (r *Router) SetupRoutes() {
 			//   GET   /jobs/{jobId}
 			//   PATCH /lessons/{lessonId}/transcription
 			r.transcription.Register(router, transcription.MiddlewareSet{})
-		})
-
-		router.Route("/videos", func(router chi.Router) {
-			r.video.Register(router, videofeat.MiddlewareSet{
-				CheckUploadLimit:     r.rateLimitMiddleware.CheckUploadLimit,
-				IncrementAfterUpload: r.rateLimitMiddleware.IncrementAfterUpload,
-			})
 		})
 
 		router.Route("/comments", func(router chi.Router) {
@@ -271,16 +265,40 @@ func (r *Router) SetupRoutes() {
 
 	})
 
-	// /imports/* — admin endpoints called from the Next.js frontend using
-	// a short-lived Bearer JWT minted by `/api/auth/go-token` on the Next
-	// side (same secret: NEXTAUTH_SECRET). Stateless, no cookies.
+	// ---- Frontend-origin surface, mounted at the root without /api ----
+	//
+	// These three are called from the Next.js frontend with a short-lived
+	// Bearer JWT minted by `/api/auth/go-token` on the Next side (same secret:
+	// NEXTAUTH_SECRET). Stateless, no cookies.
+	//
+	// The Bearer only establishes *who* is calling. It carries a `role` claim
+	// and names no tenant, so every one of these handlers goes on to read the
+	// caller's role for the tenant in the request out of "UsersOnTenants" —
+	// see internal/shared/tenantrole. Which roles pass differs per route and
+	// is declared at the call site, not here.
+
 	// LimitByIP caps abuse of the bulk endpoint when a token leaks or an
 	// admin account is compromised — the bearer token alone would otherwise
 	// allow unbounded submission of 10k-user batches.
 	r.Route("/imports", func(router chi.Router) {
 		router.Use(r.rateLimitIPMiddleware.LimitByIP)
 		r.memberImport.Register(router, member_import.MiddlewareSet{
-			SessionAuth: r.bearerMiddleware.RequireAuth,
+			BearerAuth: r.bearerMiddleware.RequireAuth,
+		})
+	})
+
+	r.Route("/sso", func(router chi.Router) {
+		r.sso.Register(router, ssofeat.MiddlewareSet{
+			BearerAuth:      r.bearerMiddleware.RequireAuth,
+			RateLimitTenant: r.rateLimitTenantMiddleware.LimitByTenant,
+		})
+	})
+
+	r.Route("/videos", func(router chi.Router) {
+		r.video.Register(router, videofeat.MiddlewareSet{
+			BearerAuth:           r.bearerMiddleware.RequireAuth,
+			CheckUploadLimit:     r.rateLimitMiddleware.CheckUploadLimit,
+			IncrementAfterUpload: r.rateLimitMiddleware.IncrementAfterUpload,
 		})
 	})
 }

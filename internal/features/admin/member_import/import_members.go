@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/memberclass-backend-golang/internal/shared/middleware"
+	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
 	"github.com/memberclass-backend-golang/internal/shared/utils"
 )
 
@@ -65,9 +65,10 @@ type tenantRow struct {
 //
 // Flow:
 //  1. Decode body, basic shape validation.
-//  2. Resolve session from context (put there by the auth middleware).
-//  3. Query UsersOnTenants to confirm the session user belongs to tenantId
-//     with role != "member".
+//  2. Resolve the Bearer identity from context (put there by the auth
+//     middleware).
+//  3. Read the caller's role in tenantId out of "UsersOnTenants" and require
+//     owner or admin.
 //  4. Load the tenant row (needed to build email links + batch emails).
 //  5. INSERT a "UserImport" header with status="processing" and respond 202
 //     immediately with { importId }.
@@ -84,24 +85,11 @@ func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authUser := middleware.GetAuthUser(r.Context())
-	if authUser == nil || authUser.UserID == "" {
-		writeError(w, http.StatusUnauthorized, "session not found")
-		return
-	}
-
-	role, err := f.loadRoleForTenant(r.Context(), authUser.UserID, req.TenantID)
+	// Bulk import writes to every member of the tenant, so it is the one route
+	// of the three that is not open to every role.
+	grant, err := f.roles.Authorize(r.Context(), req.TenantID, tenantrole.OwnerOrAdmin...)
 	if err != nil {
-		if errors.Is(err, errNotMember) {
-			writeError(w, http.StatusForbidden, "user does not belong to tenant")
-			return
-		}
-		f.log.Error("import: role lookup failed", "error", err.Error())
-		writeError(w, http.StatusInternalServerError, "failed to validate tenant access")
-		return
-	}
-	if role == "" || role == "member" {
-		writeError(w, http.StatusForbidden, "insufficient role")
+		f.writeAuthError(w, err)
 		return
 	}
 
@@ -112,7 +100,7 @@ func (f *Feature) ImportMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	importID, err := f.createImportHeader(r.Context(), authUser.UserID, &req)
+	importID, err := f.createImportHeader(r.Context(), grant.UserID, &req)
 	if err != nil {
 		f.log.Error("import: create header failed", "error", err.Error())
 		writeError(w, http.StatusInternalServerError, "failed to start import")
@@ -177,24 +165,22 @@ func validateRequest(req *importRequest) error {
 
 // ---------- Auth: role lookup ----------
 
-var errNotMember = errors.New("user is not a member of tenant")
-
-func (f *Feature) loadRoleForTenant(ctx context.Context, userID, tenantID string) (string, error) {
-	const q = `
-		SELECT role
-		FROM "UsersOnTenants"
-		WHERE "userId" = $1 AND "tenantId" = $2
-		LIMIT 1
-	`
-	var role string
-	err := f.db.QueryRowContext(ctx, q, userID, tenantID).Scan(&role)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", errNotMember
-		}
-		return "", err
+// writeAuthError turns a tenantrole failure into this slice's error envelope.
+// The messages stay as specific as they were: an admin debugging a 403 needs
+// to know whether the account is outside the tenant or merely too junior, and
+// neither fact is a secret from a caller who already proved who they are.
+func (f *Feature) writeAuthError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, tenantrole.ErrNoIdentity):
+		writeError(w, http.StatusUnauthorized, "session not found")
+	case errors.Is(err, tenantrole.ErrNotMember):
+		writeError(w, http.StatusForbidden, "user does not belong to tenant")
+	case errors.Is(err, tenantrole.ErrForbiddenRole):
+		writeError(w, http.StatusForbidden, "insufficient role")
+	default:
+		f.log.Error("import: role lookup failed", "error", err.Error())
+		writeError(w, http.StatusInternalServerError, "failed to validate tenant access")
 	}
-	return role, nil
 }
 
 // ---------- Tenant load ----------

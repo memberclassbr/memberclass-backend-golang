@@ -50,7 +50,7 @@ func createTestRouter(t *testing.T) *Router {
 	mockStudent := studentfeat.New(nil, nil, nil)
 	mockSwaggerHandler := docs.New()
 	mockAuth := authfeat.New(nil, nil, cfg, log)
-	mockSSO := ssofeat.New(nil, cfg, log)
+	mockSSO := ssofeat.New(nil, log)
 	mockAI := aifeat.New(nil, &config.Config{}, nil)
 	mockVitrine := vitrinefeat.New(nil, nil)
 	rateLimitMiddleware := mw.NewRateLimitMiddleware(nil, log)
@@ -84,8 +84,13 @@ func TestRouter_SetupRoutes(t *testing.T) {
 		path   string
 		status int // Expected status (404 for non-existent routes, or actual status for existing ones)
 	}{
-		// Video routes
-		{"POST", "/api/v1/videos/upload", 404}, // Will be 404 because we don't have actual handler implementation
+		// The frontend-origin trio moved to the root, and each now sits behind
+		// the Bearer middleware: no token means 401, and the old /api paths are
+		// gone rather than dual-mounted.
+		{"POST", "/videos/upload", 401},
+		{"POST", "/sso/generate-token", 401},
+		{"POST", "/api/v1/videos/upload", 404},
+		{"POST", "/api/v1/sso/generate-token", 404},
 
 		// Lesson routes
 		{"POST", "/api/lessons/pdf-process", 404},               // Will be 404 because we don't have actual handler implementation
@@ -147,7 +152,7 @@ func TestRouter_RouteStructure(t *testing.T) {
 	})
 
 	expectedRoutes := []string{
-		"POST /api/v1/videos/upload",
+		"POST /videos/upload",
 		"POST /api/lessons/pdf-process",
 		"POST /api/lessons/process-all-pdfs",
 		"POST /api/lessons/{lessonId}/pdf-regenerate",

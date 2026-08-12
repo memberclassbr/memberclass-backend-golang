@@ -87,7 +87,6 @@ check 401 "GET  /api/v1/user/lessons/completed" "$BASE_URL/api/v1/user/lessons/c
 check 401 "POST /api/v1/social"                 -X POST "$BASE_URL/api/v1/social"
 check 401 "GET  /api/v1/ai/lessons"             "$BASE_URL/api/v1/ai/lessons"
 check 401 "GET  /api/v1/ai/tenants"             "$BASE_URL/api/v1/ai/tenants"
-check 401 "POST /api/v1/sso/generate-token"     -X POST "$BASE_URL/api/v1/sso/generate-token"
 check 401 "POST /api/v1/auth"                   -X POST "$BASE_URL/api/v1/auth"
 check 401 "GET  /api/comments"                  "$BASE_URL/api/comments"
 check 401 "POST /api/lessons/pdf-process"       -X POST "$BASE_URL/api/lessons/pdf-process"
@@ -95,6 +94,14 @@ check 401 "POST /api/lessons/process-all-pdfs"  -X POST "$BASE_URL/api/lessons/p
 check 401 "GET  /api/lessons/x/pdf-pages"       "$BASE_URL/api/lessons/x/pdf-pages"
 check 401 "POST /api/lessons/x/pdf-regenerate"  -X POST "$BASE_URL/api/lessons/x/pdf-regenerate"
 check 401 "POST /imports/members"               -X POST "$BASE_URL/imports/members"
+check 401 "POST /sso/generate-token"            -X POST "$BASE_URL/sso/generate-token"
+check 401 "POST /videos/upload"                 -X POST "$BASE_URL/videos/upload"
+
+# The old paths of the three frontend-origin routes. They were removed in one
+# cutover rather than dual-mounted, so a 404 here is the pass and a 401 would
+# mean the old mount is still live.
+check 404 "POST /api/v1/videos/upload (gone)"      -X POST "$BASE_URL/api/v1/videos/upload"
+check 404 "POST /api/v1/sso/generate-token (gone)" -X POST "$BASE_URL/api/v1/sso/generate-token"
 
 # ---------- tenant API key ----------
 
@@ -154,20 +161,31 @@ fi
 
 section "admin endpoints (Bearer)"
 if [[ -z "$BEARER_TOKEN" ]]; then
-  skip "POST /imports/members" "set BEARER_TOKEN"
+  skip "POST /imports/members"      "set BEARER_TOKEN"
+  skip "POST /sso/generate-token"   "set BEARER_TOKEN"
+  skip "POST /videos/upload"        "set BEARER_TOKEN"
 else
   # An empty member list is rejected with 400 — enough to prove auth passes
   # without importing anyone.
   check 400 "POST /imports/members (empty body)" \
     -H "Authorization: Bearer $BEARER_TOKEN" -H 'Content-Type: application/json' \
     -X POST -d '{}' "$BASE_URL/imports/members"
+
+  # Same shape for the other two: a request that passes the Bearer and fails
+  # on its body proves the credential is wired without doing any real work.
+  check 400 "POST /sso/generate-token (no externalUrl)" \
+    -H "Authorization: Bearer $BEARER_TOKEN" -H 'Content-Type: application/json' \
+    -X POST -d '{}' "$BASE_URL/sso/generate-token"
+  check 400 "POST /videos/upload (no file)" \
+    -H "Authorization: Bearer $BEARER_TOKEN" \
+    -X POST "$BASE_URL/videos/upload"
 fi
 
 # ---------- not exercised ----------
 
 section "not exercised"
-skip "POST /api/v1/videos/upload"            "uploads a real file to Bunny"
-skip "POST /api/v1/sso/generate-token"       "mints a live SSO token"
+skip "POST /videos/upload (real file)"       "uploads a real file to Bunny"
+skip "POST /sso/generate-token (real mint)"  "mints a live SSO token"
 skip "POST /api/v1/sso/validate-token"       "consumes a one-time token"
 skip "POST /api/v1/ai/tenants/process-lessons" "enqueues real transcription work"
 skip "POST /api/lessons/pdf-process"         "starts real PDF processing"

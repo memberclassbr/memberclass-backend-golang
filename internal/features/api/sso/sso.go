@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/middleware"
+	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
 )
 
 // ssoTokenTTL is how long a minted SSO token stays redeemable. It is short
@@ -59,16 +61,11 @@ type validateTokenResponse struct {
 
 // ---------- 1. HTTP handlers ----------
 
-// GenerateSSOToken handles `POST /api/v1/sso/generate-token?externalUrl=`.
+// GenerateSSOToken handles `POST /sso/generate-token?externalUrl=`.
+//
+// Authentication is the go-token Bearer JWT, applied by the router. What this
+// handler decides is who the caller is allowed to mint a hand-off *for*.
 func (f *Feature) GenerateSSOToken(w http.ResponseWriter, r *http.Request) {
-	// The key check comes before the method check, matching the previous
-	// handler: an unauthenticated caller learns nothing about the endpoint.
-	apiKey := r.Header.Get("x-internal-api-key")
-	if apiKey == "" || apiKey != f.internalAPIKey {
-		writeCustomError(w, http.StatusUnauthorized, "Não autorizado: token é obrigatório", "UNAUTHORIZED")
-		return
-	}
-
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
@@ -92,6 +89,13 @@ func (f *Feature) GenerateSSOToken(w http.ResponseWriter, r *http.Request) {
 	externalURL := r.URL.Query().Get("externalUrl")
 	if externalURL == "" {
 		writeCustomError(w, http.StatusBadRequest, "externalUrl é obrigatório", "INVALID_REQUEST")
+		return
+	}
+
+	// Shape first, permission second: a malformed request is answered without
+	// a round trip to the database.
+	if err := f.authorizeMint(r, req); err != nil {
+		f.writeAuthError(w, err)
 		return
 	}
 
@@ -141,6 +145,45 @@ func clientIP(r *http.Request) string {
 		return ip
 	}
 	return r.RemoteAddr
+}
+
+// ---------- Auth: who may mint a hand-off for whom ----------
+
+// authorizeMint decides whether the Bearer identity on the request may mint an
+// SSO hand-off for req.UserID inside req.TenantID.
+//
+// The endpoint is open to every role, but only for the caller's own account.
+// The token this mints is redeemed at validate-token for the target user's
+// identity — id, email, name, phone, document — on the tenant's external site,
+// so minting one for somebody else is impersonation, not delegation. A member
+// signing themselves out to the tenant's site is the actual use case and stays
+// open to any role; acting on another account is an administrative act and
+// takes owner or admin.
+//
+// Before this route moved to the Bearer, the whole endpoint sat behind
+// x-internal-api-key and an arbitrary userId was safe because only the
+// platform's own backend could reach it. That is no longer true.
+func (f *Feature) authorizeMint(r *http.Request, req generateTokenRequest) error {
+	allowed := tenantrole.AnyRole
+	if caller := middleware.GetAuthUser(r.Context()); caller == nil || caller.UserID != req.UserID {
+		allowed = tenantrole.OwnerOrAdmin
+	}
+	_, err := f.roles.Authorize(r.Context(), req.TenantID, allowed...)
+	return err
+}
+
+// writeAuthError maps a tenantrole failure onto this slice's error envelope,
+// which is the `{ok, error, errorCode}` shape its other failures already use.
+func (f *Feature) writeAuthError(w http.ResponseWriter, err error) {
+	switch status := tenantrole.Status(err); status {
+	case http.StatusUnauthorized:
+		writeCustomError(w, status, "Não autorizado: token é obrigatório", "UNAUTHORIZED")
+	case http.StatusForbidden:
+		writeCustomError(w, status, "Sem permissão para gerar token para este usuário", "FORBIDDEN")
+	default:
+		f.log.Error("sso: role lookup failed: " + err.Error())
+		writeCustomError(w, status, "Erro ao validar acesso ao tenant", "INTERNAL_ERROR")
+	}
 }
 
 // ---------- 2. Business rules ----------

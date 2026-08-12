@@ -151,7 +151,7 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 		studentfeat.New(db, redis, log),
 		docs.New(),
 		authfeat.New(db, redis, cfg, log),
-		ssofeat.New(db, cfg, log),
+		ssofeat.New(db, log),
 		aifeat.New(db, cfg, log),
 		vitrinefeat.New(db, log),
 		healthfeat.New(db, redis, log),

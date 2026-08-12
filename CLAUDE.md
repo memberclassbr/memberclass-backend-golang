@@ -123,9 +123,9 @@ Four credentials, each guarding a different surface:
 | Credential | Header / cookie | Guards |
 |---|---|---|
 | Tenant external API key | `x-api-key` (legacy: `mc-api-key`) | most of `/api/v1/*` |
-| Internal API key | `x-internal-api-key` | `/api/v1/ai/*`, `/api/v1/sso/generate-token`, `/api/lessons/*` |
+| Internal API key | `x-internal-api-key` | `/api/v1/ai/*`, `/api/lessons/*` |
 | NextAuth session | `next-auth.session-token` cookie | `/api/comments` |
-| NextAuth Bearer JWT | `Authorization: Bearer` | `/imports/*` |
+| NextAuth Bearer JWT | `Authorization: Bearer` | `/imports/*`, `/sso/*`, `/videos/*` |
 
 The middlewares live in [internal/shared/middleware](internal/shared/middleware).
 
@@ -138,9 +138,41 @@ The internal API key is checked inside the handlers that use it, not by a
 middleware; those checks reject an empty incoming key so an unset
 `INTERNAL_AI_API_KEY` cannot leave an endpoint open.
 
-**`POST /api/v1/videos/upload` has no credential check** — only the upload rate
-limiter. That predates this structure and was left as it was; adding auth would
-break the frontend that calls it.
+### The frontend-origin surface: `/imports`, `/sso`, `/videos`
+
+These three sit at the root, without the `/api` prefix, because the same thing
+is true of all of them: they are called by the Next.js admin frontend with a
+short-lived Bearer JWT minted at `/api/auth/go-token` on the Next side, using
+`NEXTAUTH_SECRET`.
+
+The Bearer establishes *who* is calling and nothing more. It carries a `role`
+claim, and every one of these handlers ignores it: the claim is copied from a
+NextAuth session that may predate a demotion, and it names no tenant, so
+trusting it would let one token pass as the same role in every tenant the
+holder can name in a request body. The role is read from `"UsersOnTenants"` for
+the tenant in the request on every call, through
+[internal/shared/tenantrole](internal/shared/tenantrole).
+
+Which roles pass is declared per route, at the call site:
+
+| Route | Roles |
+|---|---|
+| `POST /imports/members` | `owner`, `admin` |
+| `POST /videos/upload` | any role in the tenant |
+| `POST /sso/generate-token` | any role **for their own account**; `owner`/`admin` to mint for another `userId` |
+
+The SSO split is not incidental. The token that endpoint mints is redeemed at
+`validate-token` for the target user's identity on the tenant's external site,
+so minting one for somebody else is impersonation rather than delegation.
+
+`POST /api/v1/sso/validate-token` stays under `/api/v1` behind the tenant API
+key: it is called by the tenant's own site, which holds no NextAuth session and
+has no way to mint a Bearer.
+
+`POST /videos/upload` used to carry no credential at all, and
+`POST /sso/generate-token` used to be gated by `x-internal-api-key`. Both moved
+in one cutover — the old paths are gone, not dual-mounted — so the frontend has
+to deploy alongside this service.
 
 ## Rate limiting
 

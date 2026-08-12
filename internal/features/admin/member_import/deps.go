@@ -2,11 +2,12 @@
 // `POST /imports/members` endpoint: an admin-only bulk user import.
 //
 // Security model
-//   - Session cookie (next-auth) is decrypted by the AuthMiddleware that the
-//     router composes in front of every route in this slice.
-//   - The slice itself re-validates: the session's userId must belong to the
-//     target tenantId AND their UsersOnTenants.role must be != "member"
-//     (i.e. owner/admin/etc).
+//   - A go-token Bearer JWT is verified by the BearerMiddleware the router
+//     composes in front of every route in this slice.
+//   - The slice itself re-validates through internal/shared/tenantrole: the
+//     token's userId must hold a role in the target tenantId, read from
+//     "UsersOnTenants" rather than from the token's own claim, and that role
+//     must be owner or admin.
 //
 // Behavior
 //   - Validates input + auth, then INSERTs a UserImport header and returns 202
@@ -27,6 +28,7 @@ import (
 
 	"github.com/memberclass-backend-golang/internal/platform/logger"
 	"github.com/memberclass-backend-golang/internal/platform/resend"
+	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
 )
 
 // Feature holds the shared dependencies for every action in this slice.
@@ -34,6 +36,7 @@ type Feature struct {
 	db     *sql.DB
 	log    logger.Logger
 	resend resend.Service
+	roles  *tenantrole.Checker
 
 	// inflight tracks background import goroutines so shutdown can drain
 	// them before the DB is closed. Without this, an in-flight import
@@ -43,9 +46,9 @@ type Feature struct {
 	inflight sync.WaitGroup
 }
 
-// New builds the slice. Wire it in cmd/api/main.go via fx.Provide.
+// New builds the slice.
 func New(db *sql.DB, log logger.Logger, resendSvc resend.Service) *Feature {
-	return &Feature{db: db, log: log, resend: resendSvc}
+	return &Feature{db: db, log: log, resend: resendSvc, roles: tenantrole.New(db)}
 }
 
 // Wait blocks until every in-flight import goroutine has returned, or until
@@ -68,7 +71,8 @@ func (f *Feature) Wait(ctx context.Context) {
 }
 
 // MiddlewareSet carries the chi-compatible middlewares the slice's routes
-// need. Only session auth — CORS is applied at the router level.
+// need. Only the Bearer check — CORS is applied at the router level, and the
+// role check is a helper the handler calls once it knows the tenant.
 type MiddlewareSet struct {
-	SessionAuth func(http.Handler) http.Handler
+	BearerAuth func(http.Handler) http.Handler
 }

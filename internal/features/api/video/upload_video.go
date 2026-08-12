@@ -12,6 +12,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/shared/httpx"
 	"github.com/memberclass-backend-golang/internal/shared/memberclasserrors"
+	"github.com/memberclass-backend-golang/internal/shared/tenantrole"
 	"github.com/memberclass-backend-golang/internal/shared/utils"
 )
 
@@ -38,8 +39,13 @@ type uploadVideoResponse struct {
 
 // ---------- 1. HTTP handler ----------
 
-// UploadVideo handles `POST /api/v1/videos/upload`, a multipart form carrying
-// the file, the tenantId and an optional title.
+// UploadVideo handles `POST /videos/upload`, a multipart form carrying the
+// file, the tenantId and an optional title.
+//
+// The Bearer middleware has already established who the caller is; what this
+// handler adds is that they hold a role — any role — in the tenantId they put
+// in the form. Without that check the token would be a licence to upload into
+// every tenant on the deployment.
 func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(0); err != nil {
 		f.log.Error("Failed to parse multipart form", "error", err)
@@ -58,6 +64,12 @@ func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	tenantID := r.FormValue("tenantId")
 	if tenantID == "" {
 		httpx.WriteError(w, "tenantId is required", http.StatusBadRequest)
+		return
+	}
+
+	// Any role may upload; belonging to the tenant is the whole requirement.
+	if _, err := f.roles.Authorize(r.Context(), tenantID, tenantrole.AnyRole...); err != nil {
+		f.writeAuthError(w, err)
 		return
 	}
 
@@ -89,6 +101,19 @@ func (f *Feature) UploadVideo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteSuccess(w, result, http.StatusOK)
+}
+
+// writeAuthError maps a tenantrole failure onto this slice's envelope. A
+// lookup that failed for an infrastructure reason is logged and answered as a
+// 500; the caller is told nothing about which tenant exists.
+func (f *Feature) writeAuthError(w http.ResponseWriter, err error) {
+	status := tenantrole.Status(err)
+	if status == http.StatusInternalServerError {
+		f.log.Error("upload: role lookup failed", "error", err.Error())
+		httpx.WriteError(w, "Failed to validate tenant access", status)
+		return
+	}
+	httpx.WriteError(w, "Not allowed to upload for this tenant", status)
 }
 
 func writeUseCaseError(w http.ResponseWriter, err error) {

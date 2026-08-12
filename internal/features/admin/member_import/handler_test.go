@@ -123,7 +123,52 @@ func TestImportMembers_UserNotInTenant(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
-func TestImportMembers_RoleMember_Forbidden(t *testing.T) {
+// Bulk import is owner/admin only. The rule used to be "anything but member",
+// which let tutor and manager through; they no longer pass.
+func TestImportMembers_OnlyOwnerAndAdminMayImport(t *testing.T) {
+	// The allowed roles are asserted as "got past the role check" rather than
+	// as 202: letting the handler reach 202 would spawn the import worker
+	// against a mock that is about to be closed. Failing the very next query —
+	// the tenant load — proves the gate opened without starting any work.
+	const passedTheGate = http.StatusInternalServerError
+
+	cases := map[string]int{
+		"owner":   passedTheGate,
+		"admin":   passedTheGate,
+		"manager": http.StatusForbidden,
+		"tutor":   http.StatusForbidden,
+		"member":  http.StatusForbidden,
+		// A row that exists with no role at all is not a wildcard.
+		"": http.StatusForbidden,
+	}
+
+	for role, want := range cases {
+		t.Run("role="+role, func(t *testing.T) {
+			f, mock, done := newFeature(t)
+			defer done()
+
+			mock.ExpectQuery(`SELECT role FROM "UsersOnTenants"`).
+				WithArgs("u-1", "t-1").
+				WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow(role))
+
+			if want == passedTheGate {
+				mock.ExpectQuery(`FROM "Tenant"`).WillReturnError(sql.ErrConnDone)
+			}
+
+			w := doImport(f, importRequest{
+				TenantID: "t-1",
+				Users:    []importUserInput{{Name: "x", Email: "x@y.com"}},
+			}, "u-1")
+
+			assert.Equal(t, want, w.Code)
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+// The Bearer's own `role` claim is never consulted: a token minted while the
+// account was an owner must not survive the demotion that follows it.
+func TestImportMembers_IgnoresTheRoleClaimOnTheToken(t *testing.T) {
 	f, mock, done := newFeature(t)
 	defer done()
 
@@ -131,12 +176,23 @@ func TestImportMembers_RoleMember_Forbidden(t *testing.T) {
 		WithArgs("u-1", "t-1").
 		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
 
-	w := doImport(f, importRequest{
+	raw, err := json.Marshal(importRequest{
 		TenantID: "t-1",
 		Users:    []importUserInput{{Name: "x", Email: "x@y.com"}},
-	}, "u-1")
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/imports/members", bytes.NewReader(raw))
+	req = req.WithContext(middleware.ContextWithAuthUser(req.Context(), &middleware.AuthUser{
+		UserID: "u-1",
+		Role:   "owner", // the claim says owner; the database says member
+	}))
+
+	w := httptest.NewRecorder()
+	f.ImportMembers(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 // ---------- Helpers (unit) ----------

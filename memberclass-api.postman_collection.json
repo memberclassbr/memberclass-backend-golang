@@ -2,7 +2,7 @@
  "info": {
   "_postman_id": "memberclass-backend-golang",
   "name": "MemberClass Backend API",
-  "description": "Coleção completa do backend MemberClass (Go, Vertical Slice Architecture).\n\nCobre **todas as 34 rotas** montadas em `internal/app/router.go`, incluindo as internas (36 requests: `pdf-process` aparece três vezes, uma por `action`).\nAs pastas são organizadas **por credencial**, porque é a divisão que importa ao validar um deploy:\n\n| Pasta | Credencial | Header / cookie |\n|---|---|---|\n| 00 · Docs & saúde | nenhuma | — |\n| 01 · API do tenant | chave de API do tenant | `x-api-key` |\n| 02 · Interno | chave interna | `x-internal-api-key` |\n| 03 · Frontend admin | JWT NextAuth / sessão | `Authorization: Bearer` / cookie `next-auth.session-token` |\n| 04 · Sem autenticação | nenhuma (proposital) | — |\n\n## Como usar\n\n1. Preencher as variáveis da coleção (aba **Variables**). No mínimo: `baseUrl`, `apiKey`, `internalAiApiKey`, `tenantId`, `email`.\n2. Rodar a pasta **00 · Docs & saúde** primeiro — se `/health` der 503 ou `/docs/` não responder, o serviço não está pronto e nada mais adianta.\n3. Rodar cada pasta no **Collection Runner**. Toda request traz três testes automáticos:\n   - rota está montada (não 404)\n   - credencial aceita (não 401/403)\n   - sem erro de servidor (não 5xx)\n4. Repetir removendo a credencial: as pastas 01–03 **devem** dar 401. Se passar sem credencial, é falha de segurança.\n\n## Ordem sugerida para validar uma migração\n\n1. `00 · Docs & saúde` — `/health` em 200: processo vivo e dependências alcançáveis.\n2. `01` → `GET /api/v1/vitrine` com `includeChildren=true` — banco do tenant conectado e árvore íntegra.\n3. `02` → `GET /api/v1/ai/transcription-stats` — comparar `total`/`transcribed` com a origem.\n4. `02` → `POST /api/v1/ai/search` — se der `count: 0` com transcrições existentes, o pgvector não migrou.\n5. `04` → `POST /api/v1/videos/upload` — exercita Redis (rate limit) e Spaces (bucket) de uma vez.\n6. `03` → `POST /imports/members` — valida `NEXTAUTH_SECRET`.\n\n## Formatos de erro (são contrato, os dois)\n\n- `{error, message}` — 405 e códigos não mapeados.\n- `{ok, error, errorCode}` — as falhas em que o cliente faz switch.\n",
+  "description": "Coleção completa do backend MemberClass (Go, Vertical Slice Architecture).\n\nCobre **todas as 34 rotas** montadas em `internal/app/router.go`, incluindo as internas (36 requests: `pdf-process` aparece três vezes, uma por `action`).\nAs pastas são organizadas **por credencial**, porque é a divisão que importa ao validar um deploy:\n\n| Pasta | Credencial | Header / cookie |\n|---|---|---|\n| 00 · Docs & saúde | nenhuma | — |\n| 01 · API do tenant | chave de API do tenant | `x-api-key` |\n| 02 · Interno | chave interna | `x-internal-api-key` |\n| 03 · Frontend admin | JWT NextAuth / sessão | `Authorization: Bearer` / cookie `next-auth.session-token` |\n\nAs três rotas da pasta 03 que usam Bearer — `/imports/members`, `/sso/generate-token` e `/videos/upload` — ficam na raiz, sem o prefixo `/api`, e validam a role do chamador lendo `\"UsersOnTenants\"` no banco. A claim `role` do JWT é ignorada de propósito.\n| 04 · Sem autenticação | nenhuma | — (vazia: `videos/upload` migrou para a 03) |\n\n## Como usar\n\n1. Preencher as variáveis da coleção (aba **Variables**). No mínimo: `baseUrl`, `apiKey`, `internalAiApiKey`, `tenantId`, `email`.\n2. Rodar a pasta **00 · Docs & saúde** primeiro — se `/health` der 503 ou `/docs/` não responder, o serviço não está pronto e nada mais adianta.\n3. Rodar cada pasta no **Collection Runner**. Toda request traz três testes automáticos:\n   - rota está montada (não 404)\n   - credencial aceita (não 401/403)\n   - sem erro de servidor (não 5xx)\n4. Repetir removendo a credencial: as pastas 01–03 **devem** dar 401. Se passar sem credencial, é falha de segurança.\n\n## Ordem sugerida para validar uma migração\n\n1. `00 · Docs & saúde` — `/health` em 200: processo vivo e dependências alcançáveis.\n2. `01` → `GET /api/v1/vitrine` com `includeChildren=true` — banco do tenant conectado e árvore íntegra.\n3. `02` → `GET /api/v1/ai/transcription-stats` — comparar `total`/`transcribed` com a origem.\n4. `02` → `POST /api/v1/ai/search` — se der `count: 0` com transcrições existentes, o pgvector não migrou.\n5. `03` → `POST /videos/upload` — exercita Redis (rate limit) e Spaces (bucket) de uma vez.\n6. `03` → `POST /imports/members` — valida `NEXTAUTH_SECRET` e o corte `owner`/`admin`.\n\n## Formatos de erro (são contrato, os dois)\n\n- `{error, message}` — 405 e códigos não mapeados.\n- `{ok, error, errorCode}` — as falhas em que o cliente faz switch.\n",
   "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
  },
  "item": [
@@ -3418,228 +3418,6 @@
    "description": "Endpoints operacionais/administrativos. A chave é conferida DENTRO do handler (não há middleware), e uma `INTERNAL_AI_API_KEY` vazia no servidor faz todas retornarem 401 — o que é proposital. Estas rotas recebem `tenantId` explícito, já que não há chave de tenant para resolver.",
    "item": [
     {
-     "name": "POST /api/v1/sso/generate-token",
-     "request": {
-      "method": "POST",
-      "header": [
-       {
-        "key": "x-internal-api-key",
-        "value": "{{internalAiApiKey}}"
-       },
-       {
-        "key": "Content-Type",
-        "value": "application/json"
-       }
-      ],
-      "url": {
-       "raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl={{externalUrl}}",
-       "host": [
-        "{{baseUrl}}"
-       ],
-       "path": [
-        "api",
-        "v1",
-        "sso",
-        "generate-token"
-       ],
-       "query": [
-        {
-         "key": "externalUrl",
-         "value": "{{externalUrl}}",
-         "description": "URL da plataforma externa para onde redirecionar."
-        }
-       ]
-      },
-      "description": "**Auth:** header `x-internal-api-key: {{internalAiApiKey}}` — deve bater com `INTERNAL_AI_API_KEY`. Validado dentro do handler, não por middleware. Chave vazia no servidor ⇒ 401 sempre.\n**Rate limit:** por tenant\n\nEmite um token SSO de curta duração para um usuário do tenant e devolve a URL de redirect. O par desta rota é o `validate-token` (pasta 01), que usa `x-api-key`.\n\n**Como testar**\n1. Preencher `userId` e `tenantId`.\n2. `externalUrl` na query define o destino do redirect.\n3. Guardar o `token` em `{{ssoToken}}` e validar na pasta 01.\n\n**Esperado:** 200 `{token, redirectUrl, expiresInSecs}`.\n**Sem/errada a credencial:** 401 `{ok:false, errorCode:\"UNAUTHORIZED\"}`.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
-      "body": {
-       "mode": "raw",
-       "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"tenantId\": \"{{tenantId}}\"\n}",
-       "options": {
-        "raw": {
-         "language": "json"
-        }
-       }
-      }
-     },
-     "response": [
-      {
-       "name": "Generate SSO Token - Success",
-       "originalRequest": {
-        "method": "POST",
-        "header": [
-         {
-          "key": "x-internal-api-key",
-          "value": "valid-internal-key"
-         },
-         {
-          "key": "Content-Type",
-          "value": "application/json"
-         }
-        ],
-        "body": {
-         "mode": "raw",
-         "raw": "{\n    \"userId\": \"user123\",\n    \"tenantId\": \"tenant456\"\n}",
-         "options": {
-          "raw": {
-           "language": "json"
-          }
-         }
-        },
-        "url": {
-         "raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
-         "host": [
-          "{{baseUrl}}"
-         ],
-         "path": [
-          "api",
-          "v1",
-          "sso",
-          "generate-token"
-         ],
-         "query": [
-          {
-           "key": "externalUrl",
-           "value": "https://external-platform.com"
-          }
-         ]
-        }
-       },
-       "status": "OK",
-       "code": 200,
-       "_postman_previewlanguage": "json",
-       "header": [
-        {
-         "key": "Content-Type",
-         "value": "application/json"
-        }
-       ],
-       "body": "{\n    \"token\": \"abc123token456\",\n    \"redirectUrl\": \"https://external-platform.com?token-mc=abc123token456\",\n    \"expiresInSecs\": 300\n}"
-      },
-      {
-       "name": "Generate SSO Token - Unauthorized",
-       "originalRequest": {
-        "method": "POST",
-        "header": [
-         {
-          "key": "Content-Type",
-          "value": "application/json"
-         }
-        ],
-        "body": {
-         "mode": "raw",
-         "raw": "{\n    \"userId\": \"user123\",\n    \"tenantId\": \"tenant456\"\n}",
-         "options": {
-          "raw": {
-           "language": "json"
-          }
-         }
-        },
-        "url": {
-         "raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
-         "host": [
-          "{{baseUrl}}"
-         ],
-         "path": [
-          "api",
-          "v1",
-          "sso",
-          "generate-token"
-         ],
-         "query": [
-          {
-           "key": "externalUrl",
-           "value": "https://external-platform.com"
-          }
-         ]
-        }
-       },
-       "status": "Unauthorized",
-       "code": 401,
-       "_postman_previewlanguage": "json",
-       "header": [
-        {
-         "key": "Content-Type",
-         "value": "application/json"
-        }
-       ],
-       "body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
-      },
-      {
-       "name": "Generate SSO Token - User Not Found",
-       "originalRequest": {
-        "method": "POST",
-        "header": [
-         {
-          "key": "x-internal-api-key",
-          "value": "valid-internal-key"
-         },
-         {
-          "key": "Content-Type",
-          "value": "application/json"
-         }
-        ],
-        "body": {
-         "mode": "raw",
-         "raw": "{\n    \"userId\": \"nonexistent\",\n    \"tenantId\": \"tenant456\"\n}",
-         "options": {
-          "raw": {
-           "language": "json"
-          }
-         }
-        },
-        "url": {
-         "raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
-         "host": [
-          "{{baseUrl}}"
-         ],
-         "path": [
-          "api",
-          "v1",
-          "sso",
-          "generate-token"
-         ],
-         "query": [
-          {
-           "key": "externalUrl",
-           "value": "https://external-platform.com"
-          }
-         ]
-        }
-       },
-       "status": "Not Found",
-       "code": 404,
-       "_postman_previewlanguage": "json",
-       "header": [
-        {
-         "key": "Content-Type",
-         "value": "application/json"
-        }
-       ],
-       "body": "{\n    \"ok\": false,\n    \"error\": \"usuário não encontrado\",\n    \"errorCode\": \"NOT_FOUND\"\n}"
-      }
-     ],
-     "event": [
-      {
-       "listen": "test",
-       "script": {
-        "type": "text/javascript",
-        "exec": [
-         "// Checagens de migração: rota montada + credencial aceita.",
-         "pm.test('rota está montada (não 404)', function () {",
-         "    pm.expect(pm.response.code).to.not.eql(404);",
-         "});",
-         "pm.test('credencial aceita (não 401/403)', function () {",
-         "    pm.expect([401, 403]).to.not.include(pm.response.code);",
-         "});",
-         "pm.test('sem erro de servidor (não 5xx)', function () {",
-         "    pm.expect(pm.response.code).to.be.below(500);",
-         "});"
-        ]
-       }
-      }
-     ]
-    },
-    {
      "name": "GET /api/v1/ai/tenants — tenants com IA",
      "request": {
       "method": "GET",
@@ -5551,36 +5329,252 @@
        }
       }
      ]
-    }
-   ]
-  },
-  {
-   "name": "04 · Sem autenticação",
-   "description": "Uma rota só, e é intencional. Documentada em CLAUDE.md: adicionar auth quebraria o frontend que a chama hoje.",
-   "item": [
+    },
     {
-     "name": "POST /api/v1/videos/upload",
+     "name": "POST /sso/generate-token",
      "request": {
       "method": "POST",
       "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{bearerToken}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/sso/generate-token?externalUrl={{externalUrl}}",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "sso",
+        "generate-token"
+       ],
+       "query": [
+        {
+         "key": "externalUrl",
+         "value": "{{externalUrl}}",
+         "description": "URL da plataforma externa para onde redirecionar."
+        }
+       ]
+      },
+      "description": "**Auth:** header `Authorization: Bearer {{bearerToken}}` — JWT go-token do frontend Next (`BearerMiddleware`). Substituiu o `x-internal-api-key`, e a rota saiu de `/api/v1/sso` para `/sso`: o caminho antigo foi removido, não fica dual-mounted.\n**Rate limit:** por tenant.\n\nEmite um token SSO de uso único (TTL 5 min) e a URL de redirect para o site externo do tenant.\n\n**Quem pode chamar** — a role vem de `\"UsersOnTenants\"` no banco, nunca da claim `role` do JWT:\n- `userId` **igual ao dono do Bearer**: qualquer role.\n- `userId` **de outra pessoa**: só `owner` ou `admin`. O token é trocado em `validate-token` pela identidade do usuário alvo, então mintar para terceiro é impersonação.\n\n**Como testar**\n1. Setar `{{bearerToken}}`, `{{userId}}`, `{{tenantId}}` e `{{externalUrl}}`.\n2. Enviar e guardar o `token` para a request `POST /api/v1/sso/validate-token` (pasta 01).\n3. Repetir com um `userId` de outra conta usando um Bearer de `member` ⇒ deve dar 403 `FORBIDDEN`.\n\n**Esperado:** 200 `{token, redirectUrl, expiresInSecs}`.\n**Sem/errado o Bearer:** 401. **Role insuficiente ou fora do tenant:** 403.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"tenantId\": \"{{tenantId}}\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     },
+     "response": [
+      {
+       "name": "Generate SSO Token - Success",
+       "originalRequest": {
+        "method": "POST",
+        "header": [
+         {
+          "key": "x-internal-api-key",
+          "value": "valid-internal-key"
+         },
+         {
+          "key": "Content-Type",
+          "value": "application/json"
+         }
+        ],
+        "body": {
+         "mode": "raw",
+         "raw": "{\n    \"userId\": \"user123\",\n    \"tenantId\": \"tenant456\"\n}",
+         "options": {
+          "raw": {
+           "language": "json"
+          }
+         }
+        },
+        "url": {
+         "raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
+         "host": [
+          "{{baseUrl}}"
+         ],
+         "path": [
+          "api",
+          "v1",
+          "sso",
+          "generate-token"
+         ],
+         "query": [
+          {
+           "key": "externalUrl",
+           "value": "https://external-platform.com"
+          }
+         ]
+        }
+       },
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "body": "{\n    \"token\": \"abc123token456\",\n    \"redirectUrl\": \"https://external-platform.com?token-mc=abc123token456\",\n    \"expiresInSecs\": 300\n}"
+      },
+      {
+       "name": "Generate SSO Token - Unauthorized",
+       "originalRequest": {
+        "method": "POST",
+        "header": [
+         {
+          "key": "Content-Type",
+          "value": "application/json"
+         }
+        ],
+        "body": {
+         "mode": "raw",
+         "raw": "{\n    \"userId\": \"user123\",\n    \"tenantId\": \"tenant456\"\n}",
+         "options": {
+          "raw": {
+           "language": "json"
+          }
+         }
+        },
+        "url": {
+         "raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
+         "host": [
+          "{{baseUrl}}"
+         ],
+         "path": [
+          "api",
+          "v1",
+          "sso",
+          "generate-token"
+         ],
+         "query": [
+          {
+           "key": "externalUrl",
+           "value": "https://external-platform.com"
+          }
+         ]
+        }
+       },
+       "status": "Unauthorized",
+       "code": 401,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "body": "{\n    \"ok\": false,\n    \"error\": \"Não autorizado: token é obrigatório\",\n    \"errorCode\": \"UNAUTHORIZED\"\n}"
+      },
+      {
+       "name": "Generate SSO Token - User Not Found",
+       "originalRequest": {
+        "method": "POST",
+        "header": [
+         {
+          "key": "x-internal-api-key",
+          "value": "valid-internal-key"
+         },
+         {
+          "key": "Content-Type",
+          "value": "application/json"
+         }
+        ],
+        "body": {
+         "mode": "raw",
+         "raw": "{\n    \"userId\": \"nonexistent\",\n    \"tenantId\": \"tenant456\"\n}",
+         "options": {
+          "raw": {
+           "language": "json"
+          }
+         }
+        },
+        "url": {
+         "raw": "{{baseUrl}}/api/v1/sso/generate-token?externalUrl=https://external-platform.com",
+         "host": [
+          "{{baseUrl}}"
+         ],
+         "path": [
+          "api",
+          "v1",
+          "sso",
+          "generate-token"
+         ],
+         "query": [
+          {
+           "key": "externalUrl",
+           "value": "https://external-platform.com"
+          }
+         ]
+        }
+       },
+       "status": "Not Found",
+       "code": 404,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "body": "{\n    \"ok\": false,\n    \"error\": \"usuário não encontrado\",\n    \"errorCode\": \"NOT_FOUND\"\n}"
+      }
+     ],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Checagens de migração: rota montada + credencial aceita.",
+         "pm.test('rota está montada (não 404)', function () {",
+         "    pm.expect(pm.response.code).to.not.eql(404);",
+         "});",
+         "pm.test('credencial aceita (não 401/403)', function () {",
+         "    pm.expect([401, 403]).to.not.include(pm.response.code);",
+         "});",
+         "pm.test('sem erro de servidor (não 5xx)', function () {",
+         "    pm.expect(pm.response.code).to.be.below(500);",
+         "});"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "POST /videos/upload",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{bearerToken}}"
+       },
        {
         "key": "user_id",
         "value": "{{userId}}"
        }
       ],
       "url": {
-       "raw": "{{baseUrl}}/api/v1/videos/upload",
+       "raw": "{{baseUrl}}/videos/upload",
        "host": [
         "{{baseUrl}}"
        ],
        "path": [
-        "api",
-        "v1",
         "videos",
         "upload"
        ]
       },
-      "description": "**Auth:** NENHUMA. Rota aberta por decisão histórica — só o rate limit de upload protege. Ver CLAUDE.md.\n**Rate limit:** por bytes de upload, chaveado pelo header `user_id`\n\nSobe um vídeo para o Bunny CDN. **Não tem checagem de credencial** — só o rate limiter de upload, que exige o header `user_id` e usa `Content-Length` para contabilizar a cota.\n\n**Como testar**\n1. Em Body → form-data, escolher um arquivo no campo `file` (o campo já está criado, só selecionar).\n2. Preencher `tenantId` e `title`.\n3. Sem o header `user_id` ⇒ 400 `user_id header is required`.\n4. Repetir até estourar a cota para validar o limiter — é o teste que exige o Redis funcionando.\n\n**Esperado:** 200 com os dados do vídeo criado.\n**Sem credencial:** passa — não há checagem. Falta o header `user_id` ⇒ 400.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`.",
+      "description": "**Auth:** header `Authorization: Bearer {{bearerToken}}` — JWT go-token do frontend Next (`BearerMiddleware`). Esta rota **não tinha credencial nenhuma** e ficava em `/api/v1/videos/upload`; o caminho antigo foi removido.\n**Rate limit:** bytes de upload por tenant.\n\nSobe o arquivo para a library Bunny do tenant e devolve a URL do player.\n\n**Quem pode chamar:** qualquer role, desde que tenha uma linha em `\"UsersOnTenants\"` para o `tenantId` do form. A role sai do banco, não da claim do JWT.\n\n**Como testar**\n1. Setar `{{bearerToken}}` e `{{tenantId}}`.\n2. Anexar um arquivo no campo `file` (form-data) e enviar.\n3. Repetir com um `tenantId` de outro tenant ⇒ deve dar 403.\n\n**Esperado:** 200 `{data:{ok, mediaUrl, guid, title}}`.\n**Sem/errado o Bearer:** 401. **Fora do tenant:** 403.",
       "body": {
        "mode": "formdata",
        "formdata": [
@@ -5766,6 +5760,11 @@
      ]
     }
    ]
+  },
+  {
+   "name": "04 · Sem autenticação",
+   "description": "Vazia de propósito. `POST /api/v1/videos/upload` era a única rota sem credencial e passou a exigir Bearer + role no tenant; migrou para a pasta 03.",
+   "item": []
   }
  ],
  "variable": [
