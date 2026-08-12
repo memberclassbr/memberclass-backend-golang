@@ -301,6 +301,15 @@ Three Redis-backed limiters in [internal/platform/ratelimit](internal/platform/r
 each slice's `MiddlewareSet` — the router owns construction, slices only
 declare what they need.
 
+The upload-bytes limiter is keyed on the go-token's `sub`, read off the context
+`BearerMiddleware` populates. It used to be keyed on a `user_id` request
+header, which meant the quota was keyed on a value the caller writes — a client
+could reset its own quota by sending a different one each time, and the header
+was mandatory on a route where the token already names the user. That header is
+gone; sending it now does nothing. `CheckUploadLimit` therefore only works
+mounted below `RequireAuth`, and answers 401 rather than charging a default
+bucket if it is not.
+
 ## Background work
 
 Started by `App.Run` and stopped in reverse order on shutdown, before the

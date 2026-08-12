@@ -24,7 +24,7 @@
         "health"
        ]
       },
-      "description": "**Auth:** NENHUMA. Rota aberta por decisão histórica — só o rate limit de upload protege. Ver CLAUDE.md.\n**Rate limit:** nenhum.\n\nFaz ping no banco do tenant e no Redis. 200 = as duas dependências responderam; 503 = pelo menos uma não. O corpo não diz qual falhou — a rota é aberta, e nomear a dependência entregaria o mapa da infra pra quem não está autenticado. Qual caiu vai pro log do serviço.\n\n**Como testar**\n1. Rodar antes de qualquer outra pasta.\n2. Se der 503, olhar o log do deploy: sai uma linha `health.dependency_unavailable` por dependência caída, com o erro.\n3. Apontar o healthcheck do Railway pra esta rota.\n\n**Esperado:** 200 `{\"status\":\"ok\"}`. Dependência fora ⇒ 503 `{\"status\":\"unhealthy\"}`. Resposta sempre `Cache-Control: no-store`.\n**Sem credencial:** passa — não há checagem. Falta o header `user_id` ⇒ 400.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** NENHUMA. Rota aberta por decisão histórica — só o rate limit de upload protege. Ver CLAUDE.md.\n**Rate limit:** nenhum.\n\nFaz ping no banco do tenant e no Redis. 200 = as duas dependências responderam; 503 = pelo menos uma não. O corpo não diz qual falhou — a rota é aberta, e nomear a dependência entregaria o mapa da infra pra quem não está autenticado. Qual caiu vai pro log do serviço.\n\n**Como testar**\n1. Rodar antes de qualquer outra pasta.\n2. Se der 503, olhar o log do deploy: sai uma linha `health.dependency_unavailable` por dependência caída, com o erro.\n3. Apontar o healthcheck do Railway pra esta rota.\n\n**Esperado:** 200 `{\"status\":\"ok\"}`. Dependência fora ⇒ 503 `{\"status\":\"unhealthy\"}`. Resposta sempre `Cache-Control: no-store`.\n**Sem credencial:** passa — não há checagem.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [],
      "event": [
@@ -63,7 +63,7 @@
         ""
        ]
       },
-      "description": "**Auth:** NENHUMA. Rota aberta por decisão histórica — só o rate limit de upload protege. Ver CLAUDE.md.\n**Rate limit:** nenhum.\n\nServe a UI do Swagger a partir de `swagger.yaml` (copiado para a imagem pelo Dockerfile).\n\n**Como testar**\n1. Abrir `{{baseUrl}}/docs/` no browser ou rodar esta request.\n2. `GET /docs` (sem barra) responde 301 para `/docs/`.\n\n**Esperado:** 200 `text/html`.\n**Sem credencial:** passa — não há checagem. Falta o header `user_id` ⇒ 400.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** NENHUMA. Rota aberta por decisão histórica — só o rate limit de upload protege. Ver CLAUDE.md.\n**Rate limit:** nenhum.\n\nServe a UI do Swagger a partir de `swagger.yaml` (copiado para a imagem pelo Dockerfile).\n\n**Como testar**\n1. Abrir `{{baseUrl}}/docs/` no browser ou rodar esta request.\n2. `GET /docs` (sem barra) responde 301 para `/docs/`.\n\n**Esperado:** 200 `text/html`.\n**Sem credencial:** passa — não há checagem.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [],
      "event": [
@@ -102,7 +102,7 @@
         "swagger.yaml"
        ]
       },
-      "description": "**Auth:** NENHUMA. Rota aberta por decisão histórica — só o rate limit de upload protege. Ver CLAUDE.md.\n**Rate limit:** nenhum.\n\nDevolve o `swagger.yaml` cru consumido pela UI.\n\n**Como testar**\n1. Rodar a request.\n2. Conferir se o `servers[0].url` reflete o host do deploy (o handler usa `X-Forwarded-Proto`).\n\n**Esperado:** 200 com YAML.\n**Sem credencial:** passa — não há checagem. Falta o header `user_id` ⇒ 400.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
+      "description": "**Auth:** NENHUMA. Rota aberta por decisão histórica — só o rate limit de upload protege. Ver CLAUDE.md.\n**Rate limit:** nenhum.\n\nDevolve o `swagger.yaml` cru consumido pela UI.\n\n**Como testar**\n1. Rodar a request.\n2. Conferir se o `servers[0].url` reflete o host do deploy (o handler usa `X-Forwarded-Proto`).\n\n**Esperado:** 200 com YAML.\n**Sem credencial:** passa — não há checagem.\n\nMétodo errado nesta rota ⇒ 405 `{error, message}`."
      },
      "response": [],
      "event": [
@@ -5482,10 +5482,6 @@
        {
         "key": "Authorization",
         "value": "Bearer {{bearerToken}}"
-       },
-       {
-        "key": "user_id",
-        "value": "{{userId}}"
        }
       ],
       "url": {
@@ -5498,7 +5494,7 @@
         "upload"
        ]
       },
-      "description": "**Auth:** header `Authorization: Bearer {{bearerToken}}` — JWT go-token do frontend Next (`BearerMiddleware`). Esta rota **não tinha credencial nenhuma** e ficava em `/api/v1/videos/upload`; o caminho antigo foi removido.\n**Rate limit:** bytes de upload por tenant.\n\nSobe o arquivo para a library Bunny do tenant e devolve a URL do player.\n\n**Quem pode chamar:** qualquer role, desde que tenha uma linha em `\"UsersOnTenants\"` para o tenant do token. A role sai do banco a cada chamada, não da claim do JWT.\n\n**O tenant sai da claim `tenantId`.** O campo `tenantId` do form é opcional e só conferido: diferente do token ⇒ 403, e nem as credenciais Bunny são lidas.\n\n**Como testar**\n1. Setar `{{bearerToken}}` (emitido para `{{tenantId}}`).\n2. Anexar um arquivo no campo `file` (form-data) e enviar — pode omitir o campo `tenantId`.\n3. Repetir com um `tenantId` de outro tenant no form ⇒ deve dar 403.\n\n**Esperado:** 200 `{data:{ok, mediaUrl, guid, title}}`.\n**Sem/errado o Bearer:** 401. **Fora do tenant:** 403.",
+      "description": "**Auth:** header `Authorization: Bearer {{bearerToken}}` — JWT go-token do frontend Next (`BearerMiddleware`). Esta rota **não tinha credencial nenhuma** e ficava em `/api/v1/videos/upload`; o caminho antigo foi removido.\n**Rate limit:** bytes de upload por usuário, chaveado na claim `sub` do token.\n\nSobe o arquivo para a library Bunny do tenant e devolve a URL do player.\n\n**Quem pode chamar:** qualquer role, desde que tenha uma linha em `\"UsersOnTenants\"` para o tenant do token. A role sai do banco a cada chamada, não da claim do JWT.\n\n**O tenant sai da claim `tenantId`.** O campo `tenantId` do form é opcional e só conferido: diferente do token ⇒ 403, e nem as credenciais Bunny são lidas.\n\n**O header `user_id` não existe mais.** A cota de upload é chaveada no `sub` do token; antes vinha desse header, que o próprio cliente escrevia — bastava mandar um valor diferente a cada upload para zerar a cota. Mandar o header hoje é inofensivo: é ignorado.\n\n**Como testar**\n1. Setar `{{bearerToken}}` (emitido para `{{tenantId}}`).\n2. Anexar um arquivo no campo `file` (form-data) e enviar — pode omitir o campo `tenantId` e não mandar `user_id` nenhum.\n3. Repetir com um `tenantId` de outro tenant no form ⇒ deve dar 403.\n\n**Esperado:** 200 `{data:{ok, mediaUrl, guid, title}}`.\n**Sem/errado o Bearer:** 401. **Fora do tenant:** 403. **Cota estourada:** 429 `{message, data:{current_size, max_size, remaining_size, reset_time}}`.",
       "body": {
        "mode": "formdata",
        "formdata": [
@@ -5730,7 +5726,7 @@
   {
    "key": "userId",
    "value": "",
-   "description": "Id do usuário. Usado no SSO, no social e no header user_id do upload."
+   "description": "Id do usuário. Usado no SSO e no social."
   },
   {
    "key": "lessonId",
