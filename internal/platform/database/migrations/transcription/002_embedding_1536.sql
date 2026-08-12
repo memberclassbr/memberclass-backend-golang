@@ -10,8 +10,10 @@
 -- All statements scoped to the legacy chunks/transcripts/videos rows
 -- only. Other tables (jobs, token_usage, memberclass_tenant_mappings,
 -- webhook_*) are left untouched.
-
-BEGIN;
+--
+-- No BEGIN/COMMIT: MigrateTranscription already runs this file inside a
+-- transaction, and committing here would end that one early — the row in
+-- schema_migrations_go would then land outside it.
 
 -- Order matters because of the chunks → transcripts → videos FK chain
 -- (no ON DELETE CASCADE on the legacy schema).
@@ -34,5 +36,3 @@ DROP INDEX IF EXISTS chunks_embedding_hnsw_cosine;
 CREATE INDEX chunks_embedding_hnsw_cosine
     ON chunks USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
-
-COMMIT;

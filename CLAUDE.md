@@ -102,7 +102,23 @@ data.
 - **Transcription database** — owned here. The SQL files in
   [internal/platform/database/migrations/transcription](internal/platform/database/migrations/transcription)
   are embedded with `go:embed` and applied at boot, tracked in a
-  `schema_migrations_go` table. A fresh deployment needs no manual step.
+  `schema_migrations_go` table.
+
+  These files started life as scripts run by hand with `psql -f`, and two habits
+  from that life do not survive the move: a psql **meta-command** is not SQL and
+  the server rejects the whole batch (`\gset` in `000` took a deployment down at
+  boot with `pq: syntax error at or near "\"`), and an explicit **`BEGIN;`/
+  `COMMIT;`** ends the transaction `applyMigration` already opened, which puts
+  the `schema_migrations_go` row outside it. `TestMigrations_*` in
+  [migrate_test.go](internal/platform/database/migrate_test.go) fails CI on
+  either, since neither shows up until a deployment with a transcription DSN
+  boots.
+
+  The migrations **alter** that schema; they do not create it. `videos`,
+  `chunks`, `transcripts`, `jobs` and `token_usage` exist in no `CREATE TABLE`
+  in this repository, so a transcription database that has never held them
+  fails at `000`. Point `DB_TRANSCRIPTION_DSN` at an existing one, or leave it
+  unset — it is optional, and unset simply disables the slice.
 
 ## Environment
 
