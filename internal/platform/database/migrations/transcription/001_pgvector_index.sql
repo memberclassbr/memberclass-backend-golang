@@ -1,8 +1,8 @@
 -- Migration for the Railway pgvector database (DB_TRANSCRIPTION_DSN).
--- This DB is NOT managed by the in-app MigrationService (which targets the
--- memberclass DB). Run manually before deploying the transcription slice:
 --
---     psql "$DB_TRANSCRIPTION_DSN" -f migrations/transcription/001_pgvector_index.sql
+-- Applied at boot by MigrateTranscription, inside a transaction it owns. It is
+-- no longer run by hand, so it carries no BEGIN/COMMIT and no psql
+-- meta-command — the file is sent to the server as SQL, not fed to psql.
 --
 -- Prereq: the Railway service must be created from the "PostgreSQL pgvector"
 -- template; the vanilla Postgres image does not ship the vector binary.
