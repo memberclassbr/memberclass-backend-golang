@@ -1427,7 +1427,7 @@ paths:
                 $ref: '#/components/schemas/StudentReportResponse'
               example:
                 alunos:
-                  - aluno_id_member_class: "user-123"
+                  - aluno_id: "user-123"
                     email: "aluno@example.com"
                     cpf: "12345678900"
                     data_cadastro: "2024-01-15T10:30:00.000Z"
@@ -2499,7 +2499,7 @@ components:
     StudentReport:
       type: object
       properties:
-        aluno_id_member_class:
+        aluno_id:
           type: string
           description: ID do aluno no MemberClass
           example: "user-123"

@@ -399,16 +399,21 @@ const sqlEventsUnion = `
 	SELECT id, type, date, details FROM (
 		-- Login events omit details: the timestamp and type are the
 		-- whole story. NULL::jsonb keeps the UNION ALL column shape.
+		--
+		-- Read from "LoginEvent", the entity that records logins. This used to
+		-- read "UserEvent" with type = 'login', the legacy table the analytics
+		-- backfill drains into LoginEvent (see migrateRow, which moves both
+		-- 'login' and 'user-login' rows). New logins land in LoginEvent, so the
+		-- timeline had stopped listing them.
 		SELECT
-			ue.id::text AS id,
+			le.id::text AS id,
 			'login' AS type,
-			ue."createdAt" AS date,
+			le."createdAt" AS date,
 			NULL::jsonb AS details
-		FROM "UserEvent" ue
-		WHERE ue."usersOnTenantsUserId" = $1
-		  AND ue."usersOnTenantsTenantId" = $2
-		  AND ue.type = 'login'
-		  AND ue."createdAt" BETWEEN $3 AND $4
+		FROM "LoginEvent" le
+		WHERE le."userId" = $1
+		  AND le."tenantId" = $2
+		  AND le."createdAt" BETWEEN $3 AND $4
 
 		UNION ALL
 
@@ -534,9 +539,9 @@ const sqlEventsUnion = `
 // Params: $1 userId, $2 tenantId, $3 startDate, $4 endDate.
 const sqlEventsCount = `
 	SELECT COUNT(*) FROM (
-		SELECT 1 FROM "UserEvent" ue
-		WHERE ue."usersOnTenantsUserId" = $1 AND ue."usersOnTenantsTenantId" = $2
-		  AND ue.type = 'login' AND ue."createdAt" BETWEEN $3 AND $4
+		SELECT 1 FROM "LoginEvent" le
+		WHERE le."userId" = $1 AND le."tenantId" = $2
+		  AND le."createdAt" BETWEEN $3 AND $4
 
 		UNION ALL
 		SELECT 1 FROM "UserEvent" ue

@@ -434,3 +434,22 @@ func TestResolveDateRange_DefaultIsWholeCalendarDays(t *testing.T) {
 	assert.LessOrEqual(t, end.Sub(start), time.Duration(31)*24*time.Hour,
 		"default must not exceed the window a caller may request")
 }
+
+// Logins come from LoginEvent. Both queries used to read UserEvent with
+// type = 'login', the legacy table the analytics backfill drains, so the
+// timeline quietly stopped listing logins while still counting the other event
+// kinds — the shape of failure sqlmock cannot see on its own.
+func TestEventsSQL_ReadsLoginsFromLoginEvent(t *testing.T) {
+	for name, query := range map[string]string{
+		"union": sqlEventsUnion,
+		"count": sqlEventsCount,
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Contains(t, query, `FROM "LoginEvent" le`)
+			assert.Contains(t, query, `le."tenantId" = $2`,
+				"a dedicated database is isolation, not a reason to drop the tenant filter")
+			assert.NotContains(t, query, `ue.type = 'login'`,
+				"UserEvent is the legacy source; new logins never land there")
+		})
+	}
+}

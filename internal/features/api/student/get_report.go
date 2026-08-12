@@ -41,7 +41,7 @@ type lessonWatched struct {
 }
 
 type studentReport struct {
-	AlunoIDMemberClass        string          `json:"aluno_id_member_class"`
+	AlunoIDMemberClass        string          `json:"aluno_id"`
 	Email                     string          `json:"email"`
 	Cpf                       string          `json:"cpf"`
 	DataCadastro              string          `json:"data_cadastro"`
@@ -357,15 +357,23 @@ const (
 		ORDER BY r."createdAt" DESC
 	`
 
+	// sqlLastAccesses reads "LoginEvent", the entity that records logins.
+	//
+	// It used to read "UserEvent" with type = 'login'. That table is the legacy
+	// source the analytics backfill drains into LoginEvent — see migrateRow in
+	// internal/features/workers/analytics/backfill.go, which moves both 'login'
+	// and 'user-login' rows across. New logins land in LoginEvent, so this
+	// query reported ultimo_acesso as null for every student. It also matched
+	// only 'login' and never 'user-login', so it missed rows even before the
+	// move.
 	sqlLastAccesses = `
-		SELECT DISTINCT ON ("usersOnTenantsUserId")
-			"usersOnTenantsUserId",
-			"createdAt"
-		FROM "UserEvent"
-		WHERE "usersOnTenantsUserId" = ANY($1)
-		  AND "usersOnTenantsTenantId" = $2
-		  AND type = 'login'
-		ORDER BY "usersOnTenantsUserId", "createdAt" DESC
+		SELECT DISTINCT ON (le."userId")
+			le."userId",
+			le."createdAt"
+		FROM "LoginEvent" le
+		WHERE le."userId" = ANY($1)
+		  AND le."tenantId" = $2
+		ORDER BY le."userId", le."createdAt" DESC
 	`
 )
 
