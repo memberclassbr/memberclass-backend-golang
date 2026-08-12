@@ -149,7 +149,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           go test -v -coverprofile=coverage.out -covermode=atomic \
-            -coverpkg=./internal/domain/usecases/...,./internal/infrastructure/adapters/repository/...,./internal/application/handlers/...,./internal/application/router/...,./internal/application/middlewares/...,./internal/infrastructure/adapters/cache/...,./internal/infrastructure/adapters/rate_limiter/...,./internal/infrastructure/adapters/storage/...,./internal/infrastructure/adapters/logger/...,./internal/infrastructure/adapters/external_services/...,./internal/domain/utils/... \
+            -coverpkg=./internal/domain/usecases/...,./internal/infrastructure/adapters/repository/...,./internal/application/handlers/...,./internal/application/router/...,./internal/application/middlewares/...,./internal/infrastructure/adapters/cache/...,./internal/infrastructure/adapters/rate_limiter/...,./internal/infrastructure/adapters/storage/...,./internal/infrastructure/adapters/logger/...,./internal/infrastructure/adapters/external_services/...,./internal/domain/utils/...,./internal/features/docs/... \
             ./...
           go tool cover -func=coverage.out > coverage.txt
 

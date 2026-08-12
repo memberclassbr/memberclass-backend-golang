@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	ai3 "github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	auth2 "github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	comment4 "github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
@@ -44,6 +43,7 @@ import (
 	user3 "github.com/memberclass-backend-golang/internal/domain/usecases/user"
 	vitrine3 "github.com/memberclass-backend-golang/internal/domain/usecases/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
+	"github.com/memberclass-backend-golang/internal/features/docs"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
@@ -153,7 +153,7 @@ func main() {
 			comment4.NewSocialCommentHandler,
 			lesson2.NewLessonsCompletedHandler,
 			student2.NewStudentReportHandler,
-			internalhttp.NewSwaggerHandler,
+			docs.New,
 			auth2.NewAuthHandler,
 			sso2.NewSSOHandler,
 			ai3.NewAILessonHandler,

@@ -6,7 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	internalhttp "github.com/memberclass-backend-golang/internal/application/handlers/http"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/ai"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/auth"
 	"github.com/memberclass-backend-golang/internal/application/handlers/http/comment"
@@ -21,6 +20,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/application/middlewares/rate_limit"
 	"github.com/memberclass-backend-golang/internal/features/api/activity_summary"
 	"github.com/memberclass-backend-golang/internal/features/admin/member_import"
+	"github.com/memberclass-backend-golang/internal/features/docs"
 	"github.com/memberclass-backend-golang/internal/features/api/user_activities"
 	"github.com/memberclass-backend-golang/internal/features/workers/transcription"
 )
@@ -39,7 +39,7 @@ type Router struct {
 	transcription             *transcription.Feature
 	lessonsCompletedHandler   *lesson.LessonsCompletedHandler
 	studentReportHandler      *student.StudentReportHandler
-	swaggerHandler            *internalhttp.SwaggerHandler
+	docs                      *docs.Feature
 	authHandler               *auth.AuthHandler
 	ssoHandler                *sso.SSOHandler
 	aiLessonHandler           *ai.AILessonHandler
@@ -66,7 +66,7 @@ func NewRouter(
 	transcriptionFeat *transcription.Feature,
 	lessonsCompletedHandler *lesson.LessonsCompletedHandler,
 	studentReportHandler *student.StudentReportHandler,
-	swaggerHandler *internalhttp.SwaggerHandler,
+	docsFeat *docs.Feature,
 	authHandler *auth.AuthHandler,
 	ssoHandler *sso.SSOHandler,
 	aiLessonHandler *ai.AILessonHandler,
@@ -114,7 +114,7 @@ func NewRouter(
 		transcription:             transcriptionFeat,
 		lessonsCompletedHandler:   lessonsCompletedHandler,
 		studentReportHandler:      studentReportHandler,
-		swaggerHandler:            swaggerHandler,
+		docs:                      docsFeat,
 		authHandler:               authHandler,
 		ssoHandler:                ssoHandler,
 		aiLessonHandler:           aiLessonHandler,
@@ -130,13 +130,7 @@ func NewRouter(
 }
 
 func (r *Router) SetupRoutes() {
-	r.Get("/docs", func(w http.ResponseWriter, req *http.Request) {
-		http.Redirect(w, req, "/docs/", http.StatusMovedPermanently)
-	})
-	r.Route("/docs", func(router chi.Router) {
-		router.Get("/", r.swaggerHandler.ServeSwaggerUI)
-		router.Get("/swagger.yaml", r.swaggerHandler.ServeSwaggerYAML)
-	})
+	r.docs.Register(r.Router)
 
 	r.Route("/api/v1", func(router chi.Router) {
 
