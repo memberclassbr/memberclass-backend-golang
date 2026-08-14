@@ -227,13 +227,20 @@ type Analytics struct {
 }
 
 // Telemetry configures the OpenTelemetry exporters. It is optional in the
-// strict sense: with any of the three variables unset the providers are never
-// installed and the service runs uninstrumented, which is what a laptop
-// without a collector needs.
+// strict sense: with any of the three required variables unset the providers
+// are never installed and the service runs uninstrumented, which is what a
+// laptop without a collector needs.
 //
-// Endpoint is a host[:port] with no scheme. The collector runs outside this
-// deployment, so the connection is TLS and Token travels inside it — a
-// plaintext exporter would put the credential on the wire in the clear.
+// Endpoint is a host[:port] with no scheme — the exporters build
+// https://<endpoint>/v1/traces themselves, so a scheme left in the value ends
+// up inside the Host header and every export fails against a host nobody
+// typed. loadTelemetry strips one rather than letting that happen.
+//
+// The collector runs outside this deployment — the service is on Railway and
+// the collector on a dedicated VPS — so the connection is TLS across the
+// public internet and Token travels inside it. Insecure is the escape hatch
+// for a collector reached over a private network only, and it is loud at boot
+// because it puts the credential on the wire in the clear.
 //
 // Project names the customer this deployment serves. It becomes the resource's
 // service.namespace rather than its service.name: every deployment reports the
@@ -245,9 +252,21 @@ type Telemetry struct {
 	Token    string
 	Project  string
 
-	// Version and InstanceID are best-effort. Railway injects them into every
-	// container; anywhere else they are empty and simply left off the resource.
-	Version    string
+	// Insecure sends OTLP over plaintext HTTP. Set by OTEL_INSECURE, or
+	// implied by an http:// scheme on OTEL_ENDPOINT_HOST.
+	Insecure bool
+
+	// ExportInterval is how often the periodic reader ships metrics. Traces are
+	// batched by the span processor and are not affected.
+	ExportInterval time.Duration
+
+	// Version is best-effort: Railway injects the commit sha into every
+	// container, and anywhere else it is empty and left off the resource.
+	Version string
+
+	// InstanceID identifies one replica. Unlike Version it is never left off —
+	// see telemetry.ServiceInstanceID for what an absent one costs. Empty here
+	// means "resolve it at runtime", not "omit it".
 	InstanceID string
 }
 
@@ -450,22 +469,71 @@ func (c *Config) loadNotifications() {
 }
 
 func (c *Config) loadTelemetry() {
-	c.Telemetry.Endpoint = strings.TrimSpace(os.Getenv("OTEL_ENDPOINT_HOST"))
+	endpoint, schemeInsecure, droppedPath := normalizeOTLPEndpoint(os.Getenv("OTEL_ENDPOINT_HOST"))
+
+	c.Telemetry.Endpoint = endpoint
 	c.Telemetry.Token = strings.TrimSpace(os.Getenv("OTEL_TOKEN"))
 	c.Telemetry.Project = strings.TrimSpace(os.Getenv("OTEL_PROJECT"))
 	c.Telemetry.Version = strings.TrimSpace(os.Getenv("RAILWAY_GIT_COMMIT_SHA"))
-	c.Telemetry.InstanceID = strings.TrimSpace(os.Getenv("RAILWAY_REPLICA_ID"))
+	c.Telemetry.ExportInterval = durationSeconds("OTEL_EXPORT_INTERVAL_SECONDS", 60*time.Second)
+
+	// An explicit value wins so a platform that names replicas badly can be
+	// overridden without a code change; Railway's own is the normal source.
+	c.Telemetry.InstanceID = lookup("OTEL_SERVICE_INSTANCE_ID", "RAILWAY_REPLICA_ID")
+
+	// http:// on the endpoint is an explicit request for plaintext, so honour
+	// it rather than stripping the scheme and then failing the TLS handshake.
+	c.Telemetry.Insecure = schemeInsecure || boolOr("OTEL_INSECURE", false)
 
 	switch {
 	case c.Telemetry.Endpoint == "":
 		c.disable("telemetry", "OTEL_ENDPOINT_HOST not set")
+		return
 	case c.Telemetry.Token == "":
 		c.disable("telemetry", "OTEL_TOKEN not set")
+		return
 	case c.Telemetry.Project == "":
 		c.disable("telemetry", "OTEL_PROJECT not set")
-	default:
-		c.Telemetry.Enabled = true
+		return
 	}
+	c.Telemetry.Enabled = true
+
+	if droppedPath != "" {
+		c.warnings = append(c.warnings, fmt.Sprintf(
+			"OTEL_ENDPOINT_HOST path %q ignored: the exporters append /v1/traces and /v1/metrics "+
+				"to the host themselves, so a collector behind a path prefix is not reachable this way",
+			droppedPath))
+	}
+	if c.Telemetry.Insecure {
+		c.warnings = append(c.warnings,
+			"OTLP export is plaintext (OTEL_INSECURE or an http:// endpoint): OTEL_TOKEN is sent in the "+
+				"clear and is readable by anything on the path — only safe on a private network")
+	}
+}
+
+// normalizeOTLPEndpoint turns what a deployment actually pastes into a
+// dashboard — "otel.example.com", "https://otel.example.com",
+// "http://10.0.0.4:4318/" — into the bare host[:port] the OTLP/HTTP exporters
+// want, and reports whether the scheme asked for plaintext.
+//
+// The exporters treat their endpoint as a Host and build the URL around it. A
+// value that still carries a scheme becomes part of that Host and every export
+// fails; a path is not prefixed to /v1/metrics but silently ignored, so it is
+// returned here for the caller to warn about instead of disappearing.
+func normalizeOTLPEndpoint(raw string) (endpoint string, insecure bool, droppedPath string) {
+	endpoint = strings.TrimSpace(raw)
+
+	switch {
+	case strings.HasPrefix(endpoint, "https://"):
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+	case strings.HasPrefix(endpoint, "http://"):
+		endpoint, insecure = strings.TrimPrefix(endpoint, "http://"), true
+	}
+
+	if slash := strings.IndexByte(endpoint, '/'); slash >= 0 {
+		endpoint, droppedPath = endpoint[:slash], strings.TrimSuffix(endpoint[slash:], "/")
+	}
+	return endpoint, insecure, droppedPath
 }
 
 // lookup returns the first non-empty value among key and its fallbacks. The
@@ -493,6 +561,14 @@ func optional(key, def string) string {
 func intOr(key string, def int) int {
 	v, err := strconv.Atoi(lookup(key))
 	if err != nil || v <= 0 {
+		return def
+	}
+	return v
+}
+
+func boolOr(key string, def bool) bool {
+	v, err := strconv.ParseBool(lookup(key))
+	if err != nil {
 		return def
 	}
 	return v

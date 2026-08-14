@@ -41,6 +41,9 @@ func setEnv(t *testing.T, overrides map[string]string) {
 		"PANDA_API_KEY", "PANDA_ALLOWED_TENANT_IDS",
 		"ANALYTICS_DELETE_ENABLED",
 		"GO_API_JWT_SECRET", "GO_API_JWT_LEGACY_FALLBACK",
+		"OTEL_ENDPOINT_HOST", "OTEL_TOKEN", "OTEL_PROJECT", "OTEL_INSECURE",
+		"OTEL_EXPORT_INTERVAL_SECONDS", "OTEL_SERVICE_INSTANCE_ID",
+		"RAILWAY_REPLICA_ID", "RAILWAY_GIT_COMMIT_SHA",
 	} {
 		t.Setenv(k, "")
 	}
@@ -392,5 +395,164 @@ func TestLoad_DocsBrandingIsSilentWhenConfigured(t *testing.T) {
 	}
 	if warnings := strings.Join(cfg.Warnings(), "\n"); strings.Contains(warnings, "PUBLIC_API_") {
 		t.Errorf("still warning about configured variables:\n%s", warnings)
+	}
+}
+
+func TestNormalizeOTLPEndpoint(t *testing.T) {
+	cases := []struct {
+		raw          string
+		wantEndpoint string
+		wantInsecure bool
+		wantDropped  string
+	}{
+		{"otel.example.com", "otel.example.com", false, ""},
+		{"  otel.example.com:4318  ", "otel.example.com:4318", false, ""},
+		// The exporters build https://<endpoint>/v1/metrics themselves. A
+		// scheme left in the value becomes part of the Host header and every
+		// export fails against a host nobody typed.
+		{"https://otel.example.com", "otel.example.com", false, ""},
+		{"https://otel.example.com/", "otel.example.com", false, ""},
+		// http:// is an explicit request for plaintext: stripping the scheme
+		// and then negotiating TLS anyway would just fail the handshake.
+		{"http://10.0.0.4:4318", "10.0.0.4:4318", true, ""},
+		{"http://10.0.0.4:4318/", "10.0.0.4:4318", true, ""},
+		// A path is ignored rather than prefixed, so it comes back for the
+		// caller to warn about instead of vanishing.
+		{"https://otel.example.com/otlp", "otel.example.com", false, "/otlp"},
+		{"", "", false, ""},
+	}
+
+	for _, tc := range cases {
+		endpoint, insecure, dropped := normalizeOTLPEndpoint(tc.raw)
+		if endpoint != tc.wantEndpoint || insecure != tc.wantInsecure || dropped != tc.wantDropped {
+			t.Errorf("normalizeOTLPEndpoint(%q) = (%q, %v, %q), want (%q, %v, %q)",
+				tc.raw, endpoint, insecure, dropped,
+				tc.wantEndpoint, tc.wantInsecure, tc.wantDropped)
+		}
+	}
+}
+
+func TestLoad_TelemetryNeedsAllThreeVariables(t *testing.T) {
+	base := map[string]string{
+		"OTEL_ENDPOINT_HOST": "otel.example.com",
+		"OTEL_TOKEN":         "collector-token",
+		"OTEL_PROJECT":       "acme",
+	}
+
+	for _, missing := range []string{"OTEL_ENDPOINT_HOST", "OTEL_TOKEN", "OTEL_PROJECT"} {
+		env := map[string]string{}
+		for k, v := range base {
+			env[k] = v
+		}
+		env[missing] = ""
+
+		setEnv(t, env)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.Telemetry.Enabled {
+			t.Errorf("telemetry enabled with %s unset", missing)
+		}
+		if warnings := strings.Join(cfg.Warnings(), "\n"); !strings.Contains(warnings, missing) {
+			t.Errorf("boot log does not name %s:\n%s", missing, warnings)
+		}
+	}
+}
+
+func TestLoad_TelemetryDefaultsAndOverrides(t *testing.T) {
+	setEnv(t, map[string]string{
+		"OTEL_ENDPOINT_HOST":     "https://otel.example.com",
+		"OTEL_TOKEN":             "collector-token",
+		"OTEL_PROJECT":           "acme",
+		"RAILWAY_REPLICA_ID":     "replica-7",
+		"RAILWAY_GIT_COMMIT_SHA": "abc123",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Telemetry.Enabled {
+		t.Fatal("telemetry should be enabled with all three variables set")
+	}
+	if cfg.Telemetry.Endpoint != "otel.example.com" {
+		t.Errorf("Endpoint = %q, want the scheme stripped", cfg.Telemetry.Endpoint)
+	}
+	if cfg.Telemetry.Insecure {
+		t.Error("an https:// endpoint must not enable plaintext export")
+	}
+	if cfg.Telemetry.ExportInterval != 60*time.Second {
+		t.Errorf("ExportInterval = %v, want 60s", cfg.Telemetry.ExportInterval)
+	}
+	if cfg.Telemetry.InstanceID != "replica-7" {
+		t.Errorf("InstanceID = %q, want the platform's replica id", cfg.Telemetry.InstanceID)
+	}
+	if cfg.Telemetry.Version != "abc123" {
+		t.Errorf("Version = %q, want the commit sha", cfg.Telemetry.Version)
+	}
+
+	// An explicit id wins, so a platform that names replicas badly can be
+	// overridden without a code change.
+	setEnv(t, map[string]string{
+		"OTEL_ENDPOINT_HOST":           "otel.example.com",
+		"OTEL_TOKEN":                   "collector-token",
+		"OTEL_PROJECT":                 "acme",
+		"RAILWAY_REPLICA_ID":           "replica-7",
+		"OTEL_SERVICE_INSTANCE_ID":     "chosen-by-hand",
+		"OTEL_EXPORT_INTERVAL_SECONDS": "15",
+	})
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Telemetry.InstanceID != "chosen-by-hand" {
+		t.Errorf("InstanceID = %q, want the explicit override", cfg.Telemetry.InstanceID)
+	}
+	if cfg.Telemetry.ExportInterval != 15*time.Second {
+		t.Errorf("ExportInterval = %v, want 15s", cfg.Telemetry.ExportInterval)
+	}
+}
+
+// Plaintext export puts OTEL_TOKEN on the wire in the clear, so a deployment
+// that has asked for it must be told at boot rather than discovering it later.
+func TestLoad_TelemetryWarnsAboutPlaintextExport(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"OTEL_ENDPOINT_HOST": "http://10.0.0.4:4318"},
+		{"OTEL_ENDPOINT_HOST": "otel.example.com", "OTEL_INSECURE": "true"},
+	} {
+		env["OTEL_TOKEN"] = "collector-token"
+		env["OTEL_PROJECT"] = "acme"
+
+		setEnv(t, env)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if !cfg.Telemetry.Insecure {
+			t.Fatalf("Insecure = false for %v", env)
+		}
+		if warnings := strings.Join(cfg.Warnings(), "\n"); !strings.Contains(warnings, "plaintext") {
+			t.Errorf("no plaintext warning for %v:\n%s", env, warnings)
+		}
+	}
+}
+
+func TestLoad_TelemetryWarnsAboutAnIgnoredEndpointPath(t *testing.T) {
+	setEnv(t, map[string]string{
+		"OTEL_ENDPOINT_HOST": "https://otel.example.com/otlp",
+		"OTEL_TOKEN":         "collector-token",
+		"OTEL_PROJECT":       "acme",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Telemetry.Endpoint != "otel.example.com" {
+		t.Errorf("Endpoint = %q, want the path removed", cfg.Telemetry.Endpoint)
+	}
+	if warnings := strings.Join(cfg.Warnings(), "\n"); !strings.Contains(warnings, "/otlp") {
+		t.Errorf("the ignored path is not named in the boot log:\n%s", warnings)
 	}
 }
