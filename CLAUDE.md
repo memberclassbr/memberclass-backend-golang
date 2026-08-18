@@ -365,7 +365,8 @@ database closes:
 ## Observability
 
 OpenTelemetry, traces and metrics over OTLP/HTTP to a collector that runs
-outside the deployment. [internal/platform/telemetry](internal/platform/telemetry)
+outside the deployment: the service is on Railway, the collector on a dedicated
+observability VPS. [internal/platform/telemetry](internal/platform/telemetry)
 owns the providers; `telemetry.Init` is called from `main` before `app.New`, and
 both `main` functions are shaped as `os.Exit(run())` so the deferred flush
 survives an error path — `os.Exit` and `log.Fatalf` skip defers.
@@ -374,12 +375,79 @@ Missing OTEL variables are not an error. The providers are simply never
 installed and the service runs uninstrumented, which is what a laptop without a
 collector needs.
 
+**Everything is a push, and nothing scrapes this process.** That is not a
+detail; it is the reason for most of what the package does. Whatever a scrape
+would have supplied has to be supplied by the exporter instead, and the three
+places that bites are below.
+
+`service.instance.id` is always set, never omitted. Under a scrape Prometheus
+stamps `instance` itself from the target address; under a push nothing does.
+Absent, every replica emits the same series identity, the collector's remote
+write receives N interleaved streams as one series, and since each replica has
+its own zero for a cumulative counter the series walks backwards and `rate()`
+returns noise. `ServiceInstanceID` in
+[identity.go](internal/platform/telemetry/identity.go) resolves
+`OTEL_SERVICE_INSTANCE_ID` → `RAILWAY_REPLICA_ID` → hostname → a per-process
+UUID, and memoises the result so the tracer and the meter cannot disagree about
+which process they are. Wrong-but-unique is harmless; *shared* corrupts the
+data.
+
+Temporality is pinned cumulative in code, ignoring
+`OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE`. The collector forwards
+through `prometheusremotewrite`, which drops delta histograms **silently** while
+simple sums keep flowing — so the symptom is "counters healthy, latency panels
+empty", which reads like an application bug and is not one. Pinning the selector
+makes the class unreachable.
+
+Endpoint values are normalised in `config.loadTelemetry`. The exporters treat
+`OTEL_ENDPOINT_HOST` as a Host and build `https://<host>/v1/metrics` themselves,
+so a scheme left in the value corrupts the Host header and every export fails
+against a host nobody typed. A scheme is stripped; `http://` turns plaintext
+export on; a path is dropped with a warning, since it would be ignored rather
+than prefixed. `OTEL_INSECURE` does the same thing explicitly and warns at boot
+— the hop crosses the public internet, so it puts `OTEL_TOKEN` in the clear.
+
 What is instrumented:
 
-- **HTTP** — `otelchi` on the root router, with `WithChiRoutes` so spans carry
-  the route pattern (`/api/v1/vitrine/{vitrineId}`) rather than the raw path.
-  The OTel middlewares sit above every auth middleware, so a 401 is still
+- **HTTP traces** — `otelchi` on the root router, with `WithChiRoutes` so spans
+  carry the route pattern (`/api/v1/vitrine/{vitrineId}`) rather than the raw
+  path. The OTel middlewares sit above every auth middleware, so a 401 is still
   measured.
+- **HTTP metrics** — `telemetry.HTTPServerMetrics`
+  ([httpmetrics.go](internal/platform/telemetry/httpmetrics.go)), an `otelhttp`
+  wrapper, replaced otelchi's metric middlewares. Those recorded **no status
+  code at all** — the service had a latency histogram and no way to compute an
+  error rate — and labelled what they did record with the pre-1.21 names
+  (`http.method`, not `http.request.method`), which no semconv-based dashboard
+  or alert matches. Three things the wrapper adds by hand:
+  - `http.server.active_requests`, because no released `otelhttp` records it for
+    a *server*, only for a client transport;
+  - `http.route`, added through the `otelhttp` labeler on the way back out —
+    chi resolves the pattern as the request descends, and the labeler is read
+    after the handler returns, which is the only reason it can be attached to
+    the duration and body-size histograms at all. An unmatched request keeps its
+    status code and gets no route, since the raw path is the cardinality the
+    pattern exists to avoid;
+  - method normalisation to `_OTHER`, because `net/http` accepts any token as a
+    method and this runs before chi has rejected anything.
+
+  It is mounted *inside* the tracing middleware so histograms record with a live
+  span in context — that is what puts trace exemplars on the latency buckets.
+  `middleware.Recoverer` moved *below* both: above them a handler panic unwound
+  straight past the instrumentation and the resulting 500 was recorded by
+  nothing.
+- **Metric cardinality** — `httpServerAttributeView` allow-lists the labels on
+  `http.server.*`. `otelhttp` derives `server.address` from the `Host` header,
+  which the caller controls: on a public API that is unbounded, and the bill
+  lands on the VPS's Prometheus. It is an allow-list, so a new attribute worth
+  keeping must be added there as well as emitted.
+- **`/health`** — served but neither traced nor measured, via
+  `telemetry.Instrumented`, which the tracing filter and the metrics wrapper
+  share so the two families measure the same set of requests. The platform's
+  healthcheck runs every few seconds and would otherwise be the busiest route in
+  the service. The skip sits outside `otelhttp` rather than in its `WithFilter`,
+  because a rejected filter still calls the wrapped handler and
+  `active_requests` would keep counting.
 - **SQL** — `otelsql` wraps both pools in `internal/platform/database`; each
   carries a `db.role` attribute (`tenant` / `transcription`) so the two are
   distinguishable. Pool gauges come from `RegisterDBStatsMetrics`.

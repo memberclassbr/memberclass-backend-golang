@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"go.opentelemetry.io/otel"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/memberclass-backend-golang/internal/platform/config"
@@ -98,18 +100,27 @@ func TestShutdown_SurvivesCancelledContext(t *testing.T) {
 	}
 }
 
-func TestNewResource_OmitsUnsetPlatformAttributes(t *testing.T) {
-	cfg := enabledConfig()
+func resourceAttributes(t *testing.T, cfg *config.Config) map[string]string {
+	t.Helper()
 
 	res, err := newResource(context.Background(), cfg)
 	if err != nil {
-		t.Fatalf("newResource: %v", err)
+		// Detection is allowed to be partial; the resource still has to work.
+		t.Logf("newResource reported partial detection: %v", err)
+	}
+	if res == nil {
+		t.Fatal("newResource returned no resource")
 	}
 
 	attrs := map[string]string{}
 	for _, kv := range res.Attributes() {
 		attrs[string(kv.Key)] = kv.Value.Emit()
 	}
+	return attrs
+}
+
+func TestNewResource_Identity(t *testing.T) {
+	attrs := resourceAttributes(t, enabledConfig())
 
 	if got := attrs["service.name"]; got != ServiceName {
 		t.Errorf("service.name = %q, want %q", got, ServiceName)
@@ -125,25 +136,60 @@ func TestNewResource_OmitsUnsetPlatformAttributes(t *testing.T) {
 	if _, ok := attrs["service.version"]; ok {
 		t.Error("service.version should be absent when the platform did not inject it")
 	}
-	if _, ok := attrs["service.instance.id"]; ok {
-		t.Error("service.instance.id should be absent when the platform did not inject it")
-	}
 
+	// Unlike the version, this one is never omitted. Everything is pushed, so
+	// no scraper stamps `instance` for us: replicas sharing a series identity
+	// interleave into one cumulative counter and rate() over it is noise.
+	if attrs["service.instance.id"] == "" {
+		t.Error("service.instance.id must be resolved even when the platform injects nothing")
+	}
+}
+
+func TestNewResource_HonoursExplicitPlatformAttributes(t *testing.T) {
+	cfg := enabledConfig()
 	cfg.Telemetry.Version = "abc123"
 	cfg.Telemetry.InstanceID = "replica-7"
-	res, err = newResource(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("newResource: %v", err)
-	}
-	attrs = map[string]string{}
-	for _, kv := range res.Attributes() {
-		attrs[string(kv.Key)] = kv.Value.Emit()
-	}
+
+	attrs := resourceAttributes(t, cfg)
+
 	if got := attrs["service.version"]; got != "abc123" {
 		t.Errorf("service.version = %q, want %q", got, "abc123")
 	}
 	if got := attrs["service.instance.id"]; got != "replica-7" {
 		t.Errorf("service.instance.id = %q, want %q", got, "replica-7")
+	}
+}
+
+// The tracer and the meter share one resource. If they disagreed about who
+// this process is, a metric and the span explaining it would land under two
+// identities and nothing would join them.
+func TestNewResource_InstanceIDIsStableAcrossCalls(t *testing.T) {
+	cfg := enabledConfig()
+
+	first := resourceAttributes(t, cfg)["service.instance.id"]
+	second := resourceAttributes(t, cfg)["service.instance.id"]
+
+	if first != second {
+		t.Errorf("service.instance.id changed between calls: %q then %q", first, second)
+	}
+}
+
+// Delta histograms are dropped silently by the collector's remote write, which
+// looks like an application bug rather than a configuration one. The selector
+// is pinned so the environment variable that would cause it cannot.
+func TestCumulativeTemporality_IgnoresInstrumentKind(t *testing.T) {
+	kinds := []sdkmetric.InstrumentKind{
+		sdkmetric.InstrumentKindCounter,
+		sdkmetric.InstrumentKindUpDownCounter,
+		sdkmetric.InstrumentKindHistogram,
+		sdkmetric.InstrumentKindObservableCounter,
+		sdkmetric.InstrumentKindObservableUpDownCounter,
+		sdkmetric.InstrumentKindObservableGauge,
+	}
+	for _, kind := range kinds {
+		if got := cumulativeTemporality(kind); got != metricdata.CumulativeTemporality {
+			t.Errorf("temporality for %v = %v, want cumulative", kind, got)
+		}
 	}
 }
 

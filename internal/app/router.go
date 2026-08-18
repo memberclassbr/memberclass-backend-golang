@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/riandyrn/otelchi"
-	otelchimetric "github.com/riandyrn/otelchi/metric"
 
 	"github.com/memberclass-backend-golang/internal/features/api/docs"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
@@ -88,7 +87,6 @@ func newRouter(
 	// id and with the platform proxy's address instead of the caller's.
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
-	router.Use(middleware.Recoverer)
 
 	// OTel sits above auth on purpose: a 401 is operational signal, and a
 	// middleware that short-circuits before this one would make those requests
@@ -97,18 +95,33 @@ func newRouter(
 	// raw path — one time series per endpoint rather than one per id. The
 	// routes are registered later, in SetupRoutes; the middleware resolves the
 	// pattern per request, so it sees them.
-	router.Use(otelchi.Middleware(telemetry.ServiceName, otelchi.WithChiRoutes(router)))
+	//
+	// The filter is the same predicate the metrics middleware below uses, so
+	// the two families measure the same set of requests. See
+	// telemetry.Instrumented.
+	router.Use(otelchi.Middleware(telemetry.ServiceName,
+		otelchi.WithChiRoutes(router),
+		otelchi.WithFilter(telemetry.Instrumented),
+	))
 
-	// The Server* names replace NewRequestDurationMillis / NewRequestInFlight /
-	// NewResponseSizeBytes, which otelchi deprecated in favour of the semconv
-	// instrument names. Request duration carries the status code as a label, so
-	// request counts per status come out of it without a separate counter.
-	metricCfg := otelchimetric.NewBaseConfig(telemetry.ServiceName)
-	router.Use(
-		otelchimetric.NewServerRequestDuration(metricCfg),
-		otelchimetric.NewServerActiveRequests(metricCfg),
-		otelchimetric.NewServerResponseBodySize(metricCfg),
-	)
+	// Server metrics come from telemetry.HTTPServerMetrics rather than
+	// otelchi's metric middlewares. Those recorded no status code — the
+	// service had a latency histogram and no way to compute an error rate —
+	// and labelled everything with the pre-1.21 attribute names
+	// (http.method rather than http.request.method), which no current
+	// dashboard or semconv-based alert matches.
+	//
+	// It goes *inside* the tracing middleware so the histograms are recorded
+	// with a live span in context: that is what puts trace exemplars on the
+	// latency buckets, which is the jump from "p99 is bad" to the trace that
+	// was the p99.
+	router.Use(telemetry.HTTPServerMetrics)
+
+	// Recoverer sits below both, and that is a change: above them, a handler
+	// panic unwound straight past the instrumentation and the resulting 500
+	// was recorded by nothing at all. Here the 500 it writes is an ordinary
+	// response as far as the metrics are concerned.
+	router.Use(middleware.Recoverer)
 
 	router.Use(mw.RequestLogger(log))
 
