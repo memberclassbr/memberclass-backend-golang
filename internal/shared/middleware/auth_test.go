@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-chi/chi/v5"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/shared/tenant"
@@ -73,11 +74,11 @@ func TestAuthExternal_ValidKeyResolvesTenant(t *testing.T) {
 	sum := sha256.Sum256([]byte(plaintext))
 
 	// The header carries the plaintext; only its hash is ever queried.
-	mock.ExpectQuery(`FROM "Tenant"`).
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
 		WithArgs(hex.EncodeToString(sum[:])).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Cliente"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "name"}).AddRow("k1", "t1", "Cliente"))
 
-	m := NewAuthExternalMiddleware(db, fakeLogger{})
+	m := NewAuthExternalMiddleware(db, fakeLogger{}, nil)
 
 	var gotTenantID string
 	handler := m.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +104,7 @@ func TestAuthExternal_RejectsMissingAndUnknownKeys(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		m := NewAuthExternalMiddleware(db, fakeLogger{})
+		m := NewAuthExternalMiddleware(db, fakeLogger{}, nil)
 		reached := false
 
 		w := httptest.NewRecorder()
@@ -120,9 +121,9 @@ func TestAuthExternal_RejectsMissingAndUnknownKeys(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		mock.ExpectQuery(`FROM "Tenant"`).WillReturnError(sql.ErrNoRows)
+		mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(sql.ErrNoRows)
 
-		m := NewAuthExternalMiddleware(db, fakeLogger{})
+		m := NewAuthExternalMiddleware(db, fakeLogger{}, nil)
 		reached := false
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -142,9 +143,9 @@ func TestAuthExternal_DatabaseErrorLooksLikeAnInvalidKey(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	mock.ExpectQuery(`FROM "Tenant"`).WillReturnError(assert.AnError)
+	mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(assert.AnError)
 
-	m := NewAuthExternalMiddleware(db, fakeLogger{})
+	m := NewAuthExternalMiddleware(db, fakeLogger{}, nil)
 	reached := false
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -461,16 +462,16 @@ func TestAuthExternal_AcceptsTheCurrentHeader(t *testing.T) {
 	defer db.Close()
 
 	sum := sha256.Sum256([]byte(plaintext))
-	mock.ExpectQuery(`FROM "Tenant"`).
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
 		WithArgs(hex.EncodeToString(sum[:])).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "name"}).AddRow("k1", "t1", "Acme"))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("x-api-key", plaintext)
 
 	rec := httptest.NewRecorder()
 	var reached bool
-	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
 		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }),
 	).ServeHTTP(rec, req)
 
@@ -487,16 +488,16 @@ func TestAuthExternal_StillAcceptsTheLegacyHeader(t *testing.T) {
 	defer db.Close()
 
 	sum := sha256.Sum256([]byte(plaintext))
-	mock.ExpectQuery(`FROM "Tenant"`).
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
 		WithArgs(hex.EncodeToString(sum[:])).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "name"}).AddRow("k1", "t1", "Acme"))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("mc-api-key", plaintext)
 
 	rec := httptest.NewRecorder()
 	var reached bool
-	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
 		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true }),
 	).ServeHTTP(rec, req)
 
@@ -512,16 +513,16 @@ func TestAuthExternal_PrefersTheCurrentHeaderWhenBothAreSent(t *testing.T) {
 	defer db.Close()
 
 	sum := sha256.Sum256([]byte("current"))
-	mock.ExpectQuery(`FROM "Tenant"`).
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
 		WithArgs(hex.EncodeToString(sum[:])).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "name"}).AddRow("k1", "t1", "Acme"))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("x-api-key", "current")
 	req.Header.Set("mc-api-key", "legacy")
 
 	rec := httptest.NewRecorder()
-	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
 		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
 	).ServeHTTP(rec, req)
 
@@ -535,11 +536,185 @@ func TestAuthExternal_RejectsWhenNeitherHeaderIsPresent(t *testing.T) {
 	defer db.Close()
 
 	rec := httptest.NewRecorder()
-	NewAuthExternalMiddleware(db, fakeLogger{}).Authenticate(
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
 		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 			t.Fatal("handler must not run without a credential")
 		}),
 	).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+// ---------- expiry, error codes and usage ----------
+
+// An expired key is refused by the same query that authenticates, so the
+// middleware never sees it. What matters here is that the answer is byte for
+// byte the answer an unknown key gets: telling the two apart would tell someone
+// guessing that a value was once real.
+func TestAuthExternal_ExpiredKeyAnswersLikeAnUnknownOne(t *testing.T) {
+	body := func(t *testing.T, err error) map[string]any {
+		t.Helper()
+
+		db, mock, dbErr := sqlmock.New()
+		require.NoError(t, dbErr)
+		defer db.Close()
+
+		mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(err)
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("x-api-key", "some-key")
+		rec := httptest.NewRecorder()
+
+		NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
+			http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("handler must not run")
+			}),
+		).ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+		var decoded map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &decoded))
+		return decoded
+	}
+
+	// The expiry lives in the WHERE clause, so an expired key is exactly a row
+	// that did not come back.
+	expired := body(t, sql.ErrNoRows)
+	unknown := body(t, sql.ErrNoRows)
+
+	assert.Equal(t, "INVALID_API_KEY", expired["errorCode"])
+	assert.Equal(t, expired, unknown)
+}
+
+// A missing header and a wrong key are different errorCodes. The caller that
+// sent nothing learns nothing it did not already know.
+func TestAuthExternal_MissingHeaderHasItsOwnErrorCode(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	rec := httptest.NewRecorder()
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("handler must not run without a credential")
+		}),
+	).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &decoded))
+	assert.Equal(t, "MISSING_API_KEY", decoded["errorCode"])
+	assert.Equal(t, false, decoded["ok"])
+}
+
+// recordedUsage is one call to the recorder.
+type recordedUsage struct {
+	apiKeyID string
+	endpoint string
+	status   int
+}
+
+type fakeUsageRecorder struct{ calls []recordedUsage }
+
+func (f *fakeUsageRecorder) Record(_ context.Context, apiKeyID, endpoint string, status int) {
+	f.calls = append(f.calls, recordedUsage{apiKeyID, endpoint, status})
+}
+
+// authenticatedRequest runs one request through a chi router with the
+// middleware mounted, which is the only way the route pattern resolves.
+func authenticatedRequest(t *testing.T, pattern, path string, handler http.HandlerFunc) *fakeUsageRecorder {
+	t.Helper()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "name"}).AddRow("key-1", "t1", "Acme"))
+
+	usage := &fakeUsageRecorder{}
+	router := chi.NewRouter()
+	router.Route("/api/v1", func(r chi.Router) {
+		r.Use(NewAuthExternalMiddleware(db, fakeLogger{}, usage).Authenticate)
+		r.Get(pattern, handler)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("x-api-key", "some-key")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	return usage
+}
+
+func TestAuthExternal_RecordsUsageWithTheRoutePattern(t *testing.T) {
+	usage := authenticatedRequest(t, "/comments/{commentId}", "/api/v1/comments/abc123",
+		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	require.Len(t, usage.calls, 1)
+	// The id in the path never reaches the row: one series per endpoint, not
+	// one per comment.
+	assert.Equal(t, recordedUsage{"key-1", "comments/:commentId", http.StatusOK}, usage.calls[0])
+}
+
+// A handler that writes nothing still answered 200, and that is what the panel
+// must show.
+func TestAuthExternal_RecordsTwoHundredForASilentHandler(t *testing.T) {
+	usage := authenticatedRequest(t, "/user/informations", "/api/v1/user/informations",
+		func(http.ResponseWriter, *http.Request) {})
+
+	require.Len(t, usage.calls, 1)
+	assert.Equal(t, http.StatusOK, usage.calls[0].status)
+}
+
+// The status is read after the handler ran, which is what lets a failure be
+// counted as one. A 429 from the rate limiter mounted below arrives here the
+// same way.
+func TestAuthExternal_RecordsTheFailureStatus(t *testing.T) {
+	usage := authenticatedRequest(t, "/user/informations", "/api/v1/user/informations",
+		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) })
+
+	require.Len(t, usage.calls, 1)
+	assert.Equal(t, http.StatusTooManyRequests, usage.calls[0].status)
+}
+
+// Without a router there is no pattern, only a raw path — and a row per path is
+// the cardinality the pattern exists to avoid.
+func TestAuthExternal_RecordsNothingWithoutARoutePattern(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "name"}).AddRow("key-1", "t1", "Acme"))
+
+	usage := &fakeUsageRecorder{}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/comments/abc123", nil)
+	req.Header.Set("x-api-key", "some-key")
+
+	NewAuthExternalMiddleware(db, fakeLogger{}, usage).Authenticate(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) }),
+	).ServeHTTP(httptest.NewRecorder(), req)
+
+	assert.Empty(t, usage.calls)
+}
+
+// A request that never authenticated has no key to charge.
+func TestAuthExternal_RecordsNothingForARejectedRequest(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(sql.ErrNoRows)
+
+	usage := &fakeUsageRecorder{}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("x-api-key", "nope")
+
+	NewAuthExternalMiddleware(db, fakeLogger{}, usage).Authenticate(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("handler must not run") }),
+	).ServeHTTP(httptest.NewRecorder(), req)
+
+	assert.Empty(t, usage.calls)
 }

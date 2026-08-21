@@ -59,7 +59,7 @@ func createTestRouter(t *testing.T) *Router {
 	rateLimitMiddleware := mw.NewRateLimitMiddleware(nil, log)
 	rateLimitTenantMiddleware := mw.NewRateLimitTenantMiddleware(nil, log)
 	rateLimitIPMiddleware := mw.NewRateLimitIPMiddleware(nil, log)
-	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log)
+	authExternalMiddleware := mw.NewAuthExternalMiddleware(nil, log, nil)
 	bearerMiddleware := mw.NewBearerMiddleware(cfg, nil, log)
 
 	return newRouter(log, mockVideo, mockLessonPDF, mockComment, mockUserActivities, mockUser, mockSocial, mockActivitySummary, mockMemberImport, nil, mockStudent, mockSwaggerHandler, mockAuth, mockSSO, mockAI, mockVitrine, healthfeat.New(nil, nil, log), rateLimitMiddleware, rateLimitTenantMiddleware, rateLimitIPMiddleware, authExternalMiddleware, bearerMiddleware)

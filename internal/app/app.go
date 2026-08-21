@@ -29,8 +29,10 @@ import (
 	videofeat "github.com/memberclass-backend-golang/internal/features/api/video"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/workers/analytics"
+	apikeyusageworker "github.com/memberclass-backend-golang/internal/features/workers/api_key_usage"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
+	"github.com/memberclass-backend-golang/internal/platform/apikeyusage"
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
@@ -40,6 +42,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
 	"github.com/memberclass-backend-golang/internal/platform/resend"
 	"github.com/memberclass-backend-golang/internal/platform/storage"
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 
 	"github.com/memberclass-backend-golang/internal/features/api/docs"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
@@ -127,7 +130,13 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	rateLimitTenant := mw.NewRateLimitTenantMiddleware(ratelimit.NewRateLimiterTenant(redis, log), log)
 	rateLimitIP := mw.NewRateLimitIPMiddleware(ratelimit.NewRateLimiterIP(redis, log), log)
 
-	authExternal := mw.NewAuthExternalMiddleware(db, log)
+	// Every tenant API key now lives in "TenantApiKey"; a deployment whose
+	// backfill has not run would 401 every integration it has. See the
+	// function comment.
+	warnIfKeysNotBackfilled(context.Background(), db, log)
+
+	usageRecorder := apikeyusage.New(redis, log)
+	authExternal := mw.NewAuthExternalMiddleware(db, log, usageRecorder)
 	authBearer := mw.NewBearerMiddleware(cfg, redis, log)
 
 	// ---------- slices ----------
@@ -172,6 +181,16 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	}
 	if err := scheduler.AddJob(analytics.NewMonthlyRollupJob(db, log, cfg.Analytics.DeleteEnabled), "0 0 9 1 * *"); err != nil {
 		return nil, fmt.Errorf("analytics.monthly_rollup: %w", err)
+	}
+
+	// Hourly, at five past. The offset keeps it off the hour, where the
+	// rollups and every other cron in the fleet are, and the day's first run
+	// at 00:05 UTC is the one that closes the previous day out. The instance
+	// id is the lock owner: every replica runs this scheduler, and only one of
+	// them may drain a day's counters.
+	usageFlush := apikeyusageworker.New(db, redis, log, telemetry.ServiceInstanceID(cfg))
+	if err := scheduler.AddJob(usageFlush, "0 5 * * * *"); err != nil {
+		return nil, fmt.Errorf("api_key_usage.flush: %w", err)
 	}
 
 	return &App{
@@ -269,4 +288,43 @@ func (a *App) shutdown(server *http.Server, stopWorkers context.CancelFunc) erro
 
 	a.log.Info("Server exited")
 	return nil
+}
+
+// sqlBackfillCheck answers, in one round trip, whether this deployment looks
+// like one whose API keys were never copied into "TenantApiKey".
+const sqlBackfillCheck = `
+	SELECT
+		(SELECT count(*) FROM "TenantApiKey"),
+		(SELECT count(*) FROM "Tenant" WHERE token_api_auth IS NOT NULL)
+`
+
+// warnIfKeysNotBackfilled shouts when the new table is empty and the old
+// column is not.
+//
+// Authentication reads "TenantApiKey" and nothing else, and each customer is
+// its own deployment with its own database, so the backfill is run once per
+// customer by hand. Get the order wrong for one of them and every integration
+// that customer has starts answering 401 — with nothing in the logs that says
+// why, because an unknown key and an un-backfilled key look identical.
+//
+// It warns rather than aborts: a customer created after this shipped has both
+// counts at zero legitimately, and refusing to boot would take that deployment
+// down for being new.
+func warnIfKeysNotBackfilled(ctx context.Context, db *sql.DB, log logger.Logger) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var newKeys, legacyKeys int
+	if err := db.QueryRowContext(ctx, sqlBackfillCheck).Scan(&newKeys, &legacyKeys); err != nil {
+		log.Warn("Could not verify API key backfill: " + err.Error())
+		return
+	}
+
+	if newKeys == 0 && legacyKeys > 0 {
+		log.Error(fmt.Sprintf(
+			"API keys not backfilled: \"TenantApiKey\" is empty while %d tenant(s) still hold token_api_auth. "+
+				"Every tenant integration on this deployment will answer 401 until the backfill runs.",
+			legacyKeys,
+		))
+	}
 }
