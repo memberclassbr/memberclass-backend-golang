@@ -29,8 +29,10 @@ import (
 	videofeat "github.com/memberclass-backend-golang/internal/features/api/video"
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/workers/analytics"
+	apikeyusageworker "github.com/memberclass-backend-golang/internal/features/workers/api_key_usage"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
+	"github.com/memberclass-backend-golang/internal/platform/apikeyusage"
 	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/platform/cache"
 	"github.com/memberclass-backend-golang/internal/platform/config"
@@ -40,6 +42,7 @@ import (
 	"github.com/memberclass-backend-golang/internal/platform/ratelimit"
 	"github.com/memberclass-backend-golang/internal/platform/resend"
 	"github.com/memberclass-backend-golang/internal/platform/storage"
+	"github.com/memberclass-backend-golang/internal/platform/telemetry"
 
 	"github.com/memberclass-backend-golang/internal/features/api/docs"
 	mw "github.com/memberclass-backend-golang/internal/shared/middleware"
@@ -127,7 +130,13 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	rateLimitTenant := mw.NewRateLimitTenantMiddleware(ratelimit.NewRateLimiterTenant(redis, log), log)
 	rateLimitIP := mw.NewRateLimitIPMiddleware(ratelimit.NewRateLimiterIP(redis, log), log)
 
-	authExternal := mw.NewAuthExternalMiddleware(db, log)
+	// Named tenant API keys live in "TenantApiKey"; a deployment where nobody
+	// has created one yet still authenticates, through the legacy fallback, and
+	// gets no usage panel. See the function comment.
+	warnIfLegacyAPIKeysRemain(context.Background(), db, log)
+
+	usageRecorder := apikeyusage.New(redis, log)
+	authExternal := mw.NewAuthExternalMiddleware(db, log, usageRecorder)
 	authBearer := mw.NewBearerMiddleware(cfg, redis, log)
 
 	// ---------- slices ----------
@@ -172,6 +181,16 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	}
 	if err := scheduler.AddJob(analytics.NewMonthlyRollupJob(db, log, cfg.Analytics.DeleteEnabled), "0 0 9 1 * *"); err != nil {
 		return nil, fmt.Errorf("analytics.monthly_rollup: %w", err)
+	}
+
+	// Hourly, at five past. The offset keeps it off the hour, where the
+	// rollups and every other cron in the fleet are, and the day's first run
+	// at 00:05 UTC is the one that closes the previous day out. The instance
+	// id is the lock owner: every replica runs this scheduler, and only one of
+	// them may drain a day's counters.
+	usageFlush := apikeyusageworker.New(db, redis, log, telemetry.ServiceInstanceID(cfg))
+	if err := scheduler.AddJob(usageFlush, "0 5 * * * *"); err != nil {
+		return nil, fmt.Errorf("api_key_usage.flush: %w", err)
 	}
 
 	return &App{
@@ -269,4 +288,47 @@ func (a *App) shutdown(server *http.Server, stopWorkers context.CancelFunc) erro
 
 	a.log.Info("Server exited")
 	return nil
+}
+
+// sqlLegacyKeyCheck answers, in one round trip, whether every tenant on this
+// deployment is still on the single pre-"TenantApiKey" key.
+const sqlLegacyKeyCheck = `
+	SELECT
+		(SELECT count(*) FROM "TenantApiKey"),
+		(SELECT count(*) FROM "Tenant" WHERE token_api_auth IS NOT NULL)
+`
+
+// warnIfLegacyAPIKeysRemain says so at boot when the new table is empty and the
+// old column is not.
+//
+// Nothing migrates a legacy key: the panel does not copy token_api_auth into
+// "TenantApiKey", so a tenant leaves the old column behind only by creating a
+// named key there. Until it does, it authenticates through the fallback, and
+// the symptom is not an outage but a silence: no key id, so the usage panel
+// stays empty, and no expiry, so nothing in the panel can retire that key.
+// Neither is visible from the outside, which is why this is said at boot.
+//
+// It warns rather than aborts: a customer created after this shipped has both
+// counts at zero legitimately, and refusing to boot would take that deployment
+// down for being new.
+//
+// It goes with the fallback itself — see issue #38.
+func warnIfLegacyAPIKeysRemain(ctx context.Context, db *sql.DB, log logger.Logger) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var newKeys, legacyKeys int
+	if err := db.QueryRowContext(ctx, sqlLegacyKeyCheck).Scan(&newKeys, &legacyKeys); err != nil {
+		log.Warn("Could not verify tenant API key migration: " + err.Error())
+		return
+	}
+
+	if newKeys == 0 && legacyKeys > 0 {
+		log.Warn(fmt.Sprintf(
+			"Tenant API keys not migrated: \"TenantApiKey\" is empty while %d tenant(s) still hold token_api_auth. "+
+				"This deployment authenticates through the legacy fallback, which no expiry and no usage "+
+				"panel reaches; create named keys in the panel to leave it.",
+			legacyKeys,
+		))
+	}
 }

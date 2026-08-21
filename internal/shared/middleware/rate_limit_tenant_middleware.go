@@ -26,18 +26,25 @@ func (m *RateLimitTenantMiddleware) LimitByTenant(next http.Handler) http.Handle
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		// The authenticated tenant wins, and the query string is only read
+		// when there is none. The other order — which is what this used to do
+		// — keyed the quota on a value the caller writes: a client with a
+		// valid API key moved itself to a fresh bucket by sending
+		// ?tenantId=anything, which is the same defect the upload limiter had
+		// with its user_id header. Rate limiting is per area, and the area is
+		// the one the credential resolved to.
 		var tenantID string
 
-		tenantIDFromQuery := r.URL.Query().Get("tenantId")
-		if tenantIDFromQuery != "" {
-			tenantID = tenantIDFromQuery
+		if authenticated := tenant.FromContext(ctx); authenticated != nil {
+			tenantID = authenticated.ID
+		} else if fromQuery := r.URL.Query().Get("tenantId"); fromQuery != "" {
+			// Routes mounted without AuthExternal have no tenant in context
+			// and still need a bucket; they are already reachable without a
+			// credential, so this changes nothing about what they expose.
+			tenantID = fromQuery
 		} else {
-			tenant := tenant.FromContext(ctx)
-			if tenant == nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-			tenantID = tenant.ID
+			next.ServeHTTP(w, r)
+			return
 		}
 
 		endpoint := r.URL.Path

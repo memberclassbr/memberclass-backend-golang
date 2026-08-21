@@ -47,7 +47,7 @@ paths:
         Retorna uma lista paginada de comentários do tenant com filtros opcionais.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Filtros disponíveis:**
@@ -195,7 +195,7 @@ paths:
         entregas (deliveries) associadas e último acesso.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Filtros disponíveis:**
@@ -522,7 +522,7 @@ paths:
                 $ref: '#/components/schemas/CustomErrorResponse'
               example:
                 ok: false
-                error: "API key invalid"
+                error: "API key inválida"
                 errorCode: "INVALID_API_KEY"
         '404':
           description: Usuário não encontrado no tenant
@@ -553,7 +553,7 @@ paths:
         Retorna um resumo de atividade dos usuários de um tenant, mostrando o email e o último acesso de cada usuário.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Regras de Data:**
@@ -673,7 +673,7 @@ paths:
                 $ref: '#/components/schemas/CustomErrorResponse'
               example:
                 ok: false
-                error: "API key invalid"
+                error: "API key inválida"
                 errorCode: "INVALID_API_KEY"
         '500':
           description: Erro interno do servidor
@@ -694,7 +694,7 @@ paths:
         Retorna as aulas concluídas por um usuário específico, com informações do curso e data de conclusão.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Regras de Data:**
@@ -832,7 +832,7 @@ paths:
                 $ref: '#/components/schemas/CustomErrorResponse'
               example:
                 ok: false
-                error: "API key invalid"
+                error: "API key inválida"
                 errorCode: "INVALID_API_KEY"
         '404':
           description: Usuário não encontrado
@@ -992,7 +992,7 @@ paths:
         Retorna uma lista paginada de compras e reembolsos de um usuário específico.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos) para melhorar a performance.
@@ -1103,7 +1103,7 @@ paths:
                 $ref: '#/components/schemas/UnauthorizedResponse'
               example:
                 ok: false
-                error: "API key invalid"
+                error: "API key inválida"
                 errorCode: "INVALID_API_KEY"
         '404':
           description: Usuário não encontrado ou não pertence ao tenant
@@ -1134,7 +1134,7 @@ paths:
         Cria um novo post em um tópico ou atualiza um post existente, com validação de tenant, usuário e permissões.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Fluxo:**
@@ -1244,7 +1244,7 @@ paths:
                   summary: API key inválida
                   value:
                     ok: false
-                    error: "API key invalid"
+                    error: "API key inválida"
                     errorCode: "INVALID_API_KEY"
         '403':
           description: Permissão negada
@@ -1309,7 +1309,7 @@ paths:
         Atualiza parcialmente a resposta e o status de publicação de um comentário específico.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: updateCommentPartial
       parameters:
@@ -1357,7 +1357,7 @@ paths:
                 $ref: '#/components/schemas/UnauthorizedResponse'
               example:
                 ok: false
-                error: "API key invalid"
+                error: "API key inválida"
                 errorCode: "INVALID_API_KEY"
         '404':
           description: Comentário não encontrado
@@ -1381,7 +1381,7 @@ paths:
         Retorna um relatório detalhado dos alunos de um tenant, incluindo informações de cadastro, entregas vinculadas, acessos e aulas assistidas.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         **Cache:** Este endpoint utiliza cache Redis com TTL de 300 segundos (5 minutos). A chave de cache é gerada usando MD5 hash dos parâmetros.
@@ -1530,7 +1530,7 @@ paths:
         Retorna todas as vitrines do tenant com sua hierarquia completa: vitrines > cursos > seções > módulos > aulas.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
         
         O tenant é identificado automaticamente pelo token de API.
@@ -1572,7 +1572,7 @@ paths:
         Retorna uma vitrine específica pelo ID. Pode incluir ou não os filhos (cursos, seções, módulos e aulas) através do parâmetro `includeChildren`.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getVitrine
       parameters:
@@ -1627,7 +1627,7 @@ paths:
         Retorna um curso específico pelo ID. Pode incluir ou não os filhos (seções, módulos e aulas) através do parâmetro `includeChildren`.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getCourse
       parameters:
@@ -1682,7 +1682,7 @@ paths:
         Retorna um módulo específico pelo ID. Pode incluir ou não os filhos (aulas) através do parâmetro `includeChildren`.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getModule
       parameters:
@@ -1737,7 +1737,7 @@ paths:
         Retorna uma aula específica pelo ID. Aulas não possuem filhos.
         
         **Autenticação:** Requer header `x-api-key` com o token de API do tenant.
-        O nome antigo `x-api-key` continua aceito para integrações que ainda não
+        O nome antigo `mc-api-key` continua aceito para integrações que ainda não
         migraram, mas não é mais documentado — use `x-api-key` em código novo.
       operationId: getLesson
       parameters:
@@ -2018,10 +2018,18 @@ components:
         error:
           type: string
           description: Mensagem de erro
-          example: "API key invalid"
+          example: "API key inválida"
         errorCode:
           type: string
-          description: Código do erro
+          description: |
+            `MISSING_API_KEY` quando nenhum header de API key foi enviado e
+            `INVALID_API_KEY` quando a chave não existe ou está vencida. Uma
+            chave vencida responde igual a uma inválida de propósito: distinguir
+            as duas diria a quem está tentando adivinhar que aquele valor um dia
+            foi válido.
+          enum:
+            - MISSING_API_KEY
+            - INVALID_API_KEY
           example: "INVALID_API_KEY"
 
     UpdateCommentRequest:
