@@ -184,6 +184,62 @@ The tenant key moved from `mc-api-key` to `x-api-key`. Both are accepted and
 [swagger.yaml](internal/features/api/docs/swagger.yaml). The legacy name goes when its callers do —
 dropping it earlier would log out every integration in one deploy.
 
+### Tenant API keys: `"TenantApiKey"`
+
+One key per area became **N named keys per area**, owned by the Next.js panel,
+which creates, renames, deletes and expires them. This service only reads them.
+`AuthExternalMiddleware` resolves `sha256(key) → ("TenantApiKey".id, tenant)`:
+
+- The hash is **unique globally**, not per tenant, because at the moment of
+  authentication there is only a header — the tenant is the *result* of the
+  lookup, not an input to it.
+- **Expiry is compared in the authenticating query itself**
+  (`expiresAt IS NULL OR expiresAt > now()`), never by a job that materialises
+  a status. Any gap between the two is a window where an expired key still
+  works. `now()` is the **database's** clock: the panel derives its "Expirada"
+  label from that same clock, and a drifting container would make the screen
+  and the gate disagree.
+- An expired key answers exactly like an unknown one — `INVALID_API_KEY`.
+  Telling them apart tells someone guessing that a value was once real. A
+  missing header is the one thing distinguished, as `MISSING_API_KEY`: a caller
+  that sent no credential already knows it sent none.
+- **A key found there falls back to `Tenant.token_api_auth`**, the
+  single-key-per-area column this replaced. **Nothing backfills that column
+  into `"TenantApiKey"`** — the panel's schema says so in as many words, and no
+  such script exists. An area leaves the old column behind by creating named
+  keys in the panel, not by being migrated, so until it does, the fallback is
+  the only path its integrations have: without it they answer 401 the moment
+  this service deploys, indistinguishably from a wrong key.
+
+  The fallback is taken on **any** failure of the first lookup, not only on
+  "no rows": the case it is really for is a database whose panel migration has
+  not run, where `"TenantApiKey"` does not exist and the query raises.
+
+  **The two stores being disjoint is what makes this safe**, and it is not a
+  detail to preserve casually. The legacy query has no expiry predicate, so a
+  hash sitting in *both* places would keep authenticating after the panel
+  expired or deleted its `"TenantApiKey"` row — revoked on the screen, live at
+  the door, and invisible either way, since the legacy path is counted nowhere.
+  Anything that ever copies a hash into `"TenantApiKey"` has to clear
+  `token_api_auth` in the same statement.
+
+  A legacy key has **no id and no expiry**, so it is counted in no usage panel
+  and nothing in the panel can retire it — a named key is what buys those, not
+  the authentication. Two things say the fallback is still load-bearing: the
+  counter `apikey.auth.legacy_fallback`, and a boot warning when
+  `"TenantApiKey"` is empty while the old column is not (a warning, not an
+  abort — a customer created after this shipped has both counts at zero
+  legitimately). **The fallback is temporary**; removing it once both are
+  clean is [issue #38](https://github.com/memberclassbr/memberclass-backend-golang/issues/38).
+
+There are **no scopes**. Every key is valid for every endpoint of its area, so
+the key id is never put in the request context — a value there is an invitation
+to start scoping by it. It stays in the auth middleware's closure, which is the
+only thing that needs it.
+
+Rate limiting stays **per area, not per key**: all of an area's keys share one
+quota. Per-key would silently multiply the quota of whoever creates more keys.
+
 The internal API key is checked inside the handlers that use it, not by a
 middleware; those checks reject an empty incoming key so an unset
 `INTERNAL_AI_API_KEY` cannot leave an endpoint open.
@@ -352,6 +408,75 @@ gone; sending it now does nothing. `CheckUploadLimit` therefore only works
 mounted below `RequireAuth`, and answers 401 rather than charging a default
 bucket if it is not.
 
+The tenant limiter had the same defect in a second place: it read `?tenantId=`
+from the query string **before** the authenticated tenant, so a caller holding
+a valid API key moved itself into an empty bucket by changing the value on
+every request. The context wins now, and the query string is only read on
+routes mounted without `AuthExternal`, which are already reachable without a
+credential.
+
+## API key usage
+
+Per-key usage feeds a panel, not a bill, and that is why none of it is on the
+request's durability path. `AuthExternalMiddleware` is the only place that
+knows which key a request arrived with, so it counts on the way back out:
+`internal/platform/apikeyusage` does one pipelined round trip to Redis —
+`HINCRBY` into two hashes per UTC day, `apikey:usage:req:<date>` and
+`apikey:usage:err:<date>`, field `<apiKeyId>|<endpoint>`.
+
+It is mounted **above** the rate limiter, so a 429 is counted rather than lost.
+`errors` is any status ≥ 400 and a strict subset of `requests`: a broken
+integration is meant to show up as a spike in errors, not in volume.
+
+`endpoint` is the **chi route pattern**, normalised to the panel's spelling
+(`/api/v1/comments/{commentId}` → `comments/:commentId`). A request with no
+pattern — a 404, a 405, a wildcard mount — is counted nowhere, because the only
+identifier left for it is the raw path, which is the cardinality the pattern
+exists to avoid.
+
+The write can never fail the request, so it is wrapped in a 100ms deadline of
+its own (`context.WithoutCancel`, since a client hanging up does not un-make
+the request it already made) behind a small circuit breaker — without one,
+"degrade quietly" means adding 100ms to every request in the service while
+Redis is down. Failures are counted as `apikey.usage.record.errors` rather than
+only swallowed: the failure mode is otherwise a panel that says "Nunca" with
+nothing anywhere saying why.
+
+[internal/features/workers/api_key_usage](internal/features/workers/api_key_usage)
+folds those hashes into `"ApiKeyUsageDaily"` **hourly**, not at midnight. A
+daily job would leave the current day blank, so an integration that breaks at
+09:00 would not appear until the following night. Hourly is free because the
+upsert **assigns** the day's total rather than adding to it — the counters in
+Redis are cumulative, so re-running is idempotent, which is also what makes a
+retry safe.
+
+Four things that are not obvious:
+
+- **A lock, `SET NX`, per day.** Every replica starts the scheduler, and two of
+  them running `HGETALL` + `DEL` over one hash is lost data: whoever deletes
+  first takes the counters out from under the other.
+- **Only a day that has ended is deleted from Redis.** Today's hash is still
+  being written to. The hashes carry a 72h TTL and the job scans three days
+  back, so a job that fails for a whole day still finds them.
+- **`gen_random_uuid()` supplies the row's `id`.** Prisma's `@default(cuid())`
+  is generated by the client, not by CockroachDB, so an insert from Go has to
+  bring its own; nothing reads it, since the row's identity is
+  `(apiKeyId, date, endpoint)`.
+- **`lastUsedAt` is stamped by the same pass**, not written during the request.
+  The job already knows which keys were used, so no request pays a database
+  write for telemetry. Granularity is a day — the panel renders a date — so the
+  hourly lag is invisible.
+
+The day is **UTC**, matching the panel and the `date` column, and this is the
+one place in the service that does not use the tenant's local day the way
+`analytics` does. Near midnight in Brazil the two disagree about which day a
+request belongs to. Changing it would mean hourly Redis keys and a data
+migration.
+
+Retention is 90 days, deleted once a day at 03:00 UTC rather than hourly:
+`"ApiKeyUsageDaily"` is indexed on `(tenantId, date)`, so a delete filtered on
+`date` alone cannot use that index and scans.
+
 ## Background work
 
 Started by `App.Run` and stopped in reverse order on shutdown, before the
@@ -361,6 +486,8 @@ database closes:
 - **notifications** — polls the Notification table, dispatches FCM pushes.
 - **transcription** — polls its own jobs table; video → Whisper → chunk → embed → pgvector.
 - **member_import** — startup reset for orphaned imports, plus a 24h retention job.
+- **api_key_usage** — hourly, on the same cron; folds the per-key Redis counters
+  into `"ApiKeyUsageDaily"`. See below.
 
 ## Observability
 

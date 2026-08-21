@@ -31,7 +31,11 @@ const (
 // NewRedisCache connects to Redis. It returns an error rather than panicking:
 // an unreachable cache is a startup failure the composition root reports, not
 // a stack trace on stderr.
-func NewRedisCache(cfg *config.Config, log logger.Logger) (Cache, error) {
+//
+// The return type is HashCache, the wider of the two interfaces, so the
+// composition root can hand the same value to a caller that needs the hash
+// operations and to one that only takes Cache.
+func NewRedisCache(cfg *config.Config, log logger.Logger) (HashCache, error) {
 	redisURL := cfg.Redis.URL
 
 	opts, err := redis.ParseURL(redisURL)
@@ -115,6 +119,40 @@ func (u *RedisCache) TTL(ctx context.Context, key string) (time.Duration, error)
 		return 0, nil
 	}
 	return ttl, nil
+}
+
+// HIncrByPipeline applies every increment and slides each touched hash's TTL
+// forward, in one round trip.
+//
+// The TTL is rewritten on every call rather than only on the first, which
+// costs one pipelined command and saves having to know whether the hash
+// already existed — a question that cannot be answered without another round
+// trip, which is the thing being avoided.
+func (u *RedisCache) HIncrByPipeline(ctx context.Context, ttl time.Duration, incs ...HashIncr) error {
+	if len(incs) == 0 {
+		return nil
+	}
+
+	pipe := u.client.Pipeline()
+	touched := make(map[string]struct{}, len(incs))
+	for _, inc := range incs {
+		pipe.HIncrBy(ctx, inc.Key, inc.Field, inc.By)
+		touched[inc.Key] = struct{}{}
+	}
+	for key := range touched {
+		pipe.Expire(ctx, key, ttl)
+	}
+
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (u *RedisCache) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	return u.client.HGetAll(ctx, key).Result()
+}
+
+func (u *RedisCache) SetNX(ctx context.Context, key string, value string, expiration time.Duration) (bool, error) {
+	return u.client.SetNX(ctx, key, value, expiration).Result()
 }
 
 func (u *RedisCache) Close() error {
