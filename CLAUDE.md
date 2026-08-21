@@ -203,22 +203,30 @@ which creates, renames, deletes and expires them. This service only reads them.
   Telling them apart tells someone guessing that a value was once real. A
   missing header is the one thing distinguished, as `MISSING_API_KEY`: a caller
   that sent no credential already knows it sent none.
-- **A key found in neither place falls back to `Tenant.token_api_auth`**, the
-  single-key-per-area column this replaced. The fallback exists so the two
-  sides can deploy in either order: the panel's
-  `scripts/backfill-tenant-api-keys.ts` copies those hashes into the new table
-  and is run per deployment — each customer is its own database — and without
-  the fallback, getting that order wrong for one customer would answer 401 to
-  every integration that customer has, indistinguishably from a wrong key.
+- **A key found there falls back to `Tenant.token_api_auth`**, the
+  single-key-per-area column this replaced. **Nothing backfills that column
+  into `"TenantApiKey"`** — the panel's schema says so in as many words, and no
+  such script exists. An area leaves the old column behind by creating named
+  keys in the panel, not by being migrated, so until it does, the fallback is
+  the only path its integrations have: without it they answer 401 the moment
+  this service deploys, indistinguishably from a wrong key.
 
-  It is taken on **any** failure of the first lookup, not only on "no rows":
-  the case it is really for is a database whose panel migration has not run,
-  where `"TenantApiKey"` does not exist and the query raises.
+  The fallback is taken on **any** failure of the first lookup, not only on
+  "no rows": the case it is really for is a database whose panel migration has
+  not run, where `"TenantApiKey"` does not exist and the query raises.
+
+  **The two stores being disjoint is what makes this safe**, and it is not a
+  detail to preserve casually. The legacy query has no expiry predicate, so a
+  hash sitting in *both* places would keep authenticating after the panel
+  expired or deleted its `"TenantApiKey"` row — revoked on the screen, live at
+  the door, and invisible either way, since the legacy path is counted nowhere.
+  Anything that ever copies a hash into `"TenantApiKey"` has to clear
+  `token_api_auth` in the same statement.
 
   A legacy key has **no id and no expiry**, so it is counted in no usage panel
-  and nothing in the panel can retire it — the migration is what buys those,
-  not the authentication. Two things say the fallback is still load-bearing:
-  the counter `apikey.auth.legacy_fallback`, and a boot warning when
+  and nothing in the panel can retire it — a named key is what buys those, not
+  the authentication. Two things say the fallback is still load-bearing: the
+  counter `apikey.auth.legacy_fallback`, and a boot warning when
   `"TenantApiKey"` is empty while the old column is not (a warning, not an
   abort — a customer created after this shipped has both counts at zero
   legitimately). **The fallback is temporary**; removing it once both are

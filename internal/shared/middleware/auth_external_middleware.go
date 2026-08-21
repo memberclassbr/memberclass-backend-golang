@@ -41,18 +41,27 @@ const sqlTenantByToken = `
 `
 
 // sqlTenantByLegacyToken is the pre-"TenantApiKey" lookup, kept as a fallback
-// so this service and the panel can deploy in either order.
+// because it is the *only* path the one pre-existing key per tenant has.
 //
-// Without it, the backfill that copies these hashes into "TenantApiKey" would
-// have to run on every customer's database *before* this service deploys
-// there; get the order wrong for one of them and every integration that
-// customer has answers 401, indistinguishably from a wrong key.
+// It is not copied anywhere. The panel does not backfill these hashes into
+// "TenantApiKey" — its schema says so in as many words — so a tenant that has
+// not yet created named keys authenticates through here and nowhere else.
+// Without this lookup that tenant's integrations answer 401 the moment this
+// service deploys, indistinguishably from a wrong key.
+//
+// That the two stores are disjoint is what keeps this fallback safe, and it is
+// not a detail to preserve casually: this query has no expiry predicate, so a
+// hash present in *both* places would go on authenticating after the panel
+// expired or deleted its "TenantApiKey" row — revoked on the screen, live at
+// the door, and invisible either way since the legacy path is counted nowhere.
+// Anything that ever copies a hash into "TenantApiKey" must clear
+// token_api_auth in the same statement.
 //
 // It is temporary, and its removal is tracked in issue #38 — from 2026-09-20,
 // once the apikey.auth.legacy_fallback counter has stayed at zero everywhere.
 // A key that only exists here has no id and no expiry, so it is counted in no
-// usage panel and never expires: two more reasons this is a bridge, not a
-// second supported way to hold a key.
+// usage panel and cannot be retired from the panel: two more reasons this is a
+// bridge, not a second supported way to hold a key.
 const sqlTenantByLegacyToken = `
 	SELECT id, name
 	FROM "Tenant"
