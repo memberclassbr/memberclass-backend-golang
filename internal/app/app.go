@@ -130,10 +130,10 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	rateLimitTenant := mw.NewRateLimitTenantMiddleware(ratelimit.NewRateLimiterTenant(redis, log), log)
 	rateLimitIP := mw.NewRateLimitIPMiddleware(ratelimit.NewRateLimiterIP(redis, log), log)
 
-	// Every tenant API key now lives in "TenantApiKey"; a deployment whose
-	// backfill has not run would 401 every integration it has. See the
-	// function comment.
-	warnIfKeysNotBackfilled(context.Background(), db, log)
+	// Tenant API keys live in "TenantApiKey"; a deployment whose backfill has
+	// not run still authenticates, through the legacy fallback, and gets no
+	// usage panel. See the function comment.
+	warnIfLegacyAPIKeysRemain(context.Background(), db, log)
 
 	usageRecorder := apikeyusage.New(redis, log)
 	authExternal := mw.NewAuthExternalMiddleware(db, log, usageRecorder)
@@ -290,40 +290,44 @@ func (a *App) shutdown(server *http.Server, stopWorkers context.CancelFunc) erro
 	return nil
 }
 
-// sqlBackfillCheck answers, in one round trip, whether this deployment looks
+// sqlLegacyKeyCheck answers, in one round trip, whether this deployment looks
 // like one whose API keys were never copied into "TenantApiKey".
-const sqlBackfillCheck = `
+const sqlLegacyKeyCheck = `
 	SELECT
 		(SELECT count(*) FROM "TenantApiKey"),
 		(SELECT count(*) FROM "Tenant" WHERE token_api_auth IS NOT NULL)
 `
 
-// warnIfKeysNotBackfilled shouts when the new table is empty and the old
-// column is not.
+// warnIfLegacyAPIKeysRemain says so at boot when the new table is empty and the
+// old column is not.
 //
-// Authentication reads "TenantApiKey" and nothing else, and each customer is
-// its own deployment with its own database, so the backfill is run once per
-// customer by hand. Get the order wrong for one of them and every integration
-// that customer has starts answering 401 — with nothing in the logs that says
-// why, because an unknown key and an un-backfilled key look identical.
+// Each customer is its own deployment with its own database, so the panel's
+// backfill is run once per customer by hand. A deployment where it has not run
+// still authenticates — the middleware falls back to token_api_auth — so the
+// symptom is not an outage but a silence: no key ids, so the usage panel stays
+// empty, and no expiry, so nothing in the panel can retire a key. Neither is
+// visible from the outside, which is why this is said at boot.
 //
 // It warns rather than aborts: a customer created after this shipped has both
 // counts at zero legitimately, and refusing to boot would take that deployment
 // down for being new.
-func warnIfKeysNotBackfilled(ctx context.Context, db *sql.DB, log logger.Logger) {
+//
+// It goes with the fallback itself — see issue #38.
+func warnIfLegacyAPIKeysRemain(ctx context.Context, db *sql.DB, log logger.Logger) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var newKeys, legacyKeys int
-	if err := db.QueryRowContext(ctx, sqlBackfillCheck).Scan(&newKeys, &legacyKeys); err != nil {
-		log.Warn("Could not verify API key backfill: " + err.Error())
+	if err := db.QueryRowContext(ctx, sqlLegacyKeyCheck).Scan(&newKeys, &legacyKeys); err != nil {
+		log.Warn("Could not verify tenant API key migration: " + err.Error())
 		return
 	}
 
 	if newKeys == 0 && legacyKeys > 0 {
-		log.Error(fmt.Sprintf(
-			"API keys not backfilled: \"TenantApiKey\" is empty while %d tenant(s) still hold token_api_auth. "+
-				"Every tenant integration on this deployment will answer 401 until the backfill runs.",
+		log.Warn(fmt.Sprintf(
+			"Tenant API keys not migrated: \"TenantApiKey\" is empty while %d tenant(s) still hold token_api_auth. "+
+				"This deployment is authenticating through the legacy fallback; run the panel's backfill "+
+				"so keys get ids, expiry and usage.",
 			legacyKeys,
 		))
 	}

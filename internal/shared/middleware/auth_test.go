@@ -122,6 +122,7 @@ func TestAuthExternal_RejectsMissingAndUnknownKeys(t *testing.T) {
 		defer db.Close()
 
 		mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(sql.ErrNoRows)
+		mock.ExpectQuery(`token_api_auth`).WillReturnError(sql.ErrNoRows)
 
 		m := NewAuthExternalMiddleware(db, fakeLogger{}, nil)
 		reached := false
@@ -144,6 +145,7 @@ func TestAuthExternal_DatabaseErrorLooksLikeAnInvalidKey(t *testing.T) {
 	defer db.Close()
 
 	mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(assert.AnError)
+	mock.ExpectQuery(`token_api_auth`).WillReturnError(assert.AnError)
 
 	m := NewAuthExternalMiddleware(db, fakeLogger{}, nil)
 	reached := false
@@ -560,6 +562,7 @@ func TestAuthExternal_ExpiredKeyAnswersLikeAnUnknownOne(t *testing.T) {
 		defer db.Close()
 
 		mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(err)
+		mock.ExpectQuery(`token_api_auth`).WillReturnError(sql.ErrNoRows)
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header.Set("x-api-key", "some-key")
@@ -707,6 +710,7 @@ func TestAuthExternal_RecordsNothingForARejectedRequest(t *testing.T) {
 	defer db.Close()
 
 	mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(`token_api_auth`).WillReturnError(sql.ErrNoRows)
 
 	usage := &fakeUsageRecorder{}
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -717,4 +721,154 @@ func TestAuthExternal_RecordsNothingForARejectedRequest(t *testing.T) {
 	).ServeHTTP(httptest.NewRecorder(), req)
 
 	assert.Empty(t, usage.calls)
+}
+
+// ---------- the legacy Tenant.token_api_auth fallback (issue #38) ----------
+
+// A key that was never copied into "TenantApiKey" still authenticates, so this
+// service and the panel can deploy in either order.
+func TestAuthExternal_FallsBackToTheLegacyColumn(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	const plaintext = "not-backfilled"
+	sum := sha256.Sum256([]byte(plaintext))
+	hash := hex.EncodeToString(sum[:])
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).WithArgs(hash).WillReturnError(sql.ErrNoRows)
+	// The legacy column holds the same sha256 hex, so the header is hashed
+	// once and both lookups take that value.
+	mock.ExpectQuery(`token_api_auth`).WithArgs(hash).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+
+	var gotTenantID string
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("x-api-key", plaintext)
+	rec := httptest.NewRecorder()
+
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if found := tenant.FromContext(r.Context()); found != nil {
+				gotTenantID = found.ID
+			}
+			w.WriteHeader(http.StatusOK)
+		}),
+	).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "t1", gotTenantID)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The failure the fallback exists for is not a missing row: a deployment whose
+// panel migration has not run has no "TenantApiKey" table at all, and the error
+// that raises must not log out every integration that customer has.
+func TestAuthExternal_FallsBackWhenTheNewTableCannotBeRead(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
+		WillReturnError(errors.New(`pq: relation "TenantApiKey" does not exist`))
+	mock.ExpectQuery(`token_api_auth`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("x-api-key", "some-key")
+	rec := httptest.NewRecorder()
+
+	var reached bool
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			reached = true
+			w.WriteHeader(http.StatusOK)
+		}),
+	).ServeHTTP(rec, req)
+
+	assert.True(t, reached)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// A key in neither place is still an invalid key, with the same body as before
+// the fallback existed.
+func TestAuthExternal_RejectsAKeyInNeitherPlace(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(`token_api_auth`).WillReturnError(sql.ErrNoRows)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("x-api-key", "nope")
+	rec := httptest.NewRecorder()
+
+	NewAuthExternalMiddleware(db, fakeLogger{}, nil).Authenticate(
+		http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("handler must not run") }),
+	).ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &decoded))
+	assert.Equal(t, "INVALID_API_KEY", decoded["errorCode"])
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The legacy column carries no key id, so there is no row for the panel to
+// hang a number on. Counting it against an empty id would put every
+// un-migrated tenant into one bucket.
+func TestAuthExternal_RecordsNothingForALegacyKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery(`token_api_auth`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("t1", "Acme"))
+
+	usage := &fakeUsageRecorder{}
+	router := chi.NewRouter()
+	router.Route("/api/v1", func(r chi.Router) {
+		r.Use(NewAuthExternalMiddleware(db, fakeLogger{}, usage).Authenticate)
+		r.Get("/user/informations", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/user/informations", nil)
+	req.Header.Set("x-api-key", "not-backfilled")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, usage.calls)
+}
+
+// The lookup order is not incidental: a key present in both places must
+// resolve to its "TenantApiKey" row, which is the one that carries an id, an
+// expiry and a usage row.
+func TestAuthExternal_PrefersTheNewTableOverTheLegacyColumn(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(`FROM "TenantApiKey"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "id", "name"}).AddRow("k1", "t1", "Acme"))
+
+	usage := &fakeUsageRecorder{}
+	router := chi.NewRouter()
+	router.Route("/api/v1", func(r chi.Router) {
+		r.Use(NewAuthExternalMiddleware(db, fakeLogger{}, usage).Authenticate)
+		r.Get("/user/informations", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/user/informations", nil)
+	req.Header.Set("x-api-key", "backfilled")
+	router.ServeHTTP(httptest.NewRecorder(), req)
+
+	// No second query ran, and the usage row names the key.
+	assert.NoError(t, mock.ExpectationsWereMet())
+	require.Len(t, usage.calls, 1)
+	assert.Equal(t, "k1", usage.calls[0].apiKeyID)
 }

@@ -203,14 +203,26 @@ which creates, renames, deletes and expires them. This service only reads them.
   Telling them apart tells someone guessing that a value was once real. A
   missing header is the one thing distinguished, as `MISSING_API_KEY`: a caller
   that sent no credential already knows it sent none.
-- **There is no fallback to `Tenant.token_api_auth`.** The panel's
+- **A key found in neither place falls back to `Tenant.token_api_auth`**, the
+  single-key-per-area column this replaced. The fallback exists so the two
+  sides can deploy in either order: the panel's
   `scripts/backfill-tenant-api-keys.ts` copies those hashes into the new table
-  and is run **per deployment, before this service deploys there** — each
-  customer is its own database. Get the order wrong and every integration that
-  customer has answers 401, indistinguishably from a wrong key. `app.New`
-  therefore counts both at boot and logs an error when the new table is empty
-  while the old column is not. It warns rather than aborts, because a customer
-  created after this shipped has both counts at zero legitimately.
+  and is run per deployment — each customer is its own database — and without
+  the fallback, getting that order wrong for one customer would answer 401 to
+  every integration that customer has, indistinguishably from a wrong key.
+
+  It is taken on **any** failure of the first lookup, not only on "no rows":
+  the case it is really for is a database whose panel migration has not run,
+  where `"TenantApiKey"` does not exist and the query raises.
+
+  A legacy key has **no id and no expiry**, so it is counted in no usage panel
+  and nothing in the panel can retire it — the migration is what buys those,
+  not the authentication. Two things say the fallback is still load-bearing:
+  the counter `apikey.auth.legacy_fallback`, and a boot warning when
+  `"TenantApiKey"` is empty while the old column is not (a warning, not an
+  abort — a customer created after this shipped has both counts at zero
+  legitimately). **The fallback is temporary**; removing it once both are
+  clean is [issue #38](https://github.com/memberclassbr/memberclass-backend-golang/issues/38).
 
 There are **no scopes**. Every key is valid for every endpoint of its area, so
 the key id is never put in the request context — a value there is an invitation

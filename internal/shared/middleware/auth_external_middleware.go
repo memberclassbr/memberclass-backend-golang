@@ -11,9 +11,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/memberclass-backend-golang/internal/platform/apikeyusage"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
@@ -28,16 +31,32 @@ import (
 // key still works. And now() is the database's clock, not the container's —
 // the panel derives its "Expired" label from the same clock, and a drifting
 // container would make the screen and the gate disagree.
-//
-// There is no fallback to Tenant.token_api_auth. The backfill that copies
-// those hashes into "TenantApiKey" runs before this deploys, per deployment;
-// see the boot check in internal/app.
 const sqlTenantByToken = `
 	SELECT k.id, t.id, t.name
 	FROM "TenantApiKey" k
 	JOIN "Tenant" t ON t.id = k."tenantId"
 	WHERE k."tokenHash" = $1
 	  AND (k."expiresAt" IS NULL OR k."expiresAt" > now())
+	LIMIT 1
+`
+
+// sqlTenantByLegacyToken is the pre-"TenantApiKey" lookup, kept as a fallback
+// so this service and the panel can deploy in either order.
+//
+// Without it, the backfill that copies these hashes into "TenantApiKey" would
+// have to run on every customer's database *before* this service deploys
+// there; get the order wrong for one of them and every integration that
+// customer has answers 401, indistinguishably from a wrong key.
+//
+// It is temporary, and its removal is tracked in issue #38 — from 2026-09-20,
+// once the apikey.auth.legacy_fallback counter has stayed at zero everywhere.
+// A key that only exists here has no id and no expiry, so it is counted in no
+// usage panel and never expires: two more reasons this is a bridge, not a
+// second supported way to hold a key.
+const sqlTenantByLegacyToken = `
+	SELECT id, name
+	FROM "Tenant"
+	WHERE token_api_auth = $1
 	LIMIT 1
 `
 
@@ -71,12 +90,41 @@ type AuthExternalMiddleware struct {
 	db    *sql.DB
 	log   logger.Logger
 	usage usageRecorder
+
+	// legacyFallbacks counts requests that only authenticated because of
+	// sqlTenantByLegacyToken. It is the evidence issue #38 closes on: a
+	// deployment nobody has backfilled looks exactly like a healthy one from
+	// the outside, so "is anyone still on the old column?" has to be a number
+	// rather than a guess.
+	legacyFallbacks metric.Int64Counter
+
+	// warnedLegacy keeps the log line to one per tenant per process. The
+	// counter answers how much; the log answers who, and an un-backfilled
+	// deployment serves every request through this path — logging each one
+	// would bury everything else.
+	warnedLegacy sync.Map
 }
 
 // NewAuthExternalMiddleware builds the middleware. usage may be nil, which
 // disables counting and leaves authentication untouched.
 func NewAuthExternalMiddleware(db *sql.DB, log logger.Logger, usage usageRecorder) *AuthExternalMiddleware {
-	return &AuthExternalMiddleware{db: db, log: log, usage: usage}
+	m := &AuthExternalMiddleware{db: db, log: log, usage: usage}
+
+	meter := otel.GetMeterProvider().Meter("github.com/memberclass-backend-golang/internal/shared/middleware")
+	counter, err := meter.Int64Counter(
+		"apikey.auth.legacy_fallback",
+		metric.WithDescription("Requests authenticated by the legacy Tenant.token_api_auth column"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		// An instrument that will not build is not a reason to refuse to
+		// authenticate anyone.
+		log.Warn("Legacy API key fallback metrics unavailable: " + err.Error())
+	} else {
+		m.legacyFallbacks = counter
+	}
+
+	return m
 }
 
 // Authenticate rejects the request unless the key resolves to a tenant, and
@@ -118,8 +166,12 @@ func (m *AuthExternalMiddleware) Authenticate(next http.Handler) http.Handler {
 // recordUsage counts the finished request. The route pattern is only resolved
 // once chi has descended into the matching route, which is why this runs after
 // the handler rather than before it.
+//
+// A request authenticated through the legacy column arrives here with an empty
+// apiKeyID and is counted nowhere: there is no key row for the panel to hang
+// the number on.
 func (m *AuthExternalMiddleware) recordUsage(r *http.Request, apiKeyID string, status int) {
-	if m.usage == nil {
+	if m.usage == nil || apiKeyID == "" {
 		return
 	}
 
@@ -150,6 +202,14 @@ func apiKeyFrom(r *http.Request) string {
 	return r.Header.Get(LegacyAPIKeyHeader)
 }
 
+// tenantByKey resolves the key, trying "TenantApiKey" first and the legacy
+// column only if that finds nothing.
+//
+// The fallback is taken on any failure of the first lookup, not just on
+// ErrNoRows, because the failure a fallback exists for is precisely the one
+// that is not a missing row: a deployment whose panel migration has not run
+// yet has no "TenantApiKey" table at all, and the error it raises must not be
+// the thing that logs out every integration that customer has.
 func (m *AuthExternalMiddleware) tenantByKey(ctx context.Context, key string) (string, *tenant.Tenant, error) {
 	sum := sha256.Sum256([]byte(key))
 	hash := hex.EncodeToString(sum[:])
@@ -160,13 +220,50 @@ func (m *AuthExternalMiddleware) tenantByKey(ctx context.Context, key string) (s
 	)
 	err := m.db.QueryRowContext(ctx, sqlTenantByToken, hash).Scan(&apiKeyID, &found.ID, &found.Name)
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return "", nil, err
-	case err != nil:
-		m.log.Error("Error finding tenant with token: " + err.Error())
+	case err == nil:
+		return apiKeyID, &found, nil
+	case !errors.Is(err, sql.ErrNoRows):
+		m.log.Error("Error finding tenant API key: " + err.Error())
+	}
+
+	legacy, legacyErr := m.tenantByLegacyToken(ctx, hash)
+	if legacyErr != nil {
+		// The first error is the interesting one unless it was simply "no such
+		// key", so it is what the caller sees; either way the response is the
+		// same.
 		return "", nil, err
 	}
-	return apiKeyID, &found, nil
+
+	m.noteLegacyFallback(ctx, legacy)
+	return "", legacy, nil
+}
+
+func (m *AuthExternalMiddleware) tenantByLegacyToken(ctx context.Context, hash string) (*tenant.Tenant, error) {
+	var found tenant.Tenant
+	err := m.db.QueryRowContext(ctx, sqlTenantByLegacyToken, hash).Scan(&found.ID, &found.Name)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, err
+	case err != nil:
+		m.log.Error("Error finding tenant with legacy token: " + err.Error())
+		return nil, err
+	}
+	return &found, nil
+}
+
+func (m *AuthExternalMiddleware) noteLegacyFallback(ctx context.Context, found *tenant.Tenant) {
+	if m.legacyFallbacks != nil {
+		m.legacyFallbacks.Add(ctx, 1)
+	}
+
+	if _, warned := m.warnedLegacy.LoadOrStore(found.ID, struct{}{}); warned {
+		return
+	}
+	m.log.Warn(
+		"Tenant authenticated by legacy token_api_auth: tenant " + found.ID +
+			" has no row in \"TenantApiKey\". Run the panel's backfill for this deployment; " +
+			"usage for this key is counted nowhere until then.",
+	)
 }
 
 func sendAPIKeyError(w http.ResponseWriter, message, code string) {
