@@ -172,10 +172,24 @@ type Public struct {
 
 // Bunny holds the account-level CDN credentials. Per-tenant library keys live
 // in the database, not here.
+//
+// BaseURL is the Stream API (video.bunnycdn.com/library), reached with a
+// per-library key. AccountBaseURL is a different service on a different host:
+// library settings, pull zones and statistics, reached with the account key in
+// APIKey. A per-library key cannot read either, which is why the usage worker
+// is gated on APIKey rather than on anything per tenant.
 type Bunny struct {
 	APIKey  string
 	BaseURL string
 	Timeout time.Duration
+
+	// AccountBaseURL is https://api.bunny.net unless a test points it
+	// elsewhere.
+	AccountBaseURL string
+
+	// UsageEnabled gates the daily usage worker. It needs the account key and
+	// nothing else: the libraries it reads are named by the tenant rows.
+	UsageEnabled bool
 }
 
 // IlovePDF converts lesson PDFs to page images.
@@ -326,9 +340,10 @@ func Load() (*Config, error) {
 			APIURL:    lookup("PUBLIC_API_URL"),
 		},
 		Bunny: Bunny{
-			APIKey:  os.Getenv("BUNNY_API_KEY"),
-			BaseURL: optional("BUNNY_BASE_URL", "https://video.bunnycdn.com/library/"),
-			Timeout: durationSeconds("BUNNY_TIMEOUT_SECONDS", 30*time.Second),
+			APIKey:         os.Getenv("BUNNY_API_KEY"),
+			BaseURL:        optional("BUNNY_BASE_URL", "https://video.bunnycdn.com/library/"),
+			Timeout:        durationSeconds("BUNNY_TIMEOUT_SECONDS", 30*time.Second),
+			AccountBaseURL: optional("BUNNY_ACCOUNT_BASE_URL", "https://api.bunny.net"),
 		},
 		Analytics: Analytics{
 			DeleteEnabled: os.Getenv("ANALYTICS_DELETE_ENABLED") == "true",
@@ -371,6 +386,7 @@ func Load() (*Config, error) {
 				"(e.g. https://api.memberclass.com.br) so the published spec is right no matter how /docs was reached")
 	}
 
+	cfg.loadBunnyUsage()
 	cfg.loadIlovePDF()
 	cfg.loadResend()
 	cfg.loadTranscription()
@@ -389,6 +405,20 @@ func (c *Config) Warnings() []string {
 
 func (c *Config) disable(feature, reason string) {
 	c.warnings = append(c.warnings, fmt.Sprintf("%s disabled: %s", feature, reason))
+}
+
+// loadBunnyUsage gates the daily Bunny usage worker.
+//
+// Off is a real cost and an invisible one: storage has no history on Bunny's
+// side, so every day the worker does not run is a day of storage nobody can
+// ever reconstruct. Traffic survives — the closing pass reads a finished period
+// from /statistics — but storage exists only in the samples this worker takes.
+func (c *Config) loadBunnyUsage() {
+	if c.Bunny.APIKey == "" {
+		c.disable("Bunny usage tracking", "BUNNY_API_KEY not set; storage history is not reconstructible after the fact")
+		return
+	}
+	c.Bunny.UsageEnabled = true
 }
 
 func (c *Config) loadIlovePDF() {
