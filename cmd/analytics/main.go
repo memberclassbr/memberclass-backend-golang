@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	analyticsjobs "github.com/memberclass-backend-golang/internal/features/workers/analytics"
+	bunnyusage "github.com/memberclass-backend-golang/internal/features/workers/bunny_usage"
+	"github.com/memberclass-backend-golang/internal/platform/bunny"
 	"github.com/memberclass-backend-golang/internal/platform/config"
 	"github.com/memberclass-backend-golang/internal/platform/database"
 	"github.com/memberclass-backend-golang/internal/platform/logger"
@@ -39,11 +41,13 @@ func main() {
 func run() int {
 	_ = godotenv.Load()
 
-	cmd := flag.String("cmd", "daily", "daily|monthly|backfill|backfill-extras")
+	cmd := flag.String("cmd", "daily", "daily|monthly|backfill|backfill-extras|bunny-usage|bunny-backfill|bunny-close")
 	from := flag.String("from", "", "YYYY-MM (backfill)")
 	to := flag.String("to", "", "YYYY-MM (backfill)")
-	tenantId := flag.String("tenantId", "", "scope backfill/daily/monthly to a single tenant (empty = all)")
+	tenantId := flag.String("tenantId", "", "scope backfill/daily/monthly/bunny-* to a single tenant (empty = all)")
 	skipUserEvent := flag.Bool("skipUserEvent", false, "skip Read fixups + UserEvent migration; only run daily/monthly rollup")
+	months := flag.Int("months", bunnyusage.MaxBackfillMonths, "how many months back bunny-backfill reaches (max 12: Bunny keeps one rolling year)")
+	month := flag.String("month", "", "YYYY-MM (bunny-close): the closed month to reprocess")
 	flag.Parse()
 
 	logr := logger.NewLogger()
@@ -83,7 +87,7 @@ func run() int {
 		trace.WithAttributes(attrs...))
 	defer span.End()
 
-	if err := execute(ctx, *cmd, db, logr, cfg, *from, *to, *tenantId, *skipUserEvent); err != nil {
+	if err := execute(ctx, *cmd, db, logr, cfg, *from, *to, *tenantId, *skipUserEvent, *months, *month); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		logr.Error(*cmd + ": " + err.Error())
@@ -101,6 +105,8 @@ func execute(
 	cfg *config.Config,
 	from, to, tenantID string,
 	skipUserEvent bool,
+	months int,
+	month string,
 ) error {
 	switch cmd {
 	case "daily":
@@ -125,7 +131,37 @@ func execute(
 	case "backfill-extras":
 		return analyticsjobs.BackfillExtras(ctx, db, logr, tenantID)
 
+	// The three Bunny commands run the same code the scheduler does, with the
+	// daily lock granted rather than contended: an operator running one by hand
+	// has already decided it should run, and being silently skipped because a
+	// replica took today's lock would look exactly like success.
+	case "bunny-usage":
+		return bunnyJob(cfg, db, logr).Execute(ctx)
+
+	case "bunny-backfill":
+		return bunnyJob(cfg, db, logr).Backfill(ctx, months, tenantID)
+
+	case "bunny-close":
+		if tenantID == "" || month == "" {
+			return fmt.Errorf("bunny-close requires --tenantId and --month=YYYY-MM")
+		}
+		parsed, err := time.Parse("2006-01", month)
+		if err != nil {
+			return fmt.Errorf("bunny-close --month must be YYYY-MM: %w", err)
+		}
+		// Reprocessing a month that is already closed is the one write that
+		// ignores closedAt, which is why it is a command someone types rather
+		// than anything a schedule can reach.
+		return bunnyJob(cfg, db, logr).ReopenAndCloseMonth(ctx, tenantID, parsed.Year(), int(parsed.Month()))
+
 	default:
 		return fmt.Errorf("unknown cmd: %s", cmd)
 	}
+}
+
+// bunnyJob builds the usage worker for a one-off run. It takes no Redis: the
+// lock exists to keep several replicas of the API off the same day, and a
+// command invoked by hand is not one of them.
+func bunnyJob(cfg *config.Config, db *sql.DB, logr logger.Logger) *bunnyusage.Job {
+	return bunnyusage.New(db, bunny.NewAccountService(cfg, logr), bunnyusage.Unlocked{}, logr, "cmd/analytics")
 }
