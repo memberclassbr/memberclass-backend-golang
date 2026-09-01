@@ -488,6 +488,145 @@ database closes:
 - **member_import** — startup reset for orphaned imports, plus a 24h retention job.
 - **api_key_usage** — hourly, on the same cron; folds the per-key Redis counters
   into `"ApiKeyUsageDaily"`. See below.
+- **bunny_usage** — daily, on the same cron; records per-area Bunny storage and
+  traffic into `"TenantBunnyMonthlyUsage"`. See below.
+
+## Bunny usage
+
+`"TenantBunnyMonthlyUsage"` holds one row per area per **UTC** month, keyed
+`(tenantId, year, month)`. The Prisma schema in the sibling `mult-memberclass`
+repository owns those columns and the panel only reads them: **this worker is
+the sole writer**, which is why the manual trigger the panel used to have was
+removed rather than kept alongside.
+
+Everything follows from traffic and storage not being the same kind of number.
+
+| | Traffic | Storage |
+|---|---|---|
+| What it is | a flow accumulated over the month | a reading of one instant |
+| Current month | `TrafficUsage` (`GET /videolibrary/{id}`) | `StorageUsage`, same call |
+| Closed month | `TotalBandwidthUsed` (`GET /statistics`) | does not exist |
+| History at Bunny | one **rolling** year | **none** |
+| How it is written | overwritten | sampled, one per day |
+
+Traffic is Bunny's own running total, which it zeroes at the UTC turn of the
+1st, so writing it is overwriting it: a run repeated in one day writes the same
+number, and a missed day repairs itself on the next. Storage has no past
+anywhere — `GET /statistics` carries no storage field at all — so a month's
+storage is only ever the samples taken during it. **A day the worker did not
+run is a day of storage nobody can reconstruct**, and that asymmetry is the
+reason the whole thing exists on a schedule rather than on demand.
+
+Which is also why every `storage*` column is nullable and **null means "not
+measured", never zero**. A backfilled month has no storage and never will; an
+area whose library answered 404 has a number nobody knows. Neither is an area
+that used nothing, and the screen has to be able to tell them apart.
+
+### The daily run
+
+Once a day at 05:30 UTC, holding a `SET NX` day lock so several replicas do not
+each walk the account. For every area with a `bunnyLibraryId`:
+
+- `GET /videolibrary/{bunnyLibraryId}` → `StorageUsage`, `TrafficUsage`,
+  `PullZoneId`.
+- One upsert writes the current month: traffic assigned, storage accumulated
+  **only when `lastSampleDate` is not today** — without that guard a second run
+  in one day would weight that day double in the average. The `WHERE closedAt
+  IS NULL` on the `DO UPDATE` is the entire rewrite lock on a closed month.
+- `Tenant.bunnyStorageBytes`, `bunnyTrafficBytes` and `bunnyUsageUpdatedAt` are
+  mirrored, because that is where the manager reads from today
+  (`actions/manager/get-areas.tsx`). They go when the tenant usage screen
+  exists; until then, not writing them means that screen quietly stops moving.
+- A **404** writes `source = "missing"` and touches no number, on an existing
+  row least of all: an absent library is unknown usage, not zero usage.
+
+`PullZoneId` arrives in the same response and is stored on `Tenant`, so
+resolving it is a lookup an area pays for once.
+
+### Closing a month
+
+The time of day is irrelevant for the current month and **decisive for a
+finished one**. 05:30 UTC on the 1st is 02:30 in Brasília, and `TrafficUsage`
+was reset five and a half hours earlier — closing from the library counter
+would drop the last ~21 hours of every month, in a number that is passed on to
+the customer. So the closing pass reads the period instead:
+
+```
+GET /statistics?pullZone={id}&dateFrom=<1st>&dateTo=<last day>
+```
+
+`TotalBandwidthUsed` already sums the period; `BandwidthUsedChart` is the same
+figure spread over days and does not need adding up. `closedAt` is then
+stamped, and the daily pass stops touching the row. The two paths agree: on
+pull zone `3697175`, `TotalBandwidthUsed` 129.377.181 against the library's
+`TrafficUsage` 129.375.439 — the traffic served between the two calls.
+
+Closing runs **before** sampling, and scans every open month rather than only
+the last one, so a worker that was down for a week still closes what it missed. It
+is bounded at 12 months because that is what `/statistics` answers for.
+
+### Backfill
+
+`cmd/analytics -cmd=bunny-backfill` — one call per pull zone per month, up to 12
+months back. **Worth running as early as possible**: Bunny's window is a
+*rolling* year, so every month of delay erases a month from the far end for
+good. With ~121 libraries that is ~1.500 requests, about an hour at the
+throttle.
+
+It is **resumable, and that is the feature that matters**. An existing row is
+skipped before its request is spent, so a run that stops halfway costs nothing
+and running it again picks up exactly where it left off — including the gaps
+inside an area it had only partly done.
+
+A backfilled row carries traffic, `source = "backfilled"` and a `closedAt`;
+every `storage*` column and `lastSampleDate` stay null. Months older than the
+retention get **no row at all** — an absent row reads as "we don't know", and a
+zeroed one would be a claim. An existing row is never overwritten, and is
+skipped before the request is spent rather than after.
+
+Two measured limits, both enforced in `internal/platform/bunny` before the call
+rather than discovered from a response: a window wider than **40 days**
+(`statistics.date_range_invalid`) and a `dateFrom` older than **one year**.
+
+`-cmd=bunny-close --tenantId=X --month=YYYY-MM` reprocesses a month that is
+already closed. It is the one write that ignores `closedAt`, which is why
+nothing scheduled can reach it.
+
+### The rate limit
+
+Bunny's limit is **per account**, so every deployment, the transcription
+slice's pull-zone lookups and anything else on the same key share one budget.
+It is easy to underestimate from a single run: a backfill at a 200ms throttle
+went clean for ~50 seconds and then took a 429 on **every** remaining call, 24
+consecutive months across 5 tenants, writing nothing.
+
+Two things came out of that, and they are a pair:
+
+- **A 429 is waited out, not reported** — `Retry-After` when Bunny sends one,
+  otherwise 2s doubling to 16s over four attempts
+  ([account.go](internal/platform/bunny/account.go)). Without the wait a
+  rate-limited run *accelerates*: a 429 comes back faster than a real response,
+  so the caller's own throttle stops pacing anything and the run drives itself
+  harder into the wall it just hit.
+- **A 429 that survives the backoff is `ErrRateLimited`, and it aborts the
+  run**, exactly like `ErrUnauthorized`. It is systemic — the next area meets
+  the same wall — so continuing does not collect data, it just burns areas
+  producing nothing.
+
+The throttle is **1s**, roughly 26 requests a minute once the ~1.3s round trip
+is counted. Aborting early is cheap precisely because both the backfill and the
+daily pass are resumable; burning the account's budget is not.
+
+### Alerting
+
+Only on **systemic** failure. A 401/403 or an exhausted rate limit aborts the
+run immediately — one bad account key fails every area, and carrying on would
+bury the cause under a hundred identical errors. More than **20%** of areas
+failing in one run fails the job. A per-area 404 does neither: it is expected,
+it becomes `source = "missing"`, and alerting on it would train everyone to
+ignore the alert. `bunny.usage.areas.{synced,failed,missing}` and
+`bunny.usage.months.closed` are what a "the worker stopped running" alert
+watches, since a job that stops emits nothing at all.
 
 ## Observability
 

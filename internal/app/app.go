@@ -30,6 +30,7 @@ import (
 	vitrinefeat "github.com/memberclass-backend-golang/internal/features/api/vitrine"
 	"github.com/memberclass-backend-golang/internal/features/workers/analytics"
 	apikeyusageworker "github.com/memberclass-backend-golang/internal/features/workers/api_key_usage"
+	bunnyusageworker "github.com/memberclass-backend-golang/internal/features/workers/bunny_usage"
 	notificationsworker "github.com/memberclass-backend-golang/internal/features/workers/notifications"
 	transcriptionworker "github.com/memberclass-backend-golang/internal/features/workers/transcription"
 	"github.com/memberclass-backend-golang/internal/platform/apikeyusage"
@@ -112,6 +113,12 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	}
 
 	bunnySvc := bunny.NewBunnyService(cfg, log)
+
+	// The account-level client is a second client on a second host with a
+	// second credential: the Stream API key a tenant holds cannot read a
+	// library's usage or a pull zone's statistics.
+	bunnyAccount := bunny.NewAccountService(cfg, log)
+
 	resendSvc := resend.New(cfg, log)
 
 	// PDF processing is optional. A deployment without iLovePDF keys boots
@@ -191,6 +198,22 @@ func New(cfg *config.Config, log logger.Logger) (*App, error) {
 	usageFlush := apikeyusageworker.New(db, redis, log, telemetry.ServiceInstanceID(cfg))
 	if err := scheduler.AddJob(usageFlush, "0 5 * * * *"); err != nil {
 		return nil, fmt.Errorf("api_key_usage.flush: %w", err)
+	}
+
+	// Bunny usage, once a day at 05:30 UTC. The hour does not matter for the
+	// current month — traffic is a running total and storage is a sample — and
+	// it does not matter for a finished one either, because the closing pass
+	// reads /statistics over the closed period rather than the library counter
+	// Bunny resets at midnight UTC on the 1st.
+	//
+	// Gated on the account key: without it every call would answer 401, and a
+	// deployment that never had one would take a failing job's alert every day
+	// for a feature it does not run.
+	if cfg.Bunny.UsageEnabled {
+		bunnyUsage := bunnyusageworker.New(db, bunnyAccount, redis, log, telemetry.ServiceInstanceID(cfg))
+		if err := scheduler.AddJob(bunnyUsage, "0 30 5 * * *"); err != nil {
+			return nil, fmt.Errorf("bunny_usage.sync: %w", err)
+		}
 	}
 
 	return &App{
